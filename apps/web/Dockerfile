@@ -21,6 +21,7 @@ COPY . .
 # Build shared package then web
 RUN pnpm --filter shared run build
 RUN pnpm --filter web run build
+RUN mkdir -p apps/web/public
 
 # ---
 # Production Image
