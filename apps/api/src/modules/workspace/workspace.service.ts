@@ -103,7 +103,7 @@ export async function inviteMember(workspaceId: string, input: InviteMemberInput
     return { id: member.id, role: member.role, joinedAt: member.joinedAt, user: member.user };
 }
 
-export async function updateMemberRole(workspaceId: string, memberId: string, newRole: import('@prisma/client').UserRole) {
+export async function updateMemberRole(workspaceId: string, memberId: string, newRole: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER') {
     const member = await prisma.workspaceMember.findFirst({
         where: { id: memberId, workspaceId },
     });
