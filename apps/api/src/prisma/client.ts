@@ -1,8 +1,5 @@
-// Import from the local generated Prisma output via a tsconfig path alias.
-// The alias "$prisma/client" is mapped to "../node_modules/.prisma/client"
-// in tsconfig.json, giving TypeScript the correct schema-specific types
-// (including RefreshToken) and bypassing pnpm hoisting issues.
-import { PrismaClient } from '$prisma/client';
+// Import from the local generated Prisma output via standard resolution.
+import { PrismaClient } from '@prisma/client';
 import { logger } from '../core/logger';
 
 const log = logger.child({ module: 'prisma' });
