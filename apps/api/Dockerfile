@@ -46,8 +46,8 @@ COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
-COPY --from=builder /app/apps/api/node_modules/.prisma /app/apps/api/node_modules/.prisma
 WORKDIR /app/apps/api
+RUN npx prisma generate
 
 ENV PORT=5000
 EXPOSE 5000

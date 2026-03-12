@@ -41,7 +41,8 @@
         "pino": "^9.2.0",
         "pino-pretty": "^11.2.1",
         "qrcode-terminal": "^0.12.0",
-        "zod": "^3.23.8"
+        "zod": "^3.23.8",
+        "prisma": "^5.14.0"
     },
     "devDependencies": {
         "@types/bcryptjs": "^3.0.0",
@@ -50,7 +51,6 @@
         "@types/qrcode-terminal": "^0.12.2",
         "@whiskeysockets/baileys": "7.0.0-rc.9",
         "@yesbheem/config": "workspace:*",
-        "prisma": "^5.14.0",
         "tsx": "^4.15.7",
         "typescript": "^5.4.5"
     }
