@@ -2,10 +2,10 @@
 # Routes traffic to Web and API containers
 
 {
-	email ${ACME_EMAIL}
+	email {$ACME_EMAIL}
 }
 
-${APP_DOMAIN} {
+{$APP_DOMAIN} {
 	# Route /api/* and /health to the backend API
 	handle_path /api/* {
 		reverse_proxy api:5000
