@@ -1,7 +1,9 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../../env';
-import { IStorageProvider } from './IStorageProvider';
+import { IStorageProvider, UploadedFileMeta } from './IStorageProvider';
+import crypto from 'crypto';
+import { FastifyReply } from 'fastify';
 
 export class S3StorageProvider implements IStorageProvider {
     private client: S3Client;
@@ -25,34 +27,73 @@ export class S3StorageProvider implements IStorageProvider {
         });
     }
 
-    async uploadBuffer(filename: string, buffer: Buffer, mimeType: string): Promise<string> {
+    async upload(
+        workspaceId: string,
+        fileBuffer: Buffer,
+        meta: UploadedFileMeta
+    ): Promise<{ storageKey: string; url: string }> {
+        const uuid = crypto.randomUUID();
+        const ext = meta.filename.split('.').pop() || meta.mimeType.split('/')[1] || 'bin';
+        const storageKey = `${workspaceId}/media/${uuid}.${ext}`;
+
         const command = new PutObjectCommand({
             Bucket: this.bucket,
-            Key: filename,
-            Body: buffer,
-            ContentType: mimeType,
+            Key: storageKey,
+            Body: fileBuffer,
+            ContentType: meta.mimeType,
         });
 
         await this.client.send(command);
-        return filename;
+
+        const url = await this.getUrl(storageKey);
+        return { storageKey, url };
     }
 
-    async getSignedUrl(filename: string, expiresInSeconds: number = 3600): Promise<string> {
+    async getUrl(storageKey: string): Promise<string> {
         const command = new GetObjectCommand({
             Bucket: this.bucket,
-            Key: filename,
+            Key: storageKey,
         });
 
-        // Use AWS SDK presigner
-        return await getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
+        return await getSignedUrl(this.client, command, { expiresIn: 3600 });
     }
 
-    async deleteFile(filename: string): Promise<void> {
+    async delete(storageKey: string): Promise<void> {
         const command = new DeleteObjectCommand({
             Bucket: this.bucket,
-            Key: filename,
+            Key: storageKey,
         });
 
         await this.client.send(command);
+    }
+
+    async streamToResponse(storageKey: string, reply: FastifyReply): Promise<void> {
+        const command = new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: storageKey,
+        });
+
+        try {
+            const response = await this.client.send(command);
+            if (!response.Body) {
+                reply.status(404).send({ error: 'Not Found', message: 'Media file body empty in S3' });
+                return;
+            }
+
+            if (response.ContentType) {
+                reply.header('Content-Type', response.ContentType);
+            }
+            if (response.ContentLength) {
+                reply.header('Content-Length', response.ContentLength);
+            }
+
+            return reply.send(response.Body as any);
+        } catch (error: any) {
+            if (error.name === 'NoSuchKey') {
+                reply.status(404).send({ error: 'Not Found', message: 'Media file not found in S3' });
+                return;
+            }
+            throw error;
+        }
     }
 }

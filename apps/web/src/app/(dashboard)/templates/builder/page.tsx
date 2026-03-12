@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Info, Plus, Trash2, Smartphone, HelpCircle } from 'lucide-react';
 import Link from 'next/link';
 
-export default function TemplateBuilderPage() {
+function TemplateBuilder() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const existingId = searchParams.get('id');
@@ -357,3 +357,12 @@ export default function TemplateBuilderPage() {
         </div>
     );
 }
+
+export default function TemplateBuilderPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center text-muted">Loading builder...</div>}>
+            <TemplateBuilder />
+        </Suspense>
+    );
+}
+

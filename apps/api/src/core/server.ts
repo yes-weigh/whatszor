@@ -63,7 +63,7 @@ export async function createServer(): Promise<FastifyInstance> {
 
     // ── Structured Logging & Tracing ────────────────────────
 
-    server.addHook('onRequest', async (request, reply) => {
+    server.addHook('onRequest', async (request, _reply) => {
         request.log = logger.child({ reqId: request.id });
         request.log.info({
             req: {
