@@ -42,6 +42,7 @@ const envSchema = z.object({
     DATABASE_CONNECTION_LIMIT: z.string().default('10').transform(Number),
     RATE_LIMIT_MAX: z.string().default('300').transform(Number),
     RATE_LIMIT_WINDOW: z.string().default('1 minute'),
+    WORKER_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
 
     // S3 Storage
     STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),

@@ -34,12 +34,17 @@ async function bootstrap() {
     // 3. Initialize BullMQ queues
     initQueues();
 
-    // 4. Start BullMQ workers
-    startWorkers();
-    initializeWorkers();
-
-    // 4.5. Restore global WhatsApp sessions
-    await waManager.restoreAllSessions();
+    // 4. Start BullMQ workers (only if enabled)
+    if (env.WORKER_ENABLED) {
+        log.info('Workers are enabled on this instance (WORKER_ENABLED=true). Starting workers.');
+        startWorkers();
+        initializeWorkers();
+        
+        // 4.5. Restore global WhatsApp sessions
+        await waManager.restoreAllSessions();
+    } else {
+        log.info('Workers are disabled on this instance (WORKER_ENABLED=false). Skipping workers.');
+    }
 
     // 5. Create Fastify server
     const server = await createServer();
@@ -58,10 +63,12 @@ async function bootstrap() {
             // Stop accepting new requests
             await server.close();
 
-            // Drain workers before closing queues
-            await stopWorkers();
+            // Drain workers before closing queues if they were running
+            if (env.WORKER_ENABLED) {
+                await stopWorkers();
+                await waManager.closeAll();
+            }
             await closeQueues();
-            await waManager.closeAll();
 
             // Disconnect data stores
             await disconnectDatabase();

@@ -1,0 +1,25 @@
+# Caddyfile for Reverse Proxy and Automatic HTTPS
+# Routes traffic to Web and API containers
+
+{
+	email ${ACME_EMAIL}
+}
+
+${APP_DOMAIN} {
+	# Route /api/* and /health to the backend API
+	handle_path /api/* {
+		reverse_proxy api:5000
+	}
+	
+	handle /health {
+		reverse_proxy api:5000
+	}
+
+	# Route all other traffic to the Next.js frontend
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+# Optional: Redirect trailing slash to non-trailing slash (e.g., example.com/api/ -> example.com/api)
+# ...or keep it as is.

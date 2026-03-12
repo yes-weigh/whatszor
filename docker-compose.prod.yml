@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    depends_on:
+      - web
+      - api
+
   db:
     image: postgres:15-alpine
     restart: always
@@ -13,7 +30,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U yesbheem" ]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,17 +43,22 @@ services:
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    restart: always
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "5000:5000"
     environment:
@@ -46,23 +68,71 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-changeme_super_secret_jwt}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-changeme_super_secret_refresh}
-      - CORS_ORIGIN=http://localhost:3000
+      - CORS_ORIGIN=https://${APP_DOMAIN}
       - WHATSAPP_API_URL=${WHATSAPP_API_URL}
+      - SENTRY_DSN=${SENTRY_DSN}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-s3}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - WORKER_ENABLED=false
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').request('http://localhost:5000/health', (r) => {if(r.statusCode!==200)process.exit(1)}).end()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/start-worker.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-yesbheem}:${POSTGRES_PASSWORD:-yesbheem_secret}@db:5432/${POSTGRES_DB:-yesbheem_prod}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - WHATSAPP_API_URL=${WHATSAPP_API_URL}
+      - SENTRY_DSN=${SENTRY_DSN}
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-s3}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    restart: always
+    restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1 # Server side will use this, client side depends on proxy or full URL
-      # Assuming Nginx sets up a reverse proxy for /api to api:5000 normally
+      - NEXT_PUBLIC_API_URL=https://${APP_DOMAIN}/api/v1
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').request('http://localhost:3000', (r) => {if(r.statusCode!==200)process.exit(1)}).end()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
 volumes:
   db-data:
   redis-data:
+  caddy-data:
+  caddy-config:

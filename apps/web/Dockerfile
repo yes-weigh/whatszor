@@ -1,40 +1,41 @@
-# === STAGE 1: Prune Workspace ===
-FROM node:22-alpine AS pruner
-WORKDIR /app
-RUN npm install -g pnpm@9.x turbo
-COPY . .
-# Prune the workspace out of all the packages to only build `web`
-RUN turbo prune --scope=@yesbheem/web --docker
+FROM node:20-alpine AS builder
 
-# === STAGE 2: Build ===
-FROM node:22-alpine AS builder
-WORKDIR /app
-RUN npm install -g pnpm@9.x
+RUN apk add --no-cache libc6-compat python3 make g++
 
-COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-COPY --from=pruner /app/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
-COPY --from=pruner /app/out/json/ .
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches ./patches
+COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/config/package.json ./packages/config/
+
 RUN pnpm install --frozen-lockfile
 
-COPY --from=pruner /app/out/full/ .
-# Generate shared prisma client just in case
-RUN pnpm --filter database exec prisma generate
+COPY . .
 
-# Build Next.js (Standalone mode needs to be enabled in next.config.js for optimal size)
-# Setting environment variables needed at build time
-ENV NEXT_PUBLIC_API_URL=/api/v1
-RUN pnpm --filter web build
+# Build shared package then web
+RUN pnpm --filter shared run build
+RUN pnpm --filter web run build
 
-# === STAGE 3: Production Runner ===
-FROM node:22-alpine AS runner
+# ---
+# Production Image
+# ---
+FROM node:20-alpine AS runner
 WORKDIR /app
-ENV NODE_ENV=production
 
-# Don't run production as root
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create nextjs user/group
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
-USER nextjs
 
+# Set correct permissions
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
 # Automatically leverage output traces to reduce image size
@@ -42,7 +43,11 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
+USER nextjs
+
 EXPOSE 3000
+
 ENV PORT=3000
-# server.js is created by next build from the standalone output
+ENV HOSTNAME="0.0.0.0"
+
 CMD ["node", "apps/web/server.js"]

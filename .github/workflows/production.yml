@@ -1,0 +1,65 @@
+name: Production CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-and-build:
+    name: Validate and Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Security Audit
+        run: pnpm audit --prod --audit-level=high
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Prisma Generate & Validate
+        run: pnpm --filter api run db:generate
+        
+      - name: Build Shared Packages
+        run: pnpm --filter shared run build
+
+      - name: Build Web
+        run: pnpm --filter web run build
+        
+      - name: Build API
+        run: pnpm --filter api run build
+
+      - name: Docker Compose Build (Dry Run)
+        run: docker compose -f docker-compose.prod.yml config
+
+      - name: Deploy to VPS
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}       # 148.230.66.84
+          username: ${{ secrets.VPS_USER }}   # root
+          password: ${{ secrets.VPS_PASSWORD }}
+          script: |
+            cd /root/whatszor
+            git pull origin main
+            docker compose -f docker-compose.prod.yml up -d --build
+            docker system prune -f
+
