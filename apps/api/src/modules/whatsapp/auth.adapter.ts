@@ -5,7 +5,7 @@ import {
     SignalDataTypeMap,
 } from '@itsukichan/baileys';
 import { prisma } from '../../prisma/client';
-import { Prisma } from '$prisma/client';
+import { Prisma } from '@prisma/client';
 
 /**
  * A custom Baileys authentication state adapter backed by Prisma.
