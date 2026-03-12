@@ -81,7 +81,7 @@ services:
       - S3_ENDPOINT=${S3_ENDPOINT}
       - WORKER_ENABLED=false
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').request('http://localhost:5000/health', (r) => {if(r.statusCode!==200)process.exit(1)}).end()"]
+      test: ["CMD", "node", "-e", "require('http').request('http://localhost:5000/api/health', (r) => {if(r.statusCode!==200)process.exit(1)}).end()"]
       interval: 30s
       timeout: 10s
       retries: 3
