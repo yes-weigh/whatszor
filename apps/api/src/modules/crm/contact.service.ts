@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma/client';
 import type { CreateContactInput, UpdateContactInput } from '@yesbheem/shared';
 import { ErrorCodes } from '@yesbheem/shared';
-import { Prisma } from '$prisma/client';
+import { Prisma } from '@prisma/client';
 import { logEvent } from '../../core/event-logger';
 
 export async function createContact(workspaceId: string, input: CreateContactInput) {

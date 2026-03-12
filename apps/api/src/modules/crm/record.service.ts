@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma/client';
 import type { CreateRecordInput, UpdateRecordInput } from '@yesbheem/shared';
 import { ErrorCodes } from '@yesbheem/shared';
-import { Prisma } from '$prisma/client';
+import { Prisma } from '@prisma/client';
 
 export async function createRecord(workspaceId: string, input: CreateRecordInput) {
     // Ensure pipeline and stage belong to the workspace

@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma/client';
 import type { CreateOrganizationInput, UpdateOrganizationInput } from '@yesbheem/shared';
 import { ErrorCodes } from '@yesbheem/shared';
-import { Prisma } from '$prisma/client';
+import { Prisma } from '@prisma/client';
 
 export async function createOrganization(workspaceId: string, input: CreateOrganizationInput) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
