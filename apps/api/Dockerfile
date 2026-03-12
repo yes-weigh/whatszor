@@ -47,7 +47,7 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
 WORKDIR /app/apps/api
-RUN pnpm dlx prisma@5.14.0 generate
+RUN npx prisma@5.14.0 generate
 
 ENV PORT=5000
 EXPOSE 5000
