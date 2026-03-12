@@ -1,0 +1,735 @@
+// This is your Prisma schema file.
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMERATIONS
+// ============================================================
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum WorkspaceStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  CANCELLED
+}
+
+// ============================================================
+// WORKSPACE (Tenant)
+// Every entity in the system MUST include workspace_id.
+// ============================================================
+
+model Workspace {
+  id        String          @id @default(cuid())
+  name      String
+  slug      String          @unique
+  status    WorkspaceStatus @default(TRIAL)
+  plan      String          @default("free")
+  settings  Json            @default("{}")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  // Relations
+  members          WorkspaceMember[]
+  contacts         Contact[]
+  organizations    Organization[]
+  pipelines        Pipeline[]
+  records          Record[]
+  conversations    Conversation[]
+  whatsAppSessions WhatsAppSession[]
+  whatsAppAccounts WhatsAppAccount[]
+  campaigns        Campaign[]
+  automationRules  AutomationRule[]
+  eventLogs        EventLog[]
+  media            Media[]
+  templates        Template[]
+  QuickReply       QuickReply[]
+
+  @@map("workspaces")
+}
+
+// ============================================================
+// USER
+// ============================================================
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String    @map("password_hash")
+  avatarUrl    String?   @map("avatar_url")
+  isVerified   Boolean   @default(false) @map("is_verified")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  memberships   WorkspaceMember[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+// ============================================================
+// WORKSPACE MEMBER (User ↔ Workspace)
+// Handles multi-workspace membership
+// ============================================================
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  userId      String   @map("user_id")
+  role        UserRole @default(MEMBER)
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  // Relations
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+// ============================================================
+// REFRESH TOKEN
+// Stored server-side for revocation support.
+// ============================================================
+
+model RefreshToken {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  workspaceId String    @map("workspace_id")
+  tokenHash   String    @unique @map("token_hash") // SHA-256 of the raw token
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  userAgent   String?   @map("user_agent")
+  ipAddress   String?   @map("ip_address")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// ============================================================
+// CORE CRM ENTITIES
+// ============================================================
+
+model Contact {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+
+  firstName String  @map("first_name")
+  lastName  String? @map("last_name")
+  email     String?
+  phone     String?
+
+  // Custom Fields (JSONB) allows generic extensibility
+  customData Json @default("{}") @map("custom_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  organization         Organization?         @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  orgId                String?               @map("org_id")
+  records              Record[]
+  conversations        Conversation[]
+  campaigns            CampaignMember[]
+  automationExecutions AutomationExecution[]
+
+  @@unique([workspaceId, email])
+  @@unique([workspaceId, phone])
+  @@index([workspaceId])
+  @@map("contacts")
+}
+
+model Organization {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+
+  name     String
+  website  String?
+  industry String?
+
+  customData Json @default("{}") @map("custom_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts  Contact[]
+  records   Record[]
+
+  @@index([workspaceId])
+  @@map("organizations")
+}
+
+// ============================================================
+// PIPELINES & RECORDS
+// ============================================================
+
+model Pipeline {
+  id          String  @id @default(cuid())
+  workspaceId String  @map("workspace_id")
+  name        String
+  description String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stages    Stage[]
+  records   Record[]
+
+  @@index([workspaceId])
+  @@map("pipelines")
+}
+
+model Stage {
+  id         String @id @default(cuid())
+  pipelineId String @map("pipeline_id")
+  name       String
+  order      Int    @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  records  Record[]
+
+  @@index([pipelineId])
+  @@map("stages")
+}
+
+model Record {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+  pipelineId  String @map("pipeline_id")
+  stageId     String @map("stage_id")
+
+  title    String // e.g., "100x Widget Order", "Onboarding Help"
+  value    Decimal?     @db.Decimal(10, 2)
+  currency String?      @default("USD")
+  status   RecordStatus @default(OPEN)
+
+  customData Json @default("{}") @map("custom_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage        Stage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactId    String?       @map("contact_id")
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  orgId        String?       @map("org_id")
+
+  @@index([workspaceId])
+  @@index([pipelineId])
+  @@index([stageId])
+  @@map("records")
+}
+
+enum RecordStatus {
+  OPEN
+  WON
+  LOST
+  ABANDONED
+}
+
+// ============================================================
+// MESSAGING & CONVERSATIONS
+// ============================================================
+
+model Conversation {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+
+  // E.g., "WHATSAPP", "EMAIL", "SMS"
+  provider   String
+  // Remote identifier, e.g., the WhatsApp JID (phone number) "919876543210@s.whatsapp.net"
+  providerId String @map("provider_id")
+
+  // Which WhatsApp session (account) owns this conversation
+  sessionId String? @map("session_id")
+
+  // WhatsApp contact name as synced from the device address book
+  waContactName String? @map("wa_contact_name")
+
+  status ConversationStatus @default(ACTIVE)
+
+  // Aggregated metadata for fast UI rendering
+  lastMessageAt DateTime @default(now()) @map("last_message_at")
+  lastMessage   String?  @map("last_message")
+  unreadCount   Int      @default(0) @map("unread_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactId String?   @map("contact_id")
+
+  messages Message[]
+
+  @@unique([workspaceId, provider, providerId])
+  @@index([workspaceId, lastMessageAt])
+  @@index([workspaceId, sessionId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String @id @default(cuid())
+  conversationId String @map("conversation_id")
+
+  // The remote message ID generated by WhatsApp/Provider for delivery tracking
+  remoteId String? @map("remote_id")
+
+  direction MessageDirection
+  type      MessageType      @default(TEXT)
+
+  // Standard text content
+  content String?
+
+  // Complex content like media URLs, templates, contacts (JSONB)
+  mediaData Json? @map("media_data")
+
+  status MessageStatus @default(PENDING)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Tracking who sent an outbound message (AI, System, or a specific User)
+  senderUserId String? @map("sender_user_id")
+
+  campaignMembers CampaignMember[]
+
+  @@unique([conversationId, remoteId])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+  BLOCKED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  DOCUMENT
+  AUDIO
+  TEMPLATE
+  SYSTEM
+}
+
+enum MessageStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+}
+
+model QuickReply {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  shortcut    String // e.g., "/pricing"
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("quick_replies")
+}
+
+// Stores the cryptographic keys required by WhatsApp Multi-Device per session
+model WhatsAppSession {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+  sessionId   String @map("session_id") // References WhatsAppAccount.sessionId
+
+  // The state identifier ("creds", "pre-key-1", "app-state-sync-version-xyz", etc)
+  category String
+  // The actual JSON key data
+  data     Json
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, category])
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@map("whatsapp_sessions")
+}
+
+// Registry of named WhatsApp accounts connected to a workspace
+model WhatsAppAccount {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  sessionId   String   @unique @map("session_id") // Stable ID used by Baileys auth & socket manager
+  name        String // Human label e.g. "Sales Team North"
+  phoneNumber String?  @map("phone_number") // Populated after successful connection
+  status      String   @default("DISCONNECTED") // DISCONNECTED | CONNECTING | CONNECTED
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("whatsapp_accounts")
+}
+
+// ── Broadcast Campaigns ─────────────────────────────────────
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignMemberStatus {
+  PENDING
+  PROCESSING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Campaign {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+
+  name   String
+  status CampaignStatus @default(DRAFT)
+
+  // Template linked to this campaign
+  templateId        String? @map("template_id")
+  templateVersionId String? @map("template_version_id")
+  templateLanguage  String? @map("template_language")
+
+  // Timing
+  scheduledAt DateTime? @map("scheduled_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  // High-level aggregate stats stored as JSON
+  // { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
+  stats Json? @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   CampaignMember[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model CampaignMember {
+  id         String @id @default(cuid())
+  campaignId String @map("campaign_id")
+  contactId  String @map("contact_id")
+
+  status CampaignMemberStatus @default(PENDING)
+
+  // If the worker successfully dispatched it, we link the created Message
+  messageId String? @unique @map("message_id")
+
+  // Any contact-specific template variables (e.g. { "name": "John" })
+  variables Json? @default("{}")
+
+  // Bound to specific version so campaign edits are impossible
+  templateVersionId String? @map("template_version_id")
+
+  // Error reason if status is FAILED
+  errorReason String? @map("error_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status])
+  @@map("campaign_members")
+}
+
+// ── Automation Rule Engine ──────────────────────────────────
+
+enum AutomationRuleStatus {
+  ACTIVE
+  DRAFT
+  INACTIVE
+}
+
+model AutomationRule {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+
+  name        String               @map("name")
+  description String?
+  status      AutomationRuleStatus @default(DRAFT)
+  eventType   String?              @map("event_type")
+  isActive    Boolean              @default(true) @map("is_active")
+
+  // Discriminator for when this rule fires mapping to shared types (e.g. { "type": "RECORD_CREATED", "pipelineId": "123" })
+  trigger Json @map("trigger")
+
+  // Array of boolean expressions (e.g. [{ "field": "customData.tier", "operator": "eq", "value": "VIP" }])
+  conditions Json @default("[]")
+
+  // Array of sequential actions (e.g. [{ "type": "SEND_WHATSAPP", "template": "hello" }, { "type": "DELAY", "minutes": 1440 }])
+  actions Json @default("[]")
+
+  // Advanced Graph Node definitions for non-linear processing
+  flowDefinition Json? @map("flow_definition")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  workspace  Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executions AutomationExecution[]
+
+  @@index([workspaceId, status])
+  @@map("automation_rules")
+}
+
+enum AutomationExecutionStatus {
+  RUNNING
+  PAUSED // e.g. waiting in DELAY
+  COMPLETED
+  FAILED
+}
+
+model AutomationExecution {
+  id        String  @id @default(cuid())
+  ruleId    String  @map("rule_id")
+  contactId String? @map("contact_id")
+
+  status AutomationExecutionStatus @default(RUNNING)
+
+  // The trigger event payload
+  triggerEvent Json?   @map("trigger_event")
+  workspaceId  String? @map("workspace_id")
+
+  // The current step index in the Actions array
+  currentStep Int @default(0) @map("current_step")
+
+  // Node ID of the paused Graph node string
+  currentNodeId String? @map("current_node_id")
+
+  // Context of why it fired, stored for potential templating or rollback evaluation mapping
+  context Json? @default("{}")
+
+  // If paused, when it should wake up
+  resumeAt DateTime? @map("resume_at")
+
+  errorReason String? @map("error_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  rule     AutomationRule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  contact  Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  nodeLogs NodeExecutionLog[]
+
+  // Avoid duplicate concurrent runs of the exact same macro on the exact same person
+  @@index([ruleId, contactId, status])
+  @@map("automation_executions")
+}
+
+model NodeExecutionLog {
+  id          String   @id @default(cuid())
+  executionId String   @map("execution_id")
+  nodeId      String   @map("node_id")
+  nodeType    String   @map("node_type")
+  status      String
+  result      Json?
+  error       String?
+  startedAt   DateTime @default(now()) @map("started_at")
+  durationMs  Int      @map("duration_ms")
+
+  execution AutomationExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@map("node_execution_logs")
+}
+
+// ── Automation Template Library ─────────────────────────────
+// Global catalog — not workspace-scoped; cloned into AutomationRule on install
+
+model AutomationTemplate {
+  id                String   @id @default(cuid())
+  name              String
+  description       String
+  category          String // lead_capture | support | dealer | campaign | appointment
+  flowDefinition    Json     @map("flow_definition")
+  requiredVariables Json     @default("[]") @map("required_variables")
+  isBuiltIn         Boolean  @default(true) @map("is_built_in")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([category])
+  @@map("automation_templates")
+}
+
+// ── Observability & Event Logging ───────────────────────────
+// Centralized timeline for all platform events (triggers, executions, external webhooks)
+
+model EventLog {
+  id              String   @id @default(cuid())
+  workspaceId     String   @map("workspace_id")
+  eventType       String   @map("event_type") // e.g., 'message_received', 'node_failed'
+  sourceModule    String   @map("source_module") // e.g., 'webhook', 'automation_engine'
+  payloadMetadata Json     @default("{}") @map("payload_metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, eventType])
+  @@map("event_logs")
+}
+
+// ============================================================
+// MEDIA GALLERY
+// ============================================================
+
+model Media {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+  name        String
+
+  // Storage Architecture
+  storageProvider String @default("local") // local | s3 | gcs
+  storageKey      String @map("storage_key") // internal path or object key
+  url             String // public or signed CDN URL generated from the storage provider
+
+  // File Metadata
+  type         String // 'image', 'video', 'document'
+  mimeType     String? @map("mime_type")
+  size         Int?
+  thumbnailUrl String? @map("thumbnail_url") // Processed thumbnail URL
+  category     String?
+  language     String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  templateVersions TemplateVersion[]
+
+  @@index([workspaceId, type])
+  @@index([workspaceId, category])
+  @@map("media_gallery")
+}
+
+// ============================================================
+// TEMPLATE STUDIO (VERSIONED)
+// ============================================================
+
+model Template {
+  id          String  @id @default(cuid())
+  workspaceId String  @map("workspace_id")
+  name        String
+  category    String?
+  language    String?
+  status      String  @default("ACTIVE")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions  TemplateVersion[]
+
+  @@index([workspaceId])
+  @@map("templates")
+}
+
+model TemplateVersion {
+  id         String @id @default(cuid())
+  templateId String @map("template_id")
+  version    Int
+
+  messageText   String  @map("message_text")
+  footerText    String? @map("footer_text")
+  headerMediaId String? @map("header_media_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  template Template         @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  media    Media?           @relation(fields: [headerMediaId], references: [id], onDelete: SetNull)
+  buttons  TemplateButton[]
+
+  @@unique([templateId, version])
+  @@map("template_versions")
+}
+
+model TemplateButton {
+  id        String @id @default(cuid())
+  versionId String @map("version_id")
+
+  type    String // quick_reply | url | call
+  label   String
+  payload String?
+
+  version TemplateVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@map("template_buttons")
+}

@@ -1,0 +1,1931 @@
+diff --git a/dist/antiban.d.ts b/dist/antiban.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..af7818a7292c7d369e4d904f5d523b4c27d92e89
+--- /dev/null
++++ b/dist/antiban.d.ts
+@@ -0,0 +1,90 @@
++/**
++ * AntiBan — Main orchestrator combining rate limiting, warm-up, and health monitoring
++ *
++ * Usage:
++ *   import { AntiBan } from 'baileys-antiban';
++ *   const antiban = new AntiBan();
++ *
++ *   // Before sending a message:
++ *   const result = await antiban.beforeSend(recipient, content);
++ *   if (result.allowed) {
++ *     await new Promise(r => setTimeout(r, result.delayMs));
++ *     await sock.sendMessage(recipient, { text: content });
++ *     antiban.afterSend(recipient, content);
++ *   }
++ */
++import { RateLimiter, type RateLimiterConfig } from './rateLimiter.js';
++import { WarmUp, type WarmUpConfig, type WarmUpState } from './warmup.js';
++import { type HealthMonitorConfig, type HealthStatus } from './health.js';
++export interface AntiBanConfig {
++    rateLimiter?: Partial<RateLimiterConfig>;
++    warmUp?: Partial<WarmUpConfig>;
++    health?: Partial<HealthMonitorConfig>;
++    /** Log warnings and blocks to console (default: true) */
++    logging?: boolean;
++}
++export interface SendDecision {
++    allowed: boolean;
++    delayMs: number;
++    reason?: string;
++    health: HealthStatus;
++    warmUpDay?: number;
++}
++export interface AntiBanStats {
++    messagesAllowed: number;
++    messagesBlocked: number;
++    totalDelayMs: number;
++    health: HealthStatus;
++    warmUp: ReturnType<WarmUp['getStatus']>;
++    rateLimiter: ReturnType<RateLimiter['getStats']>;
++}
++export declare class AntiBan {
++    private rateLimiter;
++    private warmUp;
++    private health;
++    private logging;
++    private stats;
++    constructor(config?: AntiBanConfig, warmUpState?: WarmUpState);
++    /**
++     * Check if a message can be sent and get required delay.
++     * Call this BEFORE every sendMessage().
++     */
++    beforeSend(recipient: string, content: string): Promise<SendDecision>;
++    /**
++     * Record a successfully sent message.
++     * Call this AFTER every successful sendMessage().
++     */
++    afterSend(recipient: string, content: string): void;
++    /**
++     * Record a failed message send
++     */
++    afterSendFailed(error?: string): void;
++    /**
++     * Record a disconnection (call from connection.update handler)
++     */
++    onDisconnect(reason: string | number): void;
++    /**
++     * Record a successful reconnection
++     */
++    onReconnect(): void;
++    /**
++     * Get comprehensive stats
++     */
++    getStats(): AntiBanStats;
++    /**
++     * Export warm-up state for persistence between restarts
++     */
++    exportWarmUpState(): WarmUpState;
++    /**
++     * Force pause all sending
++     */
++    pause(): void;
++    /**
++     * Resume sending
++     */
++    resume(): void;
++    /**
++     * Reset everything (use after a ban period)
++     */
++    reset(): void;
++}
+diff --git a/dist/antiban.js b/dist/antiban.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..cb223996b5bcf353294cdbabc5e8f69b673b6c0f
+--- /dev/null
++++ b/dist/antiban.js
+@@ -0,0 +1,174 @@
++/**
++ * AntiBan — Main orchestrator combining rate limiting, warm-up, and health monitoring
++ *
++ * Usage:
++ *   import { AntiBan } from 'baileys-antiban';
++ *   const antiban = new AntiBan();
++ *
++ *   // Before sending a message:
++ *   const result = await antiban.beforeSend(recipient, content);
++ *   if (result.allowed) {
++ *     await new Promise(r => setTimeout(r, result.delayMs));
++ *     await sock.sendMessage(recipient, { text: content });
++ *     antiban.afterSend(recipient, content);
++ *   }
++ */
++import { RateLimiter } from './rateLimiter.js';
++import { WarmUp } from './warmup.js';
++import { HealthMonitor } from './health.js';
++export class AntiBan {
++    rateLimiter;
++    warmUp;
++    health;
++    logging;
++    stats = {
++        messagesAllowed: 0,
++        messagesBlocked: 0,
++        totalDelayMs: 0,
++    };
++    constructor(config = {}, warmUpState) {
++        this.rateLimiter = new RateLimiter(config.rateLimiter);
++        this.warmUp = new WarmUp(config.warmUp, warmUpState);
++        this.health = new HealthMonitor({
++            ...config.health,
++            onRiskChange: (status) => {
++                if (this.logging) {
++                    const emoji = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' };
++                    console.log(`[baileys-antiban] ${emoji[status.risk]} Risk level: ${status.risk.toUpperCase()} (score: ${status.score})`);
++                    console.log(`[baileys-antiban] ${status.recommendation}`);
++                    status.reasons.forEach(r => console.log(`[baileys-antiban]   → ${r}`));
++                }
++                config.health?.onRiskChange?.(status);
++            },
++        });
++        this.logging = config.logging ?? true;
++    }
++    /**
++     * Check if a message can be sent and get required delay.
++     * Call this BEFORE every sendMessage().
++     */
++    async beforeSend(recipient, content) {
++        const healthStatus = this.health.getStatus();
++        // Health monitor says stop
++        if (this.health.isPaused()) {
++            this.stats.messagesBlocked++;
++            if (this.logging) {
++                console.log(`[baileys-antiban] ⛔ BLOCKED — health risk too high (${healthStatus.risk})`);
++            }
++            return {
++                allowed: false,
++                delayMs: 0,
++                reason: `Health risk ${healthStatus.risk}: ${healthStatus.recommendation}`,
++                health: healthStatus,
++            };
++        }
++        // Warm-up limit check
++        if (!this.warmUp.canSend()) {
++            this.stats.messagesBlocked++;
++            const warmUpStatus = this.warmUp.getStatus();
++            if (this.logging) {
++                console.log(`[baileys-antiban] ⏳ BLOCKED — warm-up day ${warmUpStatus.day}/${warmUpStatus.totalDays}, limit reached (${warmUpStatus.todaySent}/${warmUpStatus.todayLimit})`);
++            }
++            return {
++                allowed: false,
++                delayMs: 0,
++                reason: `Warm-up limit: ${warmUpStatus.todaySent}/${warmUpStatus.todayLimit} messages today (day ${warmUpStatus.day})`,
++                health: healthStatus,
++                warmUpDay: warmUpStatus.day,
++            };
++        }
++        // Rate limiter delay
++        const delay = await this.rateLimiter.getDelay(recipient, content);
++        if (delay === -1) {
++            this.stats.messagesBlocked++;
++            if (this.logging) {
++                console.log(`[baileys-antiban] 🚫 BLOCKED — rate limit or identical message spam`);
++            }
++            return {
++                allowed: false,
++                delayMs: 0,
++                reason: 'Rate limit exceeded or identical message spam detected',
++                health: healthStatus,
++            };
++        }
++        this.stats.totalDelayMs += delay;
++        return {
++            allowed: true,
++            delayMs: delay,
++            health: healthStatus,
++        };
++    }
++    /**
++     * Record a successfully sent message.
++     * Call this AFTER every successful sendMessage().
++     */
++    afterSend(recipient, content) {
++        this.rateLimiter.record(recipient, content);
++        this.warmUp.record();
++        this.stats.messagesAllowed++;
++    }
++    /**
++     * Record a failed message send
++     */
++    afterSendFailed(error) {
++        this.health.recordMessageFailed(error);
++    }
++    /**
++     * Record a disconnection (call from connection.update handler)
++     */
++    onDisconnect(reason) {
++        this.health.recordDisconnect(reason);
++    }
++    /**
++     * Record a successful reconnection
++     */
++    onReconnect() {
++        this.health.recordReconnect();
++    }
++    /**
++     * Get comprehensive stats
++     */
++    getStats() {
++        return {
++            ...this.stats,
++            health: this.health.getStatus(),
++            warmUp: this.warmUp.getStatus(),
++            rateLimiter: this.rateLimiter.getStats(),
++        };
++    }
++    /**
++     * Export warm-up state for persistence between restarts
++     */
++    exportWarmUpState() {
++        return this.warmUp.exportState();
++    }
++    /**
++     * Force pause all sending
++     */
++    pause() {
++        this.health.setPaused(true);
++        if (this.logging) {
++            console.log('[baileys-antiban] ⏸️  Sending paused manually');
++        }
++    }
++    /**
++     * Resume sending
++     */
++    resume() {
++        this.health.setPaused(false);
++        if (this.logging) {
++            console.log('[baileys-antiban] ▶️  Sending resumed');
++        }
++    }
++    /**
++     * Reset everything (use after a ban period)
++     */
++    reset() {
++        this.health.reset();
++        this.warmUp.reset();
++        this.stats = { messagesAllowed: 0, messagesBlocked: 0, totalDelayMs: 0 };
++        if (this.logging) {
++            console.log('[baileys-antiban] 🔄 Reset — starting fresh warm-up');
++        }
++    }
++}
+diff --git a/dist/contentVariator.d.ts b/dist/contentVariator.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..9f62e0da248abbba2aa205c1fa72602d36809f7f
+--- /dev/null
++++ b/dist/contentVariator.d.ts
+@@ -0,0 +1,37 @@
++/**
++ * Content Variator — Auto-vary messages to avoid spam detection
++ *
++ * WhatsApp flags identical messages sent to multiple recipients.
++ * This module adds invisible variations so each message is technically unique.
++ */
++export interface VariatorConfig {
++    /** Add zero-width characters between words (default: true) */
++    zeroWidthChars: boolean;
++    /** Vary punctuation (extra spaces, periods) (default: true) */
++    punctuationVariation: boolean;
++    /** Add random emoji padding (default: false) */
++    emojiPadding: boolean;
++    /** Synonym replacement for common words (default: false) */
++    synonyms: boolean;
++    /** Custom variation function */
++    customVariator?: (text: string, index: number) => string;
++}
++export declare class ContentVariator {
++    private config;
++    private counter;
++    constructor(config?: Partial<VariatorConfig>);
++    /**
++     * Create a unique variation of a message
++     * Each call produces a slightly different version
++     */
++    vary(text: string): string;
++    /**
++     * Create N unique variations of a message
++     */
++    varyBulk(text: string, count: number): string[];
++    private addZeroWidth;
++    private varyPunctuation;
++    private addEmojiPadding;
++    private applySynonyms;
++    private randomPositions;
++}
+diff --git a/dist/contentVariator.js b/dist/contentVariator.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..5e850faa5fe34035cf1b8b2420c0557d60c95cf4
+--- /dev/null
++++ b/dist/contentVariator.js
+@@ -0,0 +1,150 @@
++/**
++ * Content Variator — Auto-vary messages to avoid spam detection
++ *
++ * WhatsApp flags identical messages sent to multiple recipients.
++ * This module adds invisible variations so each message is technically unique.
++ */
++const DEFAULT_CONFIG = {
++    zeroWidthChars: true,
++    punctuationVariation: true,
++    emojiPadding: false,
++    synonyms: false,
++};
++// Zero-width characters invisible to users
++const ZERO_WIDTH = [
++    '\u200B', // zero-width space
++    '\u200C', // zero-width non-joiner
++    '\u200D', // zero-width joiner
++    '\uFEFF', // zero-width no-break space
++];
++const SYNONYMS = {
++    'hello': ['hi', 'hey', 'howdy'],
++    'hi': ['hello', 'hey', 'howdy'],
++    'thanks': ['thank you', 'thx', 'cheers'],
++    'please': ['kindly', 'pls'],
++    'great': ['awesome', 'excellent', 'wonderful'],
++    'good': ['great', 'nice', 'fine'],
++    'buy': ['purchase', 'get', 'grab'],
++    'sell': ['offer', 'list'],
++    'price': ['cost', 'amount', 'value'],
++    'available': ['in stock', 'on offer'],
++    'check': ['look at', 'see', 'view'],
++    'join': ['participate', 'enter', 'come to'],
++    'start': ['begin', 'kick off', 'commence'],
++    'end': ['finish', 'close', 'conclude'],
++    'bid': ['offer', 'place a bid'],
++    'win': ['secure', 'take home'],
++    'item': ['lot', 'piece', 'product'],
++};
++export class ContentVariator {
++    config;
++    counter = 0;
++    constructor(config = {}) {
++        this.config = { ...DEFAULT_CONFIG, ...config };
++    }
++    /**
++     * Create a unique variation of a message
++     * Each call produces a slightly different version
++     */
++    vary(text) {
++        let result = text;
++        this.counter++;
++        if (this.config.customVariator) {
++            return this.config.customVariator(result, this.counter);
++        }
++        if (this.config.synonyms) {
++            result = this.applySynonyms(result);
++        }
++        if (this.config.zeroWidthChars) {
++            result = this.addZeroWidth(result);
++        }
++        if (this.config.punctuationVariation) {
++            result = this.varyPunctuation(result);
++        }
++        if (this.config.emojiPadding) {
++            result = this.addEmojiPadding(result);
++        }
++        return result;
++    }
++    /**
++     * Create N unique variations of a message
++     */
++    varyBulk(text, count) {
++        const results = [];
++        const seen = new Set();
++        for (let i = 0; i < count; i++) {
++            let variation = this.vary(text);
++            // Ensure uniqueness
++            let attempts = 0;
++            while (seen.has(variation) && attempts < 10) {
++                variation = this.vary(text);
++                attempts++;
++            }
++            seen.add(variation);
++            results.push(variation);
++        }
++        return results;
++    }
++    addZeroWidth(text) {
++        const words = text.split(' ');
++        if (words.length < 2)
++            return text;
++        // Insert 1-2 zero-width chars at random positions between words
++        const positions = this.randomPositions(words.length - 1, Math.min(2, words.length - 1));
++        return words.map((word, i) => {
++            if (positions.includes(i)) {
++                const zwc = ZERO_WIDTH[Math.floor(Math.random() * ZERO_WIDTH.length)];
++                return word + zwc;
++            }
++            return word;
++        }).join(' ');
++    }
++    varyPunctuation(text) {
++        const variations = [
++            // Trailing space variations
++            () => text + ' ',
++            () => text + '  ',
++            // Period variations
++            () => text.endsWith('.') ? text.slice(0, -1) : text + '.',
++            // Nothing
++            () => text,
++            // Capitalize first letter variation
++            () => text.charAt(0) === text.charAt(0).toUpperCase()
++                ? text.charAt(0).toLowerCase() + text.slice(1)
++                : text,
++        ];
++        return variations[this.counter % variations.length]();
++    }
++    addEmojiPadding(text) {
++        const emojis = ['', ' 👍', ' ✅', ' 📌', ' 💬', ' 📢'];
++        return text + emojis[this.counter % emojis.length];
++    }
++    applySynonyms(text) {
++        const words = text.split(/\b/);
++        let replaced = false;
++        return words.map(word => {
++            if (replaced)
++                return word;
++            const lower = word.toLowerCase();
++            const synonymList = SYNONYMS[lower];
++            if (synonymList && Math.random() > 0.5) {
++                replaced = true; // Only replace one word per message
++                const synonym = synonymList[Math.floor(Math.random() * synonymList.length)];
++                // Preserve original casing
++                return word[0] === word[0].toUpperCase()
++                    ? synonym.charAt(0).toUpperCase() + synonym.slice(1)
++                    : synonym;
++            }
++            return word;
++        }).join('');
++    }
++    randomPositions(max, count) {
++        const positions = [];
++        while (positions.length < count) {
++            const pos = Math.floor(Math.random() * max);
++            if (!positions.includes(pos))
++                positions.push(pos);
++        }
++        return positions;
++    }
++}
+diff --git a/dist/health.d.ts b/dist/health.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..7e898b246a16acc9e6919eb638f249968109ae7a
+--- /dev/null
++++ b/dist/health.d.ts
+@@ -0,0 +1,78 @@
++/**
++ * Health Monitor — Detect ban warning signs early
++ *
++ * Tracks connection patterns to identify when WhatsApp is
++ * getting suspicious. Gives you time to back off before a ban.
++ *
++ * Warning signs:
++ * - Frequent disconnections (connection.update → close)
++ * - 403 Forbidden errors
++ * - 401 Logged Out (possible temp ban)
++ * - Messages failing silently (sent but not delivered)
++ * - QR re-request loops
++ * - Rate limit responses (429-like behavior)
++ */
++export type BanRiskLevel = 'low' | 'medium' | 'high' | 'critical';
++export interface HealthStatus {
++    risk: BanRiskLevel;
++    score: number;
++    reasons: string[];
++    recommendation: string;
++    stats: {
++        disconnectsLastHour: number;
++        failedMessagesLastHour: number;
++        forbiddenErrors: number;
++        uptimeMs: number;
++        lastDisconnectReason?: string;
++    };
++}
++export interface HealthMonitorConfig {
++    /** Disconnects per hour before warning (default: 3) */
++    disconnectWarningThreshold: number;
++    /** Disconnects per hour before critical (default: 5) */
++    disconnectCriticalThreshold: number;
++    /** Failed messages per hour before warning (default: 5) */
++    failedMessageThreshold: number;
++    /** Callback when risk level changes */
++    onRiskChange?: (status: HealthStatus) => void;
++    /** Auto-pause sending at this risk level (default: 'high') */
++    autoPauseAt: BanRiskLevel;
++}
++export declare class HealthMonitor {
++    private config;
++    private events;
++    private startTime;
++    private paused;
++    private lastRisk;
++    constructor(config?: Partial<HealthMonitorConfig>);
++    /**
++     * Record a disconnection event
++     */
++    recordDisconnect(reason: string | number): void;
++    /**
++     * Record a successful reconnection
++     */
++    recordReconnect(): void;
++    /**
++     * Record a failed message send
++     */
++    recordMessageFailed(error?: string): void;
++    /**
++     * Get current health status
++     */
++    getStatus(): HealthStatus;
++    /**
++     * Check if sending should be paused
++     */
++    isPaused(): boolean;
++    /**
++     * Manually pause/resume
++     */
++    setPaused(paused: boolean): void;
++    /**
++     * Reset all tracked events
++     */
++    reset(): void;
++    private cleanup;
++    private checkAndNotify;
++}
+diff --git a/dist/health.js b/dist/health.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..40a7d8fa337bc21f7295262d506527a5d4aceed8
+--- /dev/null
++++ b/dist/health.js
+@@ -0,0 +1,181 @@
++/**
++ * Health Monitor — Detect ban warning signs early
++ *
++ * Tracks connection patterns to identify when WhatsApp is
++ * getting suspicious. Gives you time to back off before a ban.
++ *
++ * Warning signs:
++ * - Frequent disconnections (connection.update → close)
++ * - 403 Forbidden errors
++ * - 401 Logged Out (possible temp ban)
++ * - Messages failing silently (sent but not delivered)
++ * - QR re-request loops
++ * - Rate limit responses (429-like behavior)
++ */
++const DEFAULT_CONFIG = {
++    disconnectWarningThreshold: 3,
++    disconnectCriticalThreshold: 5,
++    failedMessageThreshold: 5,
++    autoPauseAt: 'high',
++};
++const RISK_SCORES = {
++    low: 0,
++    medium: 30,
++    high: 60,
++    critical: 85,
++};
++export class HealthMonitor {
++    config;
++    events = [];
++    startTime = Date.now();
++    paused = false;
++    lastRisk = 'low';
++    constructor(config = {}) {
++        this.config = { ...DEFAULT_CONFIG, ...config };
++    }
++    /**
++     * Record a disconnection event
++     */
++    recordDisconnect(reason) {
++        const reasonStr = String(reason);
++        // 403 = Forbidden (WhatsApp blocking)
++        if (reasonStr === '403' || reasonStr === 'forbidden') {
++            this.events.push({ type: 'forbidden', timestamp: Date.now(), detail: reasonStr });
++        }
++        // 401 = Logged out (possible temp ban)
++        else if (reasonStr === '401' || reasonStr === 'loggedOut') {
++            this.events.push({ type: 'loggedOut', timestamp: Date.now(), detail: reasonStr });
++        }
++        else {
++            this.events.push({ type: 'disconnect', timestamp: Date.now(), detail: reasonStr });
++        }
++        this.checkAndNotify();
++    }
++    /**
++     * Record a successful reconnection
++     */
++    recordReconnect() {
++        this.events.push({ type: 'reconnect', timestamp: Date.now() });
++    }
++    /**
++     * Record a failed message send
++     */
++    recordMessageFailed(error) {
++        this.events.push({ type: 'messageFailed', timestamp: Date.now(), detail: error });
++        this.checkAndNotify();
++    }
++    /**
++     * Get current health status
++     */
++    getStatus() {
++        const now = Date.now();
++        this.cleanup(now);
++        const hourEvents = this.events.filter(e => now - e.timestamp < 3600000);
++        const disconnects = hourEvents.filter(e => e.type === 'disconnect').length;
++        const forbidden = hourEvents.filter(e => e.type === 'forbidden').length;
++        const loggedOut = hourEvents.filter(e => e.type === 'loggedOut').length;
++        const failedMessages = hourEvents.filter(e => e.type === 'messageFailed').length;
++        let score = 0;
++        const reasons = [];
++        // Forbidden errors are serious
++        if (forbidden > 0) {
++            score += 40 * forbidden;
++            reasons.push(`${forbidden} forbidden (403) error${forbidden > 1 ? 's' : ''} in last hour`);
++        }
++        // Logged out is very serious
++        if (loggedOut > 0) {
++            score += 60;
++            reasons.push('Logged out by WhatsApp — possible temporary ban');
++        }
++        // Frequent disconnects
++        if (disconnects >= this.config.disconnectCriticalThreshold) {
++            score += 30;
++            reasons.push(`${disconnects} disconnects in last hour (critical threshold)`);
++        }
++        else if (disconnects >= this.config.disconnectWarningThreshold) {
++            score += 15;
++            reasons.push(`${disconnects} disconnects in last hour`);
++        }
++        // Failed messages
++        if (failedMessages >= this.config.failedMessageThreshold) {
++            score += 20;
++            reasons.push(`${failedMessages} failed messages in last hour`);
++        }
++        // Determine risk level
++        score = Math.min(100, score);
++        let risk;
++        if (score >= 85)
++            risk = 'critical';
++        else if (score >= 60)
++            risk = 'high';
++        else if (score >= 30)
++            risk = 'medium';
++        else
++            risk = 'low';
++        // Determine recommendation
++        let recommendation;
++        switch (risk) {
++            case 'critical':
++                recommendation = 'STOP ALL MESSAGING IMMEDIATELY. Disconnect and wait 24-48 hours before reconnecting.';
++                break;
++            case 'high':
++                recommendation = 'Reduce messaging rate by 80%. Consider pausing for 1-2 hours.';
++                break;
++            case 'medium':
++                recommendation = 'Reduce messaging rate by 50%. Increase delays between messages.';
++                break;
++            default:
++                recommendation = 'Operating normally. Continue monitoring.';
++        }
++        const lastDisconnect = [...this.events].reverse().find(e => e.type === 'disconnect' || e.type === 'forbidden' || e.type === 'loggedOut');
++        return {
++            risk,
++            score,
++            reasons: reasons.length ? reasons : ['No issues detected'],
++            recommendation,
++            stats: {
++                disconnectsLastHour: disconnects,
++                failedMessagesLastHour: failedMessages,
++                forbiddenErrors: forbidden,
++                uptimeMs: now - this.startTime,
++                lastDisconnectReason: lastDisconnect?.detail,
++            },
++        };
++    }
++    /**
++     * Check if sending should be paused
++     */
++    isPaused() {
++        if (this.paused)
++            return true;
++        const status = this.getStatus();
++        const riskOrder = ['low', 'medium', 'high', 'critical'];
++        return riskOrder.indexOf(status.risk) >= riskOrder.indexOf(this.config.autoPauseAt);
++    }
++    /**
++     * Manually pause/resume
++     */
++    setPaused(paused) {
++        this.paused = paused;
++    }
++    /**
++     * Reset all tracked events
++     */
++    reset() {
++        this.events = [];
++        this.startTime = Date.now();
++        this.paused = false;
++        this.lastRisk = 'low';
++    }
++    cleanup(now) {
++        // Keep last 6 hours of events
++        this.events = this.events.filter(e => now - e.timestamp < 21600000);
++    }
++    checkAndNotify() {
++        const status = this.getStatus();
++        if (status.risk !== this.lastRisk) {
++            this.lastRisk = status.risk;
++            this.config.onRiskChange?.(status);
++        }
++    }
++}
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..a6c35bb2d14a6868b68fee86f87645d0a007aa31
+--- /dev/null
++++ b/dist/index.d.ts
+@@ -0,0 +1,18 @@
++/**
++ * baileys-antiban — Anti-ban middleware for Baileys
++ *
++ * Wraps a Baileys socket with human-like messaging patterns
++ * to minimize the risk of WhatsApp banning your number.
++ *
++ * @author Kobus Wentzel <kobie@pop.co.za>
++ * @license MIT
++ */
++export { AntiBan, type AntiBanConfig, type AntiBanStats } from './antiban.js';
++export { RateLimiter, type RateLimiterConfig } from './rateLimiter.js';
++export { WarmUp, type WarmUpConfig, type WarmUpState } from './warmup.js';
++export { HealthMonitor, type HealthStatus, type BanRiskLevel } from './health.js';
++export { MessageQueue, type QueuedMessage, type MessageQueueConfig } from './messageQueue.js';
++export { ContentVariator, type VariatorConfig } from './contentVariator.js';
++export { WebhookAlerts, type WebhookConfig } from './webhooks.js';
++export { Scheduler, type SchedulerConfig } from './scheduler.js';
++export { wrapSocket, type WrappedSocket } from './wrapper.js';
+diff --git a/dist/index.js b/dist/index.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..56a3972f0c67c56aaa0883d8a7acebb511578cf2
+--- /dev/null
++++ b/dist/index.js
+@@ -0,0 +1,18 @@
++/**
++ * baileys-antiban — Anti-ban middleware for Baileys
++ *
++ * Wraps a Baileys socket with human-like messaging patterns
++ * to minimize the risk of WhatsApp banning your number.
++ *
++ * @author Kobus Wentzel <kobie@pop.co.za>
++ * @license MIT
++ */
++export { AntiBan } from './antiban.js';
++export { RateLimiter } from './rateLimiter.js';
++export { WarmUp } from './warmup.js';
++export { HealthMonitor } from './health.js';
++export { MessageQueue } from './messageQueue.js';
++export { ContentVariator } from './contentVariator.js';
++export { WebhookAlerts } from './webhooks.js';
++export { Scheduler } from './scheduler.js';
++export { wrapSocket } from './wrapper.js';
+diff --git a/dist/messageQueue.d.ts b/dist/messageQueue.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..dbda6424db360f285a8b0992e6927a06e4293001
+--- /dev/null
++++ b/dist/messageQueue.d.ts
+@@ -0,0 +1,104 @@
++/**
++ * Persistent Message Queue — Messages survive crashes and restarts
++ *
++ * Instead of fire-and-forget, queue messages and let the anti-ban
++ * system drain them at a safe pace. Failed messages auto-retry.
++ */
++import { EventEmitter } from 'events';
++export interface QueuedMessage {
++    id: string;
++    recipient: string;
++    content: any;
++    priority: 'high' | 'normal' | 'low';
++    addedAt: number;
++    attempts: number;
++    maxAttempts: number;
++    lastError?: string;
++    scheduledFor?: number;
++    metadata?: Record<string, any>;
++}
++export interface MessageQueueConfig {
++    /** Max retry attempts per message (default: 3) */
++    maxAttempts: number;
++    /** Delay between retries in ms, doubles each attempt (default: 30000) */
++    retryBaseDelayMs: number;
++    /** Max queue size (default: 1000) */
++    maxQueueSize: number;
++    /** Path to persist queue (optional) */
++    persistPath?: string;
++    /** Process high priority first (default: true) */
++    priorityOrder: boolean;
++}
++export declare class MessageQueue extends EventEmitter {
++    private config;
++    private queue;
++    private processing;
++    private sendFn;
++    private drainTimer;
++    private idCounter;
++    constructor(config?: Partial<MessageQueueConfig>);
++    /**
++     * Set the send function (called for each message when drained)
++     * This should be the anti-ban wrapped sendMessage
++     */
++    setSendFunction(fn: (recipient: string, content: any) => Promise<void>): void;
++    /**
++     * Add a message to the queue
++     */
++    add(recipient: string, content: any, options?: {
++        priority?: 'high' | 'normal' | 'low';
++        scheduledFor?: Date;
++        metadata?: Record<string, any>;
++    }): string;
++    /**
++     * Add multiple messages (e.g., broadcast to many recipients)
++     */
++    addBulk(recipients: string[], content: any, options?: {
++        priority?: 'high' | 'normal' | 'low';
++        metadata?: Record<string, any>;
++    }): string[];
++    /**
++     * Start processing the queue
++     */
++    start(intervalMs?: number): void;
++    /**
++     * Stop processing
++     */
++    stop(): void;
++    /**
++     * Process the next message in the queue
++     */
++    private processNext;
++    /**
++     * Get queue stats
++     */
++    getStats(): {
++        total: number;
++        pending: number;
++        scheduled: number;
++        byPriority: {
++            high: number;
++            normal: number;
++            low: number;
++        };
++        processing: boolean;
++        isRunning: boolean;
++    };
++    /**
++     * Clear all messages
++     */
++    clear(): void;
++    /**
++     * Remove a specific message
++     */
++    remove(id: string): boolean;
++    /**
++     * Export queue for persistence
++     */
++    export(): QueuedMessage[];
++    /**
++     * Import queue (e.g., after restart)
++     */
++    import(messages: QueuedMessage[]): void;
++    private sortQueue;
++}
+diff --git a/dist/messageQueue.js b/dist/messageQueue.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..5de82744db86d9e102e8f5a557d19a4a7c19bb78
+--- /dev/null
++++ b/dist/messageQueue.js
+@@ -0,0 +1,180 @@
++/**
++ * Persistent Message Queue — Messages survive crashes and restarts
++ *
++ * Instead of fire-and-forget, queue messages and let the anti-ban
++ * system drain them at a safe pace. Failed messages auto-retry.
++ */
++import { EventEmitter } from 'events';
++const DEFAULT_CONFIG = {
++    maxAttempts: 3,
++    retryBaseDelayMs: 30000,
++    maxQueueSize: 1000,
++    priorityOrder: true,
++};
++export class MessageQueue extends EventEmitter {
++    config;
++    queue = [];
++    processing = false;
++    sendFn = null;
++    drainTimer = null;
++    idCounter = 0;
++    constructor(config = {}) {
++        super();
++        this.config = { ...DEFAULT_CONFIG, ...config };
++    }
++    /**
++     * Set the send function (called for each message when drained)
++     * This should be the anti-ban wrapped sendMessage
++     */
++    setSendFunction(fn) {
++        this.sendFn = fn;
++    }
++    /**
++     * Add a message to the queue
++     */
++    add(recipient, content, options) {
++        if (this.queue.length >= this.config.maxQueueSize) {
++            throw new Error(`Queue full (${this.config.maxQueueSize} messages)`);
++        }
++        const id = `msg_${Date.now()}_${++this.idCounter}`;
++        const message = {
++            id,
++            recipient,
++            content,
++            priority: options?.priority || 'normal',
++            addedAt: Date.now(),
++            attempts: 0,
++            maxAttempts: this.config.maxAttempts,
++            scheduledFor: options?.scheduledFor?.getTime(),
++            metadata: options?.metadata,
++        };
++        this.queue.push(message);
++        this.sortQueue();
++        this.emit('added', message);
++        return id;
++    }
++    /**
++     * Add multiple messages (e.g., broadcast to many recipients)
++     */
++    addBulk(recipients, content, options) {
++        return recipients.map(r => this.add(r, content, options));
++    }
++    /**
++     * Start processing the queue
++     */
++    start(intervalMs = 1000) {
++        if (this.drainTimer)
++            return;
++        this.drainTimer = setInterval(() => this.processNext(), intervalMs);
++        this.emit('started');
++    }
++    /**
++     * Stop processing
++     */
++    stop() {
++        if (this.drainTimer) {
++            clearInterval(this.drainTimer);
++            this.drainTimer = null;
++        }
++        this.emit('stopped');
++    }
++    /**
++     * Process the next message in the queue
++     */
++    async processNext() {
++        if (this.processing || !this.sendFn)
++            return;
++        const now = Date.now();
++        const message = this.queue.find(m => (!m.scheduledFor || m.scheduledFor <= now));
++        if (!message)
++            return;
++        this.processing = true;
++        try {
++            message.attempts++;
++            await this.sendFn(message.recipient, message.content);
++            // Success — remove from queue
++            this.queue = this.queue.filter(m => m.id !== message.id);
++            this.emit('sent', message);
++        }
++        catch (err) {
++            message.lastError = err.message;
++            if (err.message?.includes('baileys-antiban')) {
++                // Anti-ban blocked it — don't count as attempt, try later
++                message.attempts--;
++                this.emit('delayed', message, err.message);
++            }
++            else if (message.attempts >= message.maxAttempts) {
++                // Max retries reached — move to dead letter
++                this.queue = this.queue.filter(m => m.id !== message.id);
++                this.emit('failed', message, err.message);
++            }
++            else {
++                // Schedule retry with exponential backoff
++                const backoff = this.config.retryBaseDelayMs * Math.pow(2, message.attempts - 1);
++                message.scheduledFor = Date.now() + backoff;
++                this.emit('retry', message, message.attempts, backoff);
++            }
++        }
++        finally {
++            this.processing = false;
++        }
++    }
++    /**
++     * Get queue stats
++     */
++    getStats() {
++        const now = Date.now();
++        return {
++            total: this.queue.length,
++            pending: this.queue.filter(m => !m.scheduledFor || m.scheduledFor <= now).length,
++            scheduled: this.queue.filter(m => m.scheduledFor && m.scheduledFor > now).length,
++            byPriority: {
++                high: this.queue.filter(m => m.priority === 'high').length,
++                normal: this.queue.filter(m => m.priority === 'normal').length,
++                low: this.queue.filter(m => m.priority === 'low').length,
++            },
++            processing: this.processing,
++            isRunning: this.drainTimer !== null,
++        };
++    }
++    /**
++     * Clear all messages
++     */
++    clear() {
++        const count = this.queue.length;
++        this.queue = [];
++        this.emit('cleared', count);
++    }
++    /**
++     * Remove a specific message
++     */
++    remove(id) {
++        const before = this.queue.length;
++        this.queue = this.queue.filter(m => m.id !== id);
++        return this.queue.length < before;
++    }
++    /**
++     * Export queue for persistence
++     */
++    export() {
++        return [...this.queue];
++    }
++    /**
++     * Import queue (e.g., after restart)
++     */
++    import(messages) {
++        this.queue = [...messages];
++        this.sortQueue();
++    }
++    sortQueue() {
++        if (!this.config.priorityOrder)
++            return;
++        const priorityWeight = { high: 0, normal: 1, low: 2 };
++        this.queue.sort((a, b) => {
++            const pDiff = priorityWeight[a.priority] - priorityWeight[b.priority];
++            if (pDiff !== 0)
++                return pDiff;
++            return a.addedAt - b.addedAt; // FIFO within same priority
++        });
++    }
++}
+diff --git a/dist/rateLimiter.d.ts b/dist/rateLimiter.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..1c64b85f9bb1b39781fb8549a3c036217cf74dc1
+--- /dev/null
++++ b/dist/rateLimiter.d.ts
+@@ -0,0 +1,66 @@
++/**
++ * Rate Limiter — Enforces human-like message pacing
++ *
++ * WhatsApp's detection looks for:
++ * - Too many messages per minute/hour
++ * - Identical messages to multiple recipients
++ * - No variation in timing between messages
++ * - Sudden spikes in activity
++ * - Messages sent at inhuman speed
++ */
++export interface RateLimiterConfig {
++    /** Max messages per minute (default: 8) */
++    maxPerMinute: number;
++    /** Max messages per hour (default: 200) */
++    maxPerHour: number;
++    /** Max messages per day (default: 1500) */
++    maxPerDay: number;
++    /** Min delay between messages in ms (default: 1500) */
++    minDelayMs: number;
++    /** Max delay between messages in ms (default: 5000) */
++    maxDelayMs: number;
++    /** Extra delay for first message to a new chat in ms (default: 3000) */
++    newChatDelayMs: number;
++    /** Max identical messages before forcing variation (default: 3) */
++    maxIdenticalMessages: number;
++    /** Burst allowance - messages before rate limiting kicks in (default: 3) */
++    burstAllowance: number;
++}
++export declare class RateLimiter {
++    private config;
++    private messages;
++    private identicalCount;
++    private knownChats;
++    private burstCount;
++    private lastMessageTime;
++    constructor(config?: Partial<RateLimiterConfig>);
++    /**
++     * Calculate delay before next message can be sent.
++     * Returns 0 if message can be sent immediately.
++     * Returns -1 if message should be blocked entirely.
++     */
++    getDelay(recipient: string, content: string): Promise<number>;
++    /**
++     * Record a sent message
++     */
++    record(recipient: string, content: string): void;
++    /**
++     * Get current usage stats
++     */
++    getStats(): {
++        lastMinute: number;
++        lastHour: number;
++        lastDay: number;
++        limits: {
++            perMinute: number;
++            perHour: number;
++            perDay: number;
++        };
++        knownChats: number;
++    };
++    private cleanup;
++    /** Random delay between min and max (gaussian-ish distribution) */
++    private jitter;
++    /** Simple hash for content dedup */
++    private hashContent;
++}
+diff --git a/dist/rateLimiter.js b/dist/rateLimiter.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..be9a9caddde6f8103fd158e9a76238e70a677031
+--- /dev/null
++++ b/dist/rateLimiter.js
+@@ -0,0 +1,150 @@
++/**
++ * Rate Limiter — Enforces human-like message pacing
++ *
++ * WhatsApp's detection looks for:
++ * - Too many messages per minute/hour
++ * - Identical messages to multiple recipients
++ * - No variation in timing between messages
++ * - Sudden spikes in activity
++ * - Messages sent at inhuman speed
++ */
++const DEFAULT_CONFIG = {
++    maxPerMinute: 8,
++    maxPerHour: 200,
++    maxPerDay: 1500,
++    minDelayMs: 1500,
++    maxDelayMs: 5000,
++    newChatDelayMs: 3000,
++    maxIdenticalMessages: 3,
++    burstAllowance: 3,
++};
++export class RateLimiter {
++    config;
++    messages = [];
++    identicalCount = new Map();
++    knownChats = new Set();
++    burstCount = 0;
++    lastMessageTime = 0;
++    constructor(config = {}) {
++        this.config = { ...DEFAULT_CONFIG, ...config };
++    }
++    /**
++     * Calculate delay before next message can be sent.
++     * Returns 0 if message can be sent immediately.
++     * Returns -1 if message should be blocked entirely.
++     */
++    async getDelay(recipient, content) {
++        const now = Date.now();
++        this.cleanup(now);
++        const contentHash = this.hashContent(content);
++        // Check daily limit
++        const dayMessages = this.messages.filter(m => now - m.timestamp < 86400000);
++        if (dayMessages.length >= this.config.maxPerDay) {
++            return -1; // Hard block — daily limit reached
++        }
++        // Check hourly limit
++        const hourMessages = this.messages.filter(m => now - m.timestamp < 3600000);
++        if (hourMessages.length >= this.config.maxPerHour) {
++            const oldestInHour = hourMessages[0];
++            return oldestInHour ? (oldestInHour.timestamp + 3600000) - now : 60000;
++        }
++        // Check per-minute limit
++        const minuteMessages = this.messages.filter(m => now - m.timestamp < 60000);
++        if (minuteMessages.length >= this.config.maxPerMinute) {
++            const oldestInMinute = minuteMessages[0];
++            return oldestInMinute ? (oldestInMinute.timestamp + 60000) - now : 10000;
++        }
++        // Check identical message limit
++        const identicalKey = `${contentHash}`;
++        const identicalSent = this.identicalCount.get(identicalKey) || 0;
++        if (identicalSent >= this.config.maxIdenticalMessages) {
++            return -1; // Block identical spam
++        }
++        // Calculate human-like delay
++        let delay = 0;
++        // Burst allowance — first few messages can be faster
++        if (this.burstCount < this.config.burstAllowance) {
++            this.burstCount++;
++            delay = this.jitter(this.config.minDelayMs * 0.5, this.config.minDelayMs);
++        }
++        else {
++            delay = this.jitter(this.config.minDelayMs, this.config.maxDelayMs);
++        }
++        // Extra delay for new chats (first message to this recipient)
++        if (!this.knownChats.has(recipient)) {
++            delay += this.jitter(this.config.newChatDelayMs * 0.5, this.config.newChatDelayMs);
++        }
++        // Ensure minimum time since last message
++        const timeSinceLast = now - this.lastMessageTime;
++        if (timeSinceLast < this.config.minDelayMs) {
++            delay = Math.max(delay, this.config.minDelayMs - timeSinceLast);
++        }
++        // Add "typing simulation" delay based on content length
++        const typingDelay = Math.min(content.length * 30, 3000); // ~30ms per char, max 3s
++        delay += this.jitter(typingDelay * 0.5, typingDelay);
++        return Math.round(delay);
++    }
++    /**
++     * Record a sent message
++     */
++    record(recipient, content) {
++        const now = Date.now();
++        const contentHash = this.hashContent(content);
++        this.messages.push({ timestamp: now, recipient, contentHash });
++        this.knownChats.add(recipient);
++        this.lastMessageTime = now;
++        // Track identical messages
++        const count = (this.identicalCount.get(contentHash) || 0) + 1;
++        this.identicalCount.set(contentHash, count);
++        // Reset burst counter after inactivity
++        if (now - this.lastMessageTime > 30000) {
++            this.burstCount = 0;
++        }
++    }
++    /**
++     * Get current usage stats
++     */
++    getStats() {
++        const now = Date.now();
++        this.cleanup(now);
++        return {
++            lastMinute: this.messages.filter(m => now - m.timestamp < 60000).length,
++            lastHour: this.messages.filter(m => now - m.timestamp < 3600000).length,
++            lastDay: this.messages.filter(m => now - m.timestamp < 86400000).length,
++            limits: {
++                perMinute: this.config.maxPerMinute,
++                perHour: this.config.maxPerHour,
++                perDay: this.config.maxPerDay,
++            },
++            knownChats: this.knownChats.size,
++        };
++    }
++    cleanup(now) {
++        // Remove messages older than 24 hours
++        this.messages = this.messages.filter(m => now - m.timestamp < 86400000);
++        // Reset identical counters every hour
++        if (this.messages.length === 0) {
++            this.identicalCount.clear();
++        }
++    }
++    /** Random delay between min and max (gaussian-ish distribution) */
++    jitter(min, max) {
++        // Use Box-Muller for more human-like distribution (clustered around middle)
++        const u1 = Math.random();
++        const u2 = Math.random();
++        const normal = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
++        const normalized = (normal + 3) / 6; // Map to ~0-1 range
++        const clamped = Math.max(0, Math.min(1, normalized));
++        return Math.round(min + clamped * (max - min));
++    }
++    /** Simple hash for content dedup */
++    hashContent(content) {
++        let hash = 0;
++        for (let i = 0; i < content.length; i++) {
++            const char = content.charCodeAt(i);
++            hash = ((hash << 5) - hash) + char;
++            hash |= 0;
++        }
++        return hash.toString(36);
++    }
++}
+diff --git a/dist/scheduler.d.ts b/dist/scheduler.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..e63bdd14e9e143ed6173ce5a795c2071e45b941d
+--- /dev/null
++++ b/dist/scheduler.d.ts
+@@ -0,0 +1,58 @@
++/**
++ * Smart Scheduler — Send messages during safe hours only
++ *
++ * WhatsApp is more suspicious of messages sent at 3 AM.
++ * This module ensures messages go out during "business hours"
++ * and adds realistic daily activity patterns.
++ */
++export interface SchedulerConfig {
++    /** Timezone (default: UTC) */
++    timezone: string;
++    /** Active hours [start, end] in 24h format (default: [8, 21]) */
++    activeHours: [number, number];
++    /** Reduce rate on weekends (default: 0.5 — half rate) */
++    weekendFactor: number;
++    /** Peak hours get slightly faster sending [start, end] (default: [10, 14]) */
++    peakHours: [number, number];
++    /** Peak hour speed multiplier (default: 1.3) */
++    peakFactor: number;
++    /** Lunch break — slight slowdown [start, end] (default: [12, 13]) */
++    lunchBreak: [number, number];
++    /** Lunch break speed factor (default: 0.5) */
++    lunchFactor: number;
++}
++export declare class Scheduler {
++    private config;
++    constructor(config?: Partial<SchedulerConfig>);
++    /**
++     * Check if now is within active hours
++     */
++    isActiveTime(): boolean;
++    /**
++     * Get the speed multiplier for current time
++     * > 1 = faster, < 1 = slower, 0 = don't send
++     */
++    getSpeedFactor(): number;
++    /**
++     * Get ms until next active window
++     */
++    msUntilActive(): number;
++    /**
++     * Adjust a delay based on current time factors
++     */
++    adjustDelay(baseDelayMs: number): number;
++    /**
++     * Get current schedule status
++     */
++    getStatus(): {
++        active: boolean;
++        currentHour: number;
++        day: string;
++        isWeekend: boolean;
++        speedFactor: number;
++        msUntilActive: number;
++        activeWindow: string;
++    };
++    private getCurrentHour;
++    private getCurrentDay;
++}
+diff --git a/dist/scheduler.js b/dist/scheduler.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..bd6438b8a73d60620f809e696facbcefa4405b89
+--- /dev/null
++++ b/dist/scheduler.js
+@@ -0,0 +1,111 @@
++/**
++ * Smart Scheduler — Send messages during safe hours only
++ *
++ * WhatsApp is more suspicious of messages sent at 3 AM.
++ * This module ensures messages go out during "business hours"
++ * and adds realistic daily activity patterns.
++ */
++const DEFAULT_CONFIG = {
++    timezone: 'UTC',
++    activeHours: [8, 21],
++    weekendFactor: 0.5,
++    peakHours: [10, 14],
++    peakFactor: 1.3,
++    lunchBreak: [12, 13],
++    lunchFactor: 0.5,
++};
++export class Scheduler {
++    config;
++    constructor(config = {}) {
++        this.config = { ...DEFAULT_CONFIG, ...config };
++    }
++    /**
++     * Check if now is within active hours
++     */
++    isActiveTime() {
++        const hour = this.getCurrentHour();
++        const [start, end] = this.config.activeHours;
++        return hour >= start && hour < end;
++    }
++    /**
++     * Get the speed multiplier for current time
++     * > 1 = faster, < 1 = slower, 0 = don't send
++     */
++    getSpeedFactor() {
++        if (!this.isActiveTime())
++            return 0;
++        const hour = this.getCurrentHour();
++        const day = this.getCurrentDay();
++        let factor = 1.0;
++        // Weekend reduction
++        if (day === 0 || day === 6) {
++            factor *= this.config.weekendFactor;
++        }
++        // Peak hours boost
++        const [peakStart, peakEnd] = this.config.peakHours;
++        if (hour >= peakStart && hour < peakEnd) {
++            factor *= this.config.peakFactor;
++        }
++        // Lunch slowdown
++        const [lunchStart, lunchEnd] = this.config.lunchBreak;
++        if (hour >= lunchStart && hour < lunchEnd) {
++            factor *= this.config.lunchFactor;
++        }
++        return factor;
++    }
++    /**
++     * Get ms until next active window
++     */
++    msUntilActive() {
++        if (this.isActiveTime())
++            return 0;
++        const now = new Date();
++        const hour = now.getHours();
++        const [start] = this.config.activeHours;
++        let nextActive;
++        if (hour >= this.config.activeHours[1]) {
++            // After hours — next active is tomorrow
++            nextActive = new Date(now);
++            nextActive.setDate(nextActive.getDate() + 1);
++            nextActive.setHours(start, 0, 0, 0);
++        }
++        else {
++            // Before hours — next active is today
++            nextActive = new Date(now);
++            nextActive.setHours(start, 0, 0, 0);
++        }
++        return nextActive.getTime() - now.getTime();
++    }
++    /**
++     * Adjust a delay based on current time factors
++     */
++    adjustDelay(baseDelayMs) {
++        const factor = this.getSpeedFactor();
++        if (factor === 0)
++            return -1; // Don't send
++        return Math.round(baseDelayMs / factor);
++    }
++    /**
++     * Get current schedule status
++     */
++    getStatus() {
++        const hour = this.getCurrentHour();
++        const day = this.getCurrentDay();
++        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
++        return {
++            active: this.isActiveTime(),
++            currentHour: hour,
++            day: dayNames[day],
++            isWeekend: day === 0 || day === 6,
++            speedFactor: this.getSpeedFactor(),
++            msUntilActive: this.msUntilActive(),
++            activeWindow: `${this.config.activeHours[0]}:00 - ${this.config.activeHours[1]}:00`,
++        };
++    }
++    getCurrentHour() {
++        return new Date().getHours();
++    }
++    getCurrentDay() {
++        return new Date().getDay();
++    }
++}
+diff --git a/dist/warmup.d.ts b/dist/warmup.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b80fe13a02c3b92e60dbb9333aa009e863078855
+--- /dev/null
++++ b/dist/warmup.d.ts
+@@ -0,0 +1,72 @@
++/**
++ * WarmUp — Gradual activity increase for new/reconnected numbers
++ *
++ * New numbers or numbers reconnecting after a break are under extra scrutiny.
++ * This module enforces a gradual ramp-up of messaging activity.
++ *
++ * WhatsApp flags:
++ * - New numbers sending many messages immediately
++ * - Numbers going from 0 to 100 messages/day overnight
++ * - Sudden pattern changes after period of inactivity
++ */
++export interface WarmUpConfig {
++    /** Number of warm-up days (default: 7) */
++    warmUpDays: number;
++    /** Messages allowed on day 1 (default: 20) */
++    day1Limit: number;
++    /** Growth factor per day (default: 1.8 — roughly doubles daily) */
++    growthFactor: number;
++    /** Hours of inactivity before re-entering warm-up (default: 72) */
++    inactivityThresholdHours: number;
++    /** Persist state to this file path (optional) */
++    statePath?: string;
++}
++export interface WarmUpState {
++    /** When warm-up started */
++    startedAt: number;
++    /** Last message timestamp */
++    lastActiveAt: number;
++    /** Messages sent per day [day0count, day1count, ...] */
++    dailyCounts: number[];
++    /** Whether warm-up is complete */
++    graduated: boolean;
++}
++export declare class WarmUp {
++    private config;
++    private state;
++    constructor(config?: Partial<WarmUpConfig>, existingState?: WarmUpState);
++    /**
++     * Get the current daily message limit based on warm-up phase
++     */
++    getDailyLimit(): number;
++    /**
++     * Check if a message can be sent (within warm-up limits)
++     */
++    canSend(): boolean;
++    /**
++     * Record a sent message
++     */
++    record(): void;
++    /**
++     * Get current warm-up status
++     */
++    getStatus(): {
++        phase: 'warming' | 'graduated';
++        day: number;
++        totalDays: number;
++        todayLimit: number;
++        todaySent: number;
++        progress: number;
++    };
++    /**
++     * Export state for persistence
++     */
++    exportState(): WarmUpState;
++    /**
++     * Reset warm-up (e.g., after detected ban risk)
++     */
++    reset(): void;
++    private getCurrentDay;
++    private checkInactivity;
++    private freshState;
++}
+diff --git a/dist/warmup.js b/dist/warmup.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..ee4908c0a3ae507f0fd7083c1460819748a07c4b
+--- /dev/null
++++ b/dist/warmup.js
+@@ -0,0 +1,109 @@
++/**
++ * WarmUp — Gradual activity increase for new/reconnected numbers
++ *
++ * New numbers or numbers reconnecting after a break are under extra scrutiny.
++ * This module enforces a gradual ramp-up of messaging activity.
++ *
++ * WhatsApp flags:
++ * - New numbers sending many messages immediately
++ * - Numbers going from 0 to 100 messages/day overnight
++ * - Sudden pattern changes after period of inactivity
++ */
++const DEFAULT_CONFIG = {
++    warmUpDays: 7,
++    day1Limit: 20,
++    growthFactor: 1.8,
++    inactivityThresholdHours: 72,
++};
++export class WarmUp {
++    config;
++    state;
++    constructor(config = {}, existingState) {
++        this.config = { ...DEFAULT_CONFIG, ...config };
++        this.state = existingState || this.freshState();
++    }
++    /**
++     * Get the current daily message limit based on warm-up phase
++     */
++    getDailyLimit() {
++        if (this.state.graduated)
++            return Infinity;
++        const day = this.getCurrentDay();
++        if (day >= this.config.warmUpDays) {
++            this.state.graduated = true;
++            return Infinity;
++        }
++        return Math.round(this.config.day1Limit * Math.pow(this.config.growthFactor, day));
++    }
++    /**
++     * Check if a message can be sent (within warm-up limits)
++     */
++    canSend() {
++        this.checkInactivity();
++        if (this.state.graduated)
++            return true;
++        const day = this.getCurrentDay();
++        const todayCount = this.state.dailyCounts[day] || 0;
++        return todayCount < this.getDailyLimit();
++    }
++    /**
++     * Record a sent message
++     */
++    record() {
++        const now = Date.now();
++        const day = this.getCurrentDay();
++        while (this.state.dailyCounts.length <= day) {
++            this.state.dailyCounts.push(0);
++        }
++        this.state.dailyCounts[day]++;
++        this.state.lastActiveAt = now;
++    }
++    /**
++     * Get current warm-up status
++     */
++    getStatus() {
++        const day = this.getCurrentDay();
++        const todaySent = this.state.dailyCounts[day] || 0;
++        const limit = this.getDailyLimit();
++        return {
++            phase: this.state.graduated ? 'graduated' : 'warming',
++            day: Math.min(day + 1, this.config.warmUpDays),
++            totalDays: this.config.warmUpDays,
++            todayLimit: limit === Infinity ? -1 : limit,
++            todaySent,
++            progress: this.state.graduated ? 100 : Math.round((day / this.config.warmUpDays) * 100),
++        };
++    }
++    /**
++     * Export state for persistence
++     */
++    exportState() {
++        return { ...this.state };
++    }
++    /**
++     * Reset warm-up (e.g., after detected ban risk)
++     */
++    reset() {
++        this.state = this.freshState();
++    }
++    getCurrentDay() {
++        return Math.floor((Date.now() - this.state.startedAt) / 86400000);
++    }
++    checkInactivity() {
++        const hoursSinceActive = (Date.now() - this.state.lastActiveAt) / 3600000;
++        if (hoursSinceActive > this.config.inactivityThresholdHours && this.state.graduated) {
++            // Re-enter warm-up after extended inactivity
++            this.state = this.freshState();
++            this.state.graduated = false;
++        }
++    }
++    freshState() {
++        const now = Date.now();
++        return {
++            startedAt: now,
++            lastActiveAt: now,
++            dailyCounts: [],
++            graduated: false,
++        };
++    }
++}
+diff --git a/dist/webhooks.d.ts b/dist/webhooks.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..fd9c005395542485d785387a546d912d67e969fd
+--- /dev/null
++++ b/dist/webhooks.d.ts
+@@ -0,0 +1,40 @@
++/**
++ * Webhook Alerts — Get notified on Telegram/Discord/Slack when risk changes
++ */
++export interface WebhookConfig {
++    /** Webhook URLs to POST to */
++    urls: string[];
++    /** Minimum risk level to trigger alert (default: 'medium') */
++    minRiskLevel: 'low' | 'medium' | 'high' | 'critical';
++    /** Cooldown between alerts in ms (default: 300000 — 5 min) */
++    cooldownMs: number;
++    /** Include stats in payload (default: true) */
++    includeStats: boolean;
++    /** Custom headers for webhook requests */
++    headers?: Record<string, string>;
++    /** Telegram bot token + chat ID for direct Telegram alerts */
++    telegram?: {
++        botToken: string;
++        chatId: string;
++    };
++    /** Discord webhook URL */
++    discord?: {
++        webhookUrl: string;
++    };
++}
++export declare class WebhookAlerts {
++    private config;
++    private lastAlertTime;
++    constructor(config?: Partial<WebhookConfig>);
++    /**
++     * Send alert if risk level warrants it
++     */
++    alert(data: {
++        risk: string;
++        score: number;
++        recommendation: string;
++        reasons: string[];
++        stats?: any;
++    }): Promise<void>;
++    private postWebhook;
++}
+diff --git a/dist/webhooks.js b/dist/webhooks.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..aca3eb2d1d0445b5b6a9992aab9e2d990b960b3b
+--- /dev/null
++++ b/dist/webhooks.js
+@@ -0,0 +1,80 @@
++/**
++ * Webhook Alerts — Get notified on Telegram/Discord/Slack when risk changes
++ */
++const DEFAULT_CONFIG = {
++    urls: [],
++    minRiskLevel: 'medium',
++    cooldownMs: 300000,
++    includeStats: true,
++};
++export class WebhookAlerts {
++    config;
++    lastAlertTime = 0;
++    constructor(config = {}) {
++        this.config = { ...DEFAULT_CONFIG, ...config };
++    }
++    /**
++     * Send alert if risk level warrants it
++     */
++    async alert(data) {
++        const riskOrder = ['low', 'medium', 'high', 'critical'];
++        if (riskOrder.indexOf(data.risk) < riskOrder.indexOf(this.config.minRiskLevel)) {
++            return; // Below threshold
++        }
++        const now = Date.now();
++        if (now - this.lastAlertTime < this.config.cooldownMs) {
++            return; // Cooldown active
++        }
++        this.lastAlertTime = now;
++        const payload = {
++            source: 'baileys-antiban',
++            timestamp: new Date().toISOString(),
++            ...data,
++        };
++        // Send to generic webhook URLs
++        for (const url of this.config.urls) {
++            this.postWebhook(url, payload).catch(() => { });
++        }
++        // Telegram
++        if (this.config.telegram) {
++            const emoji = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' }[data.risk] || '⚪';
++            const text = `${emoji} *baileys-antiban Alert*\n\nRisk: *${data.risk.toUpperCase()}* (score: ${data.score})\n${data.recommendation}\n\nReasons:\n${data.reasons.map(r => `• ${r}`).join('\n')}`;
++            this.postWebhook(`https://api.telegram.org/bot${this.config.telegram.botToken}/sendMessage`, { chat_id: this.config.telegram.chatId, text, parse_mode: 'Markdown' }).catch(() => { });
++        }
++        // Discord
++        if (this.config.discord) {
++            const color = { low: 0x00ff00, medium: 0xffff00, high: 0xff8800, critical: 0xff0000 }[data.risk] || 0;
++            this.postWebhook(this.config.discord.webhookUrl, {
++                embeds: [{
++                        title: '🛡️ baileys-antiban Alert',
++                        color,
++                        fields: [
++                            { name: 'Risk', value: data.risk.toUpperCase(), inline: true },
++                            { name: 'Score', value: String(data.score), inline: true },
++                            { name: 'Recommendation', value: data.recommendation },
++                            { name: 'Reasons', value: data.reasons.join('\n') },
++                        ],
++                        timestamp: new Date().toISOString(),
++                    }],
++            }).catch(() => { });
++        }
++    }
++    async postWebhook(url, payload) {
++        try {
++            const response = await fetch(url, {
++                method: 'POST',
++                headers: {
++                    'Content-Type': 'application/json',
++                    ...this.config.headers,
++                },
++                body: JSON.stringify(payload),
++            });
++            if (!response.ok) {
++                console.error(`[baileys-antiban] Webhook failed: ${response.status}`);
++            }
++        }
++        catch (err) {
++            console.error(`[baileys-antiban] Webhook error:`, err);
++        }
++    }
++}
+diff --git a/dist/wrapper.d.ts b/dist/wrapper.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..99086da97ff8d5ff243f68eb9c713c85e638e7b8
+--- /dev/null
++++ b/dist/wrapper.d.ts
+@@ -0,0 +1,32 @@
++/**
++ * Socket Wrapper — Drop-in replacement that wraps sendMessage with anti-ban protection
++ *
++ * Usage:
++ *   import makeWASocket from 'baileys';
++ *   import { wrapSocket } from 'baileys-antiban';
++ *
++ *   const sock = makeWASocket({ ... });
++ *   const safeSock = wrapSocket(sock);
++ *
++ *   // Use safeSock.sendMessage() — automatically rate-limited and monitored
++ *   await safeSock.sendMessage(jid, { text: 'Hello!' });
++ *
++ *   // Check health anytime
++ *   console.log(safeSock.antiban.getStats());
++ */
++import { AntiBan, type AntiBanConfig } from './antiban.js';
++import type { WarmUpState } from './warmup.js';
++type WASocket = {
++    sendMessage: (jid: string, content: any, options?: any) => Promise<any>;
++    ev: any;
++    [key: string]: any;
++};
++export interface WrappedSocket extends WASocket {
++    antiban: AntiBan;
++}
++/**
++ * Wrap a Baileys socket with anti-ban protection.
++ * The returned socket has the same API but sendMessage() is protected.
++ */
++export declare function wrapSocket(sock: WASocket, config?: AntiBanConfig, warmUpState?: WarmUpState): WrappedSocket;
++export {};
+diff --git a/dist/wrapper.js b/dist/wrapper.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..f214606b113532488b46158ea1938b808400d305
+--- /dev/null
++++ b/dist/wrapper.js
+@@ -0,0 +1,63 @@
++/**
++ * Socket Wrapper — Drop-in replacement that wraps sendMessage with anti-ban protection
++ *
++ * Usage:
++ *   import makeWASocket from 'baileys';
++ *   import { wrapSocket } from 'baileys-antiban';
++ *
++ *   const sock = makeWASocket({ ... });
++ *   const safeSock = wrapSocket(sock);
++ *
++ *   // Use safeSock.sendMessage() — automatically rate-limited and monitored
++ *   await safeSock.sendMessage(jid, { text: 'Hello!' });
++ *
++ *   // Check health anytime
++ *   console.log(safeSock.antiban.getStats());
++ */
++import { AntiBan } from './antiban.js';
++/**
++ * Wrap a Baileys socket with anti-ban protection.
++ * The returned socket has the same API but sendMessage() is protected.
++ */
++export function wrapSocket(sock, config, warmUpState) {
++    const antiban = new AntiBan(config, warmUpState);
++    // Hook into connection events for health monitoring
++    sock.ev.on('connection.update', (update) => {
++        if (update.connection === 'close') {
++            const reason = update.lastDisconnect?.error?.output?.statusCode || 'unknown';
++            antiban.onDisconnect(reason);
++        }
++        if (update.connection === 'open') {
++            antiban.onReconnect();
++        }
++    });
++    // Create proxy that intercepts sendMessage
++    const originalSendMessage = sock.sendMessage.bind(sock);
++    const wrappedSendMessage = async (jid, content, options) => {
++        // Extract text content for rate limiter analysis
++        const text = content?.text || content?.caption || content?.image?.caption || '';
++        const decision = await antiban.beforeSend(jid, text);
++        if (!decision.allowed) {
++            throw new Error(`[baileys-antiban] Message blocked: ${decision.reason}`);
++        }
++        // Apply delay
++        if (decision.delayMs > 0) {
++            await new Promise(resolve => setTimeout(resolve, decision.delayMs));
++        }
++        // Send message
++        try {
++            const result = await originalSendMessage(jid, content, options);
++            antiban.afterSend(jid, text);
++            return result;
++        }
++        catch (error) {
++            antiban.afterSendFailed(error instanceof Error ? error.message : String(error));
++            throw error;
++        }
++    };
++    // Return enhanced socket
++    const wrapped = Object.create(sock);
++    wrapped.sendMessage = wrappedSendMessage;
++    wrapped.antiban = antiban;
++    return wrapped;
++}

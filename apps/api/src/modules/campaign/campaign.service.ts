@@ -1,0 +1,153 @@
+import { prisma } from '../../prisma/client';
+import type { CreateCampaignInput, AddCampaignMembersInput, UpdateCampaignInput } from '@yesbheem/shared';
+import { ErrorCodes } from '@yesbheem/shared';
+import { Queue } from 'bullmq';
+import { getRedisClient } from '../../core/redis';
+import { logEvent } from '../../core/event-logger';
+
+// Note: Instead of importing queue directly and causing circular dependencies if queue imports service,
+// we define a local reference to the campaign queue.
+export const campaignQueue = new Queue('campaign-execution', { connection: getRedisClient() as any });
+
+export async function createCampaign(workspaceId: string, input: CreateCampaignInput) {
+    const campaign = await prisma.campaign.create({
+        data: {
+            workspaceId,
+            name: input.name,
+            templateId: input.templateId,
+            templateVersionId: (input as any).templateVersionId,
+            templateLanguage: input.templateLanguage,
+            scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+        },
+    });
+
+    return campaign;
+}
+
+export async function getCampaigns(workspaceId: string, skip: number = 0, take: number = 20) {
+    const [campaigns, total] = await Promise.all([
+        prisma.campaign.findMany({
+            where: { workspaceId },
+            skip,
+            take,
+            orderBy: { createdAt: 'desc' },
+        }),
+        prisma.campaign.count({ where: { workspaceId } }),
+    ]);
+
+    return { campaigns, total };
+}
+
+export async function getCampaign(workspaceId: string, campaignId: string) {
+    const campaign = await prisma.campaign.findUnique({
+        where: { id: campaignId, workspaceId },
+        include: {
+            _count: { select: { members: true } }
+        }
+    });
+
+    if (!campaign) {
+        throw { statusCode: 404, code: ErrorCodes.NOT_FOUND, message: `Campaign ${campaignId} not found` };
+    }
+
+    return campaign;
+}
+
+export async function updateCampaign(workspaceId: string, campaignId: string, input: UpdateCampaignInput) {
+    // Verify existence
+    await getCampaign(workspaceId, campaignId);
+
+    const data: any = {};
+    if (input.name !== undefined) data.name = input.name;
+    if (input.status !== undefined) data.status = input.status;
+    if (input.templateId !== undefined) data.templateId = input.templateId;
+    if ((input as any).templateVersionId !== undefined) data.templateVersionId = (input as any).templateVersionId;
+    if (input.templateLanguage !== undefined) data.templateLanguage = input.templateLanguage;
+    if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+
+    const updated = await prisma.campaign.update({
+        where: { id: campaignId },
+        data,
+    });
+
+    return updated;
+}
+
+export async function addCampaignMembers(workspaceId: string, campaignId: string, input: AddCampaignMembersInput) {
+    // 1. Verify Campaign belongs to workspace
+    const campaign = await getCampaign(workspaceId, campaignId);
+
+    if (campaign.status !== 'DRAFT' && campaign.status !== 'SCHEDULED') {
+        throw { statusCode: 400, code: ErrorCodes.BAD_REQUEST, message: 'Cannot add members to a running or completed campaign' };
+    }
+
+    // 2. Validate all contacts belong to workspace
+    const contactIds = input.members.map(m => m.contactId);
+
+    // Chunk queries to avoid huge IN clauses if large
+    const validContacts = await prisma.contact.findMany({
+        where: {
+            workspaceId,
+            id: { in: contactIds }
+        },
+        select: { id: true }
+    });
+
+    const validContactIds = new Set(validContacts.map(c => c.id));
+
+    // 3. Filter input to only valid contacts (or throw error for invalid chunks)
+    const validMembersToAdd = input.members.filter(m => validContactIds.has(m.contactId));
+
+    if (validMembersToAdd.length === 0) {
+        throw { statusCode: 400, code: ErrorCodes.BAD_REQUEST, message: 'No valid contacts provided for this workspace' };
+    }
+
+    // 4. Bulk insert, ignoring conflicts using createMany
+    const created = await prisma.campaignMember.createMany({
+        data: validMembersToAdd.map(m => ({
+            campaignId,
+            contactId: m.contactId,
+            variables: m.variables || {},
+            templateVersionId: campaign.templateVersionId, // Inherit immutable version from campaign
+            status: 'PENDING'
+        })),
+        skipDuplicates: true // Ignore if already added
+    });
+
+    return { added: created.count };
+}
+
+/**
+ * Initiates a campaign by queuing a background job to process the members.
+ */
+export async function startCampaign(workspaceId: string, campaignId: string) {
+    const campaign = await getCampaign(workspaceId, campaignId);
+
+    if (campaign.status === 'RUNNING' || campaign.status === 'COMPLETED') {
+        throw { statusCode: 400, code: ErrorCodes.BAD_REQUEST, message: 'Campaign is already running or completed' };
+    }
+
+    // Mark as running
+    const updated = await prisma.campaign.update({
+        where: { id: campaignId },
+        data: {
+            status: 'RUNNING',
+            startedAt: new Date(),
+        }
+    });
+
+    // Enqueue job. The worker will paginate through CampaignMembers and push them to outbound routing.
+    await campaignQueue.add(`campaign-${campaignId}`, {
+        workspaceId,
+        campaignId
+    });
+
+    // Log global event
+    await logEvent(workspaceId, 'campaign_sent', 'campaign_module', {
+        campaignId: updated.id,
+        name: updated.name,
+        templateId: updated.templateId
+    });
+
+    return updated;
+}

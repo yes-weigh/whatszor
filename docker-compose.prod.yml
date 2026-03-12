@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-yesbheem}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yesbheem_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-yesbheem_prod}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U yesbheem" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-yesbheem}:${POSTGRES_PASSWORD:-yesbheem_secret}@db:5432/${POSTGRES_DB:-yesbheem_prod}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-changeme_super_secret_jwt}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-changeme_super_secret_refresh}
+      - CORS_ORIGIN=http://localhost:3000
+      - WHATSAPP_API_URL=${WHATSAPP_API_URL}
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: always
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api/v1 # Server side will use this, client side depends on proxy or full URL
+      # Assuming Nginx sets up a reverse proxy for /api to api:5000 normally
+
+volumes:
+  db-data:
+  redis-data:
