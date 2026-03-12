@@ -107,6 +107,8 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-yesbheem}:${POSTGRES_PASSWORD:-yesbheem_secret}@db:5432/${POSTGRES_DB:-yesbheem_prod}?schema=public
       - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-changeme_super_secret_jwt}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-changeme_super_secret_refresh}
       - WHATSAPP_API_URL=${WHATSAPP_API_URL}
       - SENTRY_DSN=${SENTRY_DSN}
       - STORAGE_PROVIDER=${STORAGE_PROVIDER:-s3}
