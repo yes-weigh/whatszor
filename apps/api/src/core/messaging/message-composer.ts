@@ -2,6 +2,7 @@ import { logger } from '../logger';
 import { prisma } from '../../prisma/client';
 import { renderTemplateVersion, RenderContext } from '../../modules/template/template-renderer';
 import { randomUUID } from 'crypto';
+import { outboundMessagesQueue } from '../queue';
 
 const log = logger.child({ module: 'message-composer' });
 
@@ -13,6 +14,9 @@ export interface ComposeMessageRequest {
     // Delivery Details
     provider: string; // "WHATSAPP"
     providerId: string; // Recipient JID (phone number)
+    sessionId?: string | null; // WhatsApp session account ID optional
+    campaignId?: string | null; // Optional campaign context
+    delay?: number; // Delay in milliseconds before sending
     
     // Direct content (mutually exclusive with templateVersionId)
     type?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'AUDIO' | 'TEMPLATE';
@@ -31,12 +35,13 @@ export interface ComposeMessageRequest {
  */
 export async function composeAndQueueMessage(request: ComposeMessageRequest) {
     const { 
-        conversationId, senderUserId,
+        workspaceId, conversationId, senderUserId,
+        providerId, sessionId, campaignId, delay,
         type, content, mediaUrl, 
         templateVersionId, templateVariables 
     } = request;
 
-    log.debug({ conversationId, providerId: request.providerId }, 'Composing message pipeline initiated');
+    log.debug({ conversationId, providerId }, 'Composing message pipeline initiated');
 
     // 1. Resolve Template (if required)
     let finalType = type || 'TEXT';
@@ -81,14 +86,16 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
     log.info({ messageId: message.id }, 'Outbound message enqueued locally');
 
     // 3. Dispatch to final Message Worker
-    // Note: This relies on the core messageQueue which routes to Baileys provider.
-    // Assuming imported from ../queue later...
-    // await messageQueue.add('send-whatsapp-message', {
-    //    messageId: message.id,
-    //    workspaceId,
-    //    provider,
-    //    providerId
-    // });
+    await outboundMessagesQueue.add(`send-${message.id}`, {
+        workspaceId,
+        messageId: message.id,
+        toJid: providerId,
+        sessionId,
+        type: message.type,
+        content: message.content,
+        mediaData: message.mediaData,
+        campaignId
+    }, { delay: delay || 0 });
 
     return message;
 }

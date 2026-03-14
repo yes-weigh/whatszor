@@ -1,25 +1,30 @@
 import { prisma } from '../../prisma/client';
 import type { CreateCampaignInput, AddCampaignMembersInput, UpdateCampaignInput } from '@yesbheem/shared';
+import { buildCampaignSnapshotForAudience } from './campaign-target.service';
 import { ErrorCodes } from '@yesbheem/shared';
-import { Queue } from 'bullmq';
-import { getRedisClient } from '../../core/redis';
 import { logEvent } from '../../core/event-logger';
-
-// Note: Instead of importing queue directly and causing circular dependencies if queue imports service,
-// we define a local reference to the campaign queue.
-export const campaignQueue = new Queue('campaign-execution', { connection: getRedisClient() as any });
+import { QueueName, getQueue } from '../../queues';
 
 export async function createCampaign(workspaceId: string, input: CreateCampaignInput) {
     const campaign = await prisma.campaign.create({
         data: {
             workspaceId,
             name: input.name,
-            templateId: input.templateId,
-            templateVersionId: (input as any).templateVersionId,
-            templateLanguage: input.templateLanguage,
+            templateId: input.templateId || null,
+            templateVersionId: input.templateVersionId || null,
+            templateLanguage: input.templateLanguage || null,
+            whatsappAccountId: input.whatsappAccountId || null,
             scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+            audienceId: input.audienceId || null,
         },
     });
+
+    if (input.audienceId) {
+        await buildCampaignSnapshotForAudience(workspaceId, campaign.id, input.audienceId);
+    } else if (input.contactIds && input.contactIds.length > 0) {
+        const payload = input.contactIds.map(id => ({ contactId: id }));
+        await addCampaignMembers(workspaceId, campaign.id, { members: payload });
+    }
 
     return campaign;
 }
@@ -31,6 +36,9 @@ export async function getCampaigns(workspaceId: string, skip: number = 0, take: 
             skip,
             take,
             orderBy: { createdAt: 'desc' },
+            include: {
+                _count: { select: { members: true } }
+            }
         }),
         prisma.campaign.count({ where: { workspaceId } }),
     ]);
@@ -53,6 +61,29 @@ export async function getCampaign(workspaceId: string, campaignId: string) {
     return campaign;
 }
 
+export async function cancelCampaign(workspaceId: string, campaignId: string) {
+    const campaign = await prisma.campaign.findUnique({
+        where: { id: campaignId, workspaceId }
+    });
+
+    if (!campaign) {
+        throw { statusCode: 404, code: ErrorCodes.NOT_FOUND, message: `Campaign ${campaignId} not found` };
+    }
+
+    const updated = await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: 'CANCELLED' }
+    });
+
+    // Mark pending members as failed to give visual feedback that they won't be sent
+    await prisma.campaignMember.updateMany({
+        where: { campaignId, status: { in: ['PENDING', 'PROCESSING'] } },
+        data: { status: 'FAILED', errorReason: 'Campaign cancelled by user' }
+    });
+
+    return updated;
+}
+
 export async function updateCampaign(workspaceId: string, campaignId: string, input: UpdateCampaignInput) {
     // Verify existence
     await getCampaign(workspaceId, campaignId);
@@ -60,9 +91,10 @@ export async function updateCampaign(workspaceId: string, campaignId: string, in
     const data: any = {};
     if (input.name !== undefined) data.name = input.name;
     if (input.status !== undefined) data.status = input.status;
-    if (input.templateId !== undefined) data.templateId = input.templateId;
-    if ((input as any).templateVersionId !== undefined) data.templateVersionId = (input as any).templateVersionId;
-    if (input.templateLanguage !== undefined) data.templateLanguage = input.templateLanguage;
+    if (input.templateId !== undefined) data.templateId = input.templateId || null;
+    if ((input as any).templateVersionId !== undefined) data.templateVersionId = (input as any).templateVersionId || null;
+    if (input.templateLanguage !== undefined) data.templateLanguage = input.templateLanguage || null;
+    if ((input as any).whatsappAccountId !== undefined) data.whatsappAccountId = (input as any).whatsappAccountId || null;
     if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
 
     const updated = await prisma.campaign.update({
@@ -93,7 +125,7 @@ export async function addCampaignMembers(workspaceId: string, campaignId: string
         select: { id: true }
     });
 
-    const validContactIds = new Set(validContacts.map(c => c.id));
+    const validContactIds = new Set(validContacts.map((c: { id: string }) => c.id));
 
     // 3. Filter input to only valid contacts (or throw error for invalid chunks)
     const validMembersToAdd = input.members.filter(m => validContactIds.has(m.contactId));
@@ -137,7 +169,7 @@ export async function startCampaign(workspaceId: string, campaignId: string) {
     });
 
     // Enqueue job. The worker will paginate through CampaignMembers and push them to outbound routing.
-    await campaignQueue.add(`campaign-${campaignId}`, {
+    await getQueue(QueueName.CAMPAIGN).add(`campaign-${campaignId}`, {
         workspaceId,
         campaignId
     });
@@ -150,4 +182,60 @@ export async function startCampaign(workspaceId: string, campaignId: string) {
     });
 
     return updated;
+}
+
+/**
+ * Recalculates the JSON stats object on the Campaign model by aggregating all
+ * CampaignMember statuses. Completely idempotent and race-condition free.
+ */
+export async function syncCampaignStats(workspaceId: string, campaignId: string) {
+    const stats = await prisma.campaignMember.groupBy({
+        by: ['status'],
+        where: { campaignId },
+        _count: { status: true }
+    });
+
+    const parsedStats = {
+        total: 0,
+        sent: 0,
+        delivered: 0,
+        read: 0,
+        failed: 0
+    };
+
+    // Calculate absolute isolated counts
+    for (const stat of stats) {
+        const count = stat._count.status;
+        parsedStats.total += count;
+        if (stat.status === 'SENT') parsedStats.sent += count;
+        if (stat.status === 'DELIVERED') parsedStats.delivered += count;
+        if (stat.status === 'READ') parsedStats.read += count;
+        if (stat.status === 'FAILED') parsedStats.failed += count;
+    }
+
+    // Cumulative Funnel logic:
+    // A READ message is implicitly DELIVERED and SENT.
+    // A DELIVERED message is implicitly SENT.
+    parsedStats.delivered += parsedStats.read;
+    parsedStats.sent += parsedStats.delivered;
+
+    await prisma.campaign.update({
+        where: { id: campaignId, workspaceId },
+        data: { stats: parsedStats as any }
+    });
+}
+
+export async function deleteCampaign(workspaceId: string, campaignId: string) {
+    const campaign = await getCampaign(workspaceId, campaignId);
+
+    if (campaign.status === 'RUNNING') {
+        throw { statusCode: 400, code: ErrorCodes.BAD_REQUEST, message: 'Cannot delete a running campaign' };
+    }
+
+    await prisma.$transaction([
+        prisma.campaignMember.deleteMany({ where: { campaignId } }),
+        prisma.campaign.delete({ where: { id: campaignId } })
+    ]);
+
+    return { deleted: true };
 }

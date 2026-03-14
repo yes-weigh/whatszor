@@ -1,0 +1,43 @@
+{
+  "id": "cmmp26wb5000lxtgn4zt6i2x8",
+  "workspaceId": "cmmnn1ulu00027cqtssq6lti8",
+  "name": "t4",
+  "status": "COMPLETED",
+  "templateId": "cmmosgjoc000o3lt21pe8ozp7",
+  "templateVersionId": null,
+  "templateLanguage": null,
+  "scheduledAt": null,
+  "startedAt": "2026-03-13T15:35:56.987Z",
+  "completedAt": "2026-03-13T15:35:57.170Z",
+  "whatsappAccountId": null,
+  "stats": {},
+  "createdAt": "2026-03-13T15:35:56.945Z",
+  "updatedAt": "2026-03-13T15:35:57.172Z",
+  "audienceId": null,
+  "members": [
+    {
+      "id": "cmmp26wbr000mxtgni975ofyy",
+      "campaignId": "cmmp26wb5000lxtgn4zt6i2x8",
+      "contactId": "cmmnpk4p308xj7cqtyqagk753",
+      "status": "SENT",
+      "messageId": "cmmp26we2000rxtgnr3udpgcf",
+      "variables": {},
+      "templateVersionId": null,
+      "errorReason": null,
+      "createdAt": "2026-03-13T15:35:56.967Z",
+      "updatedAt": "2026-03-13T15:36:01.973Z"
+    },
+    {
+      "id": "cmmp26wbr000nxtgnz2aqasdi",
+      "campaignId": "cmmp26wb5000lxtgn4zt6i2x8",
+      "contactId": "cmmnpl37g0ajv7cqt7jak4p8i",
+      "status": "SENT",
+      "messageId": "cmmp26wfv000txtgndcp6datk",
+      "variables": {},
+      "templateVersionId": null,
+      "errorReason": null,
+      "createdAt": "2026-03-13T15:35:56.967Z",
+      "updatedAt": "2026-03-13T15:36:05.715Z"
+    }
+  ]
+}

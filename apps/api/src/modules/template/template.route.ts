@@ -46,7 +46,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
                     version: 1,
                     messageText: b.messageText,
                     footerText: b.footerText,
-                    headerMediaId: b.headerMediaId,
+                    headerMediaId: b.headerMediaId || undefined,
                     buttons: {
                         create: (b.buttons || []).map((btn: any) => ({
                             type: btn.type,
@@ -113,7 +113,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
                     version: nextVersionNum,
                     messageText: b.messageText,
                     footerText: b.footerText,
-                    headerMediaId: b.headerMediaId,
+                    headerMediaId: b.headerMediaId || undefined,
                     buttons: {
                         create: (b.buttons || []).map((btn: any) => ({
                             type: btn.type,

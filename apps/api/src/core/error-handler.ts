@@ -14,6 +14,7 @@ export function errorHandler(
 ): void {
     // Zod validation errors from @fastify/sensible or manual parsing
     if (error instanceof ZodError) {
+        logger.error({ validationErrors: error.flatten().fieldErrors }, 'Zod validation failed');
         reply.status(422).send({
             success: false,
             error: {

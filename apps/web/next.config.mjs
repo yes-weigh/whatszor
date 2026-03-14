@@ -7,6 +7,7 @@ const nextConfig = {
     transpilePackages: ['@yesbheem/shared'],
     experimental: {
         optimizePackageImports: ['lucide-react'],
+        instrumentationHook: true,
     },
     async headers() {
         return [

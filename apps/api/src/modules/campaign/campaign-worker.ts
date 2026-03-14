@@ -2,6 +2,7 @@ import { Job } from 'bullmq';
 import { prisma } from '../../prisma/client';
 import { logger } from '../../core/logger';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
+import { createOrGetConversation } from '../../modules/messaging/conversation.service';
 
 const log = logger.child({ module: 'campaign-worker' });
 
@@ -14,8 +15,27 @@ export async function processCampaignJob(job: Job) {
         where: { id: campaignId }
     });
 
-    if (!campaign || !campaign.templateVersionId) {
-        log.error({ campaignId }, 'Campaign not found or missing template version');
+    if (!campaign) {
+        log.error({ campaignId }, 'Campaign not found');
+        return;
+    }
+
+    let templateVersionId = campaign.templateVersionId;
+
+    if (!templateVersionId && campaign.templateId) {
+        // Fallback: Resolve highest available version for this template
+        const latestVersion = await prisma.templateVersion.findFirst({
+            where: { templateId: campaign.templateId },
+            orderBy: { version: 'desc' },
+            select: { id: true }
+        });
+        if (latestVersion) {
+            templateVersionId = latestVersion.id;
+        }
+    }
+
+    if (!templateVersionId) {
+        log.error({ campaignId }, 'Campaign missing template version');
         return;
     }
 
@@ -32,19 +52,34 @@ export async function processCampaignJob(job: Job) {
 
     log.info({ campaignId, pendingCount: members.length }, 'Processing campaign members');
 
+    let processed = 0;
+
     for (const member of members) {
         try {
             if (!member.contact.phone) {
                 throw new Error('Contact missing phone number');
             }
 
+            // Ensure conversation exists
+            const conversation = await createOrGetConversation(workspaceId, {
+                provider: 'WHATSAPP',
+                providerId: member.contact.phone,
+            });
+
+            // Stagger messages to prevent burst sending
+            const MIN_DELAY_MS = 3000;
+            const JITTER_MS = 2000;
+            const jobDelay = processed * (MIN_DELAY_MS + Math.floor(Math.random() * JITTER_MS));
+
             // Universal Messaging Pipeline integration
             const message = await composeAndQueueMessage({
                 workspaceId,
-                conversationId: `cmp-${campaignId}-${member.contactId}`, // Simplified pseudo-conversation or resolve real one
+                conversationId: conversation.id,
                 provider: 'WHATSAPP',
                 providerId: member.contact.phone, // Real JID resolution happens in WA worker
-                templateVersionId: member.templateVersionId || campaign.templateVersionId!,
+                campaignId: campaign.id,
+                delay: jobDelay,
+                templateVersionId: member.templateVersionId || templateVersionId,
                 templateVariables: {
                     contact: member.contact.customData as any,
                     ...((member.variables as Record<string, any>) || {})
@@ -59,6 +94,8 @@ export async function processCampaignJob(job: Job) {
                     messageId: message.id
                 }
             });
+            
+            processed++;
 
         } catch (error: any) {
             log.error({ memberId: member.id, err: error }, 'Failed to queue campaign message for member');
@@ -69,6 +106,16 @@ export async function processCampaignJob(job: Job) {
                     errorReason: error.message || 'Unknown error during composing'
                 }
             });
+            
+            const c = await prisma.campaign.findUnique({ where: { id: campaignId } });
+            if (c) {
+                const stats = (c.stats as Record<string, number>) || {};
+                stats.failed = (stats.failed || 0) + 1;
+                await prisma.campaign.update({
+                    where: { id: campaignId },
+                    data: { stats: stats as any }
+                });
+            }
         }
     }
 

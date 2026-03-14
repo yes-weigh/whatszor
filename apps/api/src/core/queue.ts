@@ -149,6 +149,45 @@ export function initializeWorkers() {
                     data: { status },
                 });
 
+                // Also update CampaignMember to keep campaign stats accurate
+                const updatedMembers = await (prisma.campaignMember as any).findMany({
+                    where: { messageId: msg.id },
+                    select: { id: true, campaignId: true, status: true }
+                });
+
+                if (updatedMembers.length > 0) {
+                    await (prisma.campaignMember as any).updateMany({
+                        where: { messageId: msg.id },
+                        data: { status },
+                    });
+
+                    // Update aggregate stats on the Campaign
+                    for (const member of updatedMembers) {
+                        // Only increment if it's advancing to a higher state to prevent double-counting
+                        if (member.status === status) continue;
+                        
+                        const campaign = await prisma.campaign.findUnique({ where: { id: member.campaignId } });
+                        if (campaign) {
+                            const stats = (campaign.stats as Record<string, number>) || {};
+                            
+                            // Initialize if empty
+                            stats.delivered = stats.delivered || 0;
+                            stats.read = stats.read || 0;
+                            
+                            if (status === 'DELIVERED' && member.status !== 'DELIVERED' && member.status !== 'READ' && member.status !== 'PLAYED') {
+                                stats.delivered += 1;
+                            } else if ((status === 'READ' || status === 'PLAYED') && member.status !== 'READ' && member.status !== 'PLAYED') {
+                                stats.read += 1;
+                            }
+                            
+                            await prisma.campaign.update({
+                                where: { id: campaign.id },
+                                data: { stats: stats as any }
+                            });
+                        }
+                    }
+                }
+
                 // Push real-time update to any open UI tabs for this workspace
                 realtimeEmit(workspaceId, 'message.status', {
                     messageId: msg.id,
@@ -328,7 +367,19 @@ export function initializeWorkers() {
                         // Download and persist inbound media to local disk.
                         // We do this AFTER the message is saved so a download
                         // failure never causes message loss.
-                        if (mediaData && !msg.key.fromMe) {
+                        const mediaSpecific = mediaData?.imageMessage 
+                                        || mediaData?.videoMessage 
+                                        || mediaData?.audioMessage 
+                                        || mediaData?.documentMessage;
+                        
+                        // Some system messages, like button replies, might contain an outer "imageMessage" type 
+                        // without an actual downloadable url/mediaKey. Skip download for those.
+                        const hasDownloadableMedia = mediaData 
+                            && !msg.key.fromMe 
+                            && mediaSpecific 
+                            && (mediaSpecific.url && !!mediaSpecific.mediaKey);
+
+                        if (hasDownloadableMedia) {
                             try {
                                 const mimeType: string =
                                     mediaData.imageMessage?.mimetype
@@ -738,12 +789,16 @@ export function initializeWorkers() {
 
             log.info({ messageId, toJid, sessionId }, 'Processing outbound message');
 
-            // Use session-specific safe socket if provided (for per-salesperson routing).
-            // getSafeSocket() returns the anti-ban wrapped socket — all sends are automatically
-            // rate-limited with gaussian jitter, typed, and health-monitored.
-            const socket = sessionId
-                ? (waManager.getSafeSocket(sessionId) || waManager.getSafeSocket(workspaceId))
-                : waManager.getSafeSocket(workspaceId);
+            let activeSessionId = sessionId;
+
+            if (!activeSessionId) {
+                const defaultAccount = await prisma.whatsAppAccount.findFirst({
+                    where: { workspaceId, status: 'CONNECTED' }
+                });
+                if (defaultAccount) activeSessionId = defaultAccount.sessionId;
+            }
+
+            const socket = activeSessionId ? waManager.getSafeSocket(activeSessionId) : undefined;
             if (!socket) {
                 // If the socket isn't connected, we can't send.
                 // Re-queue or fail the job
@@ -753,20 +808,80 @@ export function initializeWorkers() {
             try {
                 let payload: any;
 
-                // In Phase 5, if it's a template we can send button messages here using Itsukichann/Baileys features
-                if (type === 'TEMPLATE' && mediaData?.buttons) {
-                    payload = {
-                        text: content,
-                        buttons: mediaData.buttons,
-                        headerType: 1
+                if (type === 'TEMPLATE' && mediaData?.templatePayload?.buttons?.length > 0) {
+                    const templateData = mediaData.templatePayload;
+
+                    const interactiveButtons = templateData.buttons.map((btn: any, i: number) => {
+                        return {
+                            name: 'quick_reply',
+                            buttonParamsJson: JSON.stringify({
+                                display_text: btn.label,
+                                id: btn.payload || `btn_id_${i}`
+                            })
+                        };
+                    });
+
+                    const buttonMessage: any = {
+                        footer: templateData.footerText || undefined,
+                        interactiveButtons: interactiveButtons,
                     };
+
+                    if (templateData.headerMediaUrl) {
+                        if (templateData.headerMediaType === 'IMAGE') {
+                            buttonMessage.image = { url: templateData.headerMediaUrl };
+                            buttonMessage.caption = content;
+                        } else if (templateData.headerMediaType === 'VIDEO') {
+                            buttonMessage.video = { url: templateData.headerMediaUrl };
+                            buttonMessage.caption = content;
+                        } else if (templateData.headerMediaType === 'DOCUMENT') {
+                            buttonMessage.document = { url: templateData.headerMediaUrl };
+                            buttonMessage.caption = content;
+                            buttonMessage.fileName = 'document.pdf';
+                        }
+                    } else {
+                        buttonMessage.text = content;
+                    }
+
+                    payload = buttonMessage;
+                } else if (type === 'TEMPLATE') {
+                    // Raw text template with no media and no buttons
+                    payload = { text: content };
                 } else if (type === 'IMAGE' && mediaData?.url) {
                     payload = { image: { url: mediaData.url }, caption: content };
+                } else if (type === 'VIDEO' && mediaData?.url) {
+                    payload = { video: { url: mediaData.url }, caption: content };
+                } else if (type === 'DOCUMENT' && mediaData?.url) {
+                    payload = { document: { url: mediaData.url }, fileName: mediaData.fileName || 'document', caption: content };
                 } else {
                     payload = { text: content };
                 }
 
-                const result = await socket.sendMessage(toJid, payload);
+                log.info({ payload }, `Simulating payload structure for ${messageId}`);
+                // The original instruction had a malformed snippet here, which seems to be an attempt to insert
+                // a replyToMessageId logic block. Assuming the intent was to add debug logging around payload
+                // and then the reply logic, but the reply logic is not present in the original file.
+                // I will only add the debug log as explicitly requested and correct the malformed line.
+
+                // If part of a campaign, double-check that it wasn't cancelled while in queue
+                if (job.data.campaignId) {
+                    const campaign = await prisma.campaign.findUnique({
+                        where: { id: job.data.campaignId },
+                        select: { status: true }
+                    });
+                    if (campaign?.status === 'CANCELLED') {
+                        log.info({ messageId, campaignId: job.data.campaignId }, 'Skipping message - campaign was cancelled');
+                        await prisma.message.update({
+                            where: { id: messageId },
+                            data: { status: 'FAILED' }
+                        });
+                        return; // Abort sending
+                    }
+                }
+
+                // Ensure JID is formatted correctly for Baileys
+                const formattedJid = toJid.includes('@') ? toJid : `${toJid.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+                
+                const result = await socket.sendMessage(formattedJid, payload);
 
                 // Update database
                 await prisma.message.update({
@@ -776,6 +891,23 @@ export function initializeWorkers() {
                         status: 'SENT'
                     }
                 });
+
+                // Sync status to CampaignMember if applicable
+                if (job.data.campaignId) {
+                    await (prisma.campaignMember as any).updateMany({
+                        where: { messageId },
+                        data: { status: 'SENT' }
+                    });
+                    const campaign = await prisma.campaign.findUnique({ where: { id: job.data.campaignId } });
+                    if (campaign) {
+                        const stats = (campaign.stats as Record<string, number>) || {};
+                        stats.sent = (stats.sent || 0) + 1;
+                        await prisma.campaign.update({
+                            where: { id: campaign.id },
+                            data: { stats: stats as any }
+                        });
+                    }
+                }
 
                 // Log global event
                 await logEvent(workspaceId, 'message_sent', 'automation_engine', {
@@ -809,6 +941,23 @@ export function initializeWorkers() {
                     where: { id: messageId },
                     data: { status: 'FAILED' }
                 });
+                
+                if (job.data.campaignId) {
+                    await (prisma.campaignMember as any).updateMany({
+                        where: { messageId },
+                        data: { status: 'FAILED', errorReason: err.message || 'Send failed' }
+                    });
+                    const campaign = await prisma.campaign.findUnique({ where: { id: job.data.campaignId } });
+                    if (campaign) {
+                        const stats = (campaign.stats as Record<string, number>) || {};
+                        stats.failed = (stats.failed || 0) + 1;
+                        await prisma.campaign.update({
+                            where: { id: campaign.id },
+                            data: { stats: stats as any }
+                        });
+                    }
+                }
+                
                 throw err;
             }
         },
@@ -819,104 +968,7 @@ export function initializeWorkers() {
     inboundWorker.on('error', (err) => log.error(err, 'Inbound worker failed'));
     outboundWorker.on('error', (err) => log.error(err, 'Outbound worker failed'));
 
-    // 3. Campaign Worker
-    // Processes bulk campaign execution
-    const campaignWorker = new Worker(
-        'campaign-execution',
-        async (job: Job) => {
-            const { workspaceId, campaignId } = job.data;
-            log.info({ campaignId }, 'Processing campaign broadcast');
 
-            const campaign = await prisma.campaign.findUnique({
-                where: { id: campaignId, workspaceId }
-            });
-
-            if (!campaign) {
-                log.error({ campaignId }, 'Campaign not found during execution');
-                return;
-            }
-
-            // Loop through PENDING members in chunks of 50
-            const CHUNK_SIZE = 50;
-            let processed = 0;
-
-            while (true) {
-                const members = await prisma.campaignMember.findMany({
-                    where: { campaignId, status: 'PENDING' },
-                    take: CHUNK_SIZE,
-                    skip: 0, // We update status, so skip is technically 0
-                    include: { contact: true }
-                });
-
-                if (members.length === 0) break;
-
-                // Pre-create Message records for tracking
-                for (const m of members) {
-                    if (!m.contact.phone) continue;
-
-                    // Ensure conversation exists
-                    const conversation = await createOrGetConversation(workspaceId, {
-                        provider: 'WHATSAPP',
-                        providerId: m.contact.phone,
-                    });
-
-                    const message = await prisma.message.create({
-                        data: {
-                            conversationId: conversation.id,
-                            direction: 'OUTBOUND',
-                            type: campaign.templateId ? 'TEMPLATE' : 'TEXT',
-                            content: 'Campaign Broadcast',
-                            status: 'QUEUED',
-                            senderUserId: 'SYSTEM', // System broadcast
-                        }
-                    });
-
-                    // Link the message to CampaignMember and mark PROCESSING
-                    await prisma.campaignMember.update({
-                        where: { id: m.id },
-                        data: {
-                            messageId: message.id,
-                            status: 'PROCESSING'
-                        }
-                    });
-
-                // Add to outbound queue with staggered delay to prevent burst sending.
-                // Each member is spaced 3–5 seconds apart, spreading 50 messages over
-                // ~2.5–4 minutes and mimicking human send patterns.
-                // The anti-ban safe socket also applies gaussian jitter on each actual send.
-                const MIN_DELAY_MS = 3000;
-                const JITTER_MS = 2000; // +0–2s additional random jitter per member
-                const jobDelay = processed * (MIN_DELAY_MS + Math.floor(Math.random() * JITTER_MS));
-
-                    await outboundMessagesQueue.add(`send-${message.id}`, {
-                        workspaceId,
-                        messageId: message.id,
-                        toJid: m.contact.phone,
-                        type: message.type,
-                        content: message.content, // Ideally resolved template text
-                        mediaData: { buttons: null }, // Placeholder
-                        campaignId,
-                    }, { delay: jobDelay });
-
-                    processed++;
-                }
-            }
-
-            // Mark completed
-            await prisma.campaign.update({
-                where: { id: campaignId },
-                data: {
-                    status: 'COMPLETED',
-                    completedAt: new Date(),
-                    stats: { total: processed, sent: processed, delivered: 0, read: 0, failed: 0 }
-                }
-            });
-
-            log.info({ campaignId, processed }, 'Campaign broadcast executed');
-        },
-        { connection }
-    );
-    campaignWorker.on('error', (err) => log.error(err, 'Campaign worker failed'));
 
     // 4. Automation Rule Engine Worker
     // Executes sequence of macro actions

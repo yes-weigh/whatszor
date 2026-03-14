@@ -4,8 +4,9 @@ import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
-import { Megaphone, Play, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Megaphone, Play, Clock, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const statusBadge: Record<string, string> = {
     DRAFT: 'badge-gray',
@@ -27,6 +28,11 @@ export default function CampaignsPage() {
     const qc = useQueryClient();
     const router = useRouter();
     const hasPermission = useAuthStore(s => s.hasPermission);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const { data: campaignsData } = useQuery({
         queryKey: ['campaigns'],
@@ -38,7 +44,19 @@ export default function CampaignsPage() {
         onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
     });
 
+    const cancelMutation = useMutation({
+        mutationFn: (id: string) => api.post(`/campaigns/${id}/cancel`),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => api.delete(`/campaigns/${id}`),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+    });
+
     const campaigns: any[] = campaignsData ?? [];
+
+    if (!mounted) return null;
 
     return (
         <div>
@@ -94,13 +112,37 @@ export default function CampaignsPage() {
                                     </div>
                                 )}
 
-                                {c.status === 'DRAFT' && hasPermission('campaigns:update') && (
-                                    <button className="btn btn-primary self-start"
-                                        onClick={() => startMutation.mutate(c.id)}
-                                        disabled={startMutation.isPending}>
-                                        <Play size={14} /> Launch
-                                    </button>
-                                )}
+                                <div className="flex gap-2">
+                                    {c.status === 'DRAFT' && hasPermission('campaigns:update') && (
+                                        <button className="btn btn-primary self-start"
+                                            onClick={() => startMutation.mutate(c.id)}
+                                            disabled={startMutation.isPending}>
+                                            <Play size={14} /> Launch
+                                        </button>
+                                    )}
+                                    {c.status === 'RUNNING' && hasPermission('campaigns:update') && (
+                                        <button className="btn btn-ghost text-yellow-500 self-start hover:bg-yellow-500/10"
+                                            onClick={() => {
+                                                if (confirm('Are you sure you want to stop this campaign?')) {
+                                                    cancelMutation.mutate(c.id);
+                                                }
+                                            }}
+                                            disabled={cancelMutation.isPending}>
+                                            <XCircle size={14} /> Stop
+                                        </button>
+                                    )}
+                                    {c.status !== 'RUNNING' && hasPermission('campaigns:delete') && (
+                                        <button className="btn btn-ghost text-red-500 self-start"
+                                            onClick={() => {
+                                                if (confirm('Are you sure you want to delete this campaign?')) {
+                                                    deleteMutation.mutate(c.id);
+                                                }
+                                            }}
+                                            disabled={deleteMutation.isPending}>
+                                            <Trash2 size={14} /> Delete
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         );
                     })}

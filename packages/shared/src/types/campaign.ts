@@ -42,9 +42,14 @@ export interface CampaignMember {
 
 export interface CreateCampaignInput {
     name: string;
-    templateId?: string;
-    templateLanguage?: string;
-    scheduledAt?: string;
+    templateId?: string | null;
+    templateVersionId?: string | null;
+    templateLanguage?: string | null;
+    scheduledAt?: string | null;
+    status?: CampaignStatus | null;
+    contactIds?: string[] | null;
+    audienceId?: string | null;
+    whatsappAccountId?: string | null;
 }
 
 export interface UpdateCampaignInput {

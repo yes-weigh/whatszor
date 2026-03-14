@@ -21,7 +21,7 @@ function createPrismaClient(): PrismaClient {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (client as any).$on('query', (e: { query: string; params: string; duration: number }) => {
             if (e.duration > 100) {
-                log.warn({ query: e.query, params: e.params, duration: `${e.duration}ms` }, 'Slow query');
+                log.warn({ duration: `${e.duration}ms` }, 'Slow query');
             }
         });
     }

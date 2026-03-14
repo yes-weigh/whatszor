@@ -45,9 +45,14 @@ export const CampaignMemberSchema = z.object({
 
 export const CreateCampaignSchema = z.object({
     name: NonEmptyStringSchema,
-    templateId: z.string().optional(),
-    templateLanguage: z.string().optional(),
-    scheduledAt: z.string().datetime().optional(),
+    templateId: z.string().optional().nullable(),
+    templateVersionId: z.string().optional().nullable(),
+    templateLanguage: z.string().optional().nullable(),
+    scheduledAt: z.string().datetime().optional().nullable(),
+    status: CampaignStatusSchema.optional().nullable(),
+    contactIds: z.array(z.string()).optional().nullable(),
+    audienceId: z.string().optional().nullable(),
+    whatsappAccountId: z.string().optional().nullable(),
 });
 
 export const UpdateCampaignSchema = z.object({

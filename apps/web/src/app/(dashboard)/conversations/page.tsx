@@ -9,8 +9,9 @@ import { useQuickReplies } from '@/hooks/use-quick-replies';
 import {
     MessageSquare, Search, Send, Phone, CheckCheck, Check,
     Smartphone, ChevronDown, X, Loader2, Circle, Download, FileText, Zap,
-    Paperclip, PenSquare
+    Paperclip, PenSquare, FileImage
 } from 'lucide-react';
+import TemplatePickerModal from './TemplatePickerModal';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -357,6 +358,7 @@ export default function ConversationsPage() {
     const [replySession, setReplySession] = useState<string | null>(null);
     const [showSessionPicker, setShowSessionPicker] = useState(false);
     const [showQuickReplies, setShowQuickReplies] = useState(false);
+    const [showTemplatePicker, setShowTemplatePicker] = useState(false);
     const [showNewChat, setShowNewChat] = useState(false);
     const [newChatSearch, setNewChatSearch] = useState('');
     const [attachUploading, setAttachUploading] = useState(false);
@@ -484,6 +486,23 @@ export default function ConversationsPage() {
         },
         onSuccess: () => {
             setReplyText('');
+            qc.invalidateQueries({ queryKey: ['messages', selectedConv?.id] });
+            qc.invalidateQueries({ queryKey: ['conversations'] });
+        },
+    });
+
+    const sendTemplate = useMutation({
+        mutationFn: async ({ templateVersionId, variables }: { templateVersionId: string, variables: Record<string, any> }) => {
+            if (!selectedConv) return;
+            return api.post(`/conversations/${selectedConv.id}/messages`, {
+                type: 'TEMPLATE',
+                templateVersionId,
+                templateVariables: variables,
+                sessionId: replySession,
+            });
+        },
+        onSuccess: () => {
+            setShowTemplatePicker(false);
             qc.invalidateQueries({ queryKey: ['messages', selectedConv?.id] });
             qc.invalidateQueries({ queryKey: ['conversations'] });
         },
@@ -889,6 +908,14 @@ export default function ConversationsPage() {
 
                             {/* Input row */}
                             <div className="flex gap-2 items-end relative">
+                                {/* Template Trigger */}
+                                <button
+                                    onClick={() => setShowTemplatePicker(true)}
+                                    className="w-10 h-10 rounded-xl bg-elevated border border-theme hover:bg-hover flex items-center justify-center transition-colors text-muted hover:text-accent shrink-0"
+                                    title="Send Template"
+                                >
+                                    <FileImage size={18} />
+                                </button>
                                 {/* Quick Replies Trigger */}
                                 <div className="relative">
                                     <button
@@ -983,6 +1010,16 @@ export default function ConversationsPage() {
                             </div>
                         </div>
                     </>
+                )}
+
+                {/* Modals outside the chat conditionally rendered */}
+                {showTemplatePicker && (
+                    <TemplatePickerModal
+                        onClose={() => setShowTemplatePicker(false)}
+                        onSend={async (templateVersionId, variables) => {
+                            await sendTemplate.mutateAsync({ templateVersionId, variables });
+                        }}
+                    />
                 )}
             </div>
         </div >

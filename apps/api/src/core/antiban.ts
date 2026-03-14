@@ -29,14 +29,14 @@ const REDIS_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export const ANTIBAN_CONFIG: AntiBanConfig = {
     rateLimiter: {
-        maxPerMinute: 8,
-        maxPerHour: 200,
-        maxPerDay: 1500,
+        maxPerMinute: 60,
+        maxPerHour: 1000,
+        maxPerDay: 5000,
         minDelayMs: 1500,
         maxDelayMs: 5000,
         newChatDelayMs: 3000,
-        maxIdenticalMessages: 3,
-        burstAllowance: 3,
+        maxIdenticalMessages: 100,
+        burstAllowance: 20,
     },
     warmUp: {
         warmUpDays: 7,

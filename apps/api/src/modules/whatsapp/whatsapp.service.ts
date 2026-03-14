@@ -161,7 +161,8 @@ class WhatsAppManager extends EventEmitter {
 
                 // Extract phone number from creds
                 const creds = (sock.authState as any)?.creds?.me;
-                const phoneNumber = creds?.id?.split('@')[0]?.replace(/[^0-9]/g, '') || null;
+                const phoneBase = creds?.id?.split('@')[0]?.split(':')[0];
+                const phoneNumber = phoneBase?.replace(/[^0-9]/g, '') || null;
                 const name = creds?.name || null;
 
                 await prisma.whatsAppAccount.updateMany({

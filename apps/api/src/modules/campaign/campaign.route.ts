@@ -26,7 +26,7 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { workspaceId } = req.user;
         const input = CreateCampaignSchema.parse(req.body);
 
-        const data = await campaignService.createCampaign(workspaceId, input);
+        const data = await campaignService.createCampaign(workspaceId, input as any);
         return reply.status(201).send({ success: true, data });
     });
 
@@ -43,9 +43,9 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
     fastify.patch('/:id', { preHandler: requireRole('campaigns:update') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
-        const input = UpdateCampaignSchema.parse(req.body);
+        const input = UpdateCampaignSchema.parse(req.body) as any;
 
-        const data = await campaignService.updateCampaign(workspaceId, id, input);
+        const data = await campaignService.updateCampaign(workspaceId, id, input as any);
         return reply.send({ success: true, data });
     });
 
@@ -66,5 +66,23 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
 
         const data = await campaignService.startCampaign(workspaceId, id);
         return reply.status(202).send({ success: true, data });
+    });
+
+    // Manually Cancel/Stop Campaign
+    fastify.post('/:id/cancel', { preHandler: requireRole('campaigns:update') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+
+        const data = await campaignService.cancelCampaign(workspaceId, id);
+        return reply.send({ success: true, data });
+    });
+
+    // Delete Campaign
+    fastify.delete('/:id', { preHandler: requireRole('campaigns:delete') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+
+        const data = await campaignService.deleteCampaign(workspaceId, id);
+        return reply.send({ success: true, data });
     });
 };

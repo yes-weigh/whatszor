@@ -28,6 +28,7 @@ export default function NewCampaignPage() {
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [contactSearch, setContactSearch] = useState('');
     const [name, setName] = useState('');
+    const [whatsappAccountId, setWhatsappAccountId] = useState('');
     const [scheduleType, setScheduleType] = useState<'now' | 'later'>('now');
     const [scheduledAt, setScheduledAt] = useState('');
 
@@ -47,6 +48,11 @@ export default function NewCampaignPage() {
     const { data: contacts = [] } = useQuery({
         queryKey: ['contacts', contactSearch],
         queryFn: () => api.get(`/crm/contacts?search=${contactSearch}&limit=100`).then(r => r.data?.data ?? []),
+    });
+
+    const { data: accounts = [] } = useQuery({
+        queryKey: ['whatsappAccounts'],
+        queryFn: () => api.get('/whatsapp/sessions').then(r => r.data?.data ?? []),
     });
 
     const createMutation = useMutation({
@@ -81,6 +87,7 @@ export default function NewCampaignPage() {
             name,
             templateId: selectedTemplate?.id,
             contactIds: selectedContacts,
+            whatsappAccountId: whatsappAccountId || undefined,
             status: 'DRAFT',
             scheduledAt: scheduleType === 'later' && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         });
@@ -220,6 +227,17 @@ export default function NewCampaignPage() {
                             <label className="text-xs font-medium text-secondary">Campaign Name</label>
                             <input className="input" placeholder="e.g. March Promo Blast"
                                 value={name} onChange={e => setName(e.target.value)} required />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-medium text-secondary">Send Message From</label>
+                            <select className="input" aria-label="Send Message From" value={whatsappAccountId} onChange={e => setWhatsappAccountId(e.target.value)}>
+                                <option value="">Auto-select strategy (Default)</option>
+                                {(accounts as any[]).map((acc: any) => (
+                                    <option key={acc.id} value={acc.id}>
+                                        {acc.name} {acc.phoneNumber ? `(+${acc.phoneNumber.replace('+', '')})` : ''}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="card bg-elevated/50">

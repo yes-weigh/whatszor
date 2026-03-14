@@ -25,7 +25,7 @@ const envSchema = z.object({
     CORS_ORIGIN: z.string().default('http://localhost:3000'),
 
     // Logging
-    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('warn'),
 
     // Media Storage — local disk path for downloaded inbound WhatsApp media
     MEDIA_DIR: z.string().default('./media'),

@@ -23,6 +23,8 @@ export const SendMessageSchema = z.object({
     content: z.string().optional().nullable(),
     mediaData: z.record(z.unknown()).optional().nullable(),
     sessionId: z.string().optional().nullable(), // Which WhatsApp account to send from
+    templateVersionId: z.string().optional(),
+    templateVariables: z.record(z.any()).optional()
 });
 
 // Types derived from Input schemas

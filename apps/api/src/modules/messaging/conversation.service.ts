@@ -2,6 +2,7 @@ import { prisma } from '../../prisma/client';
 import type { CreateConversationInput, UpdateConversationInput, SendMessageInput } from '@yesbheem/shared';
 import { ErrorCodes } from '@yesbheem/shared';
 import { outboundMessagesQueue } from '../../core/queue';
+import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 
 // ── JID Utilities ──────────────────────────────────────────
 
@@ -183,6 +184,42 @@ export async function sendMessage(
 ) {
     const conversation = await getConversation(workspaceId, conversationId);
 
+    // Resolve which WhatsApp account to use
+    let sessionId = input.sessionId as string | null ?? null;
+    if (!sessionId) {
+        const fallback = await prisma.whatsAppAccount.findFirst({
+            where: { workspaceId, status: 'CONNECTED' },
+            select: { sessionId: true }
+        });
+        sessionId = fallback?.sessionId ?? workspaceId;
+    }
+
+    if (input.type === 'TEMPLATE' && input.templateVersionId) {
+        // Use the centralized composer that correctly formats Baileys payloads
+        const message = await composeAndQueueMessage({
+            workspaceId,
+            senderUserId: userId,
+            conversationId: conversation.id,
+            provider: 'WHATSAPP',
+            providerId: conversation.providerId,
+            sessionId: sessionId,
+            type: 'TEMPLATE',
+            templateVersionId: input.templateVersionId,
+            templateVariables: input.templateVariables,
+        });
+
+        await prisma.conversation.update({
+            where: { id: conversationId },
+            data: {
+                lastMessageAt: new Date(),
+                lastMessage: 'Template message',
+            },
+        });
+
+        return message;
+    }
+
+    // Traditional content messages
     const mediaData = input.mediaData ? (input.mediaData as any) : undefined;
 
     const message = await prisma.message.create({
@@ -196,18 +233,6 @@ export async function sendMessage(
             senderUserId: userId,
         },
     });
-
-    // Resolve which WhatsApp account to use:
-    // 1. sessionId from request body (user explicitly chose)
-    // 2. Fall back to any connected account in the workspace
-    let sessionId = (input as any).sessionId as string | null ?? null;
-    if (!sessionId) {
-        const fallback = await prisma.whatsAppAccount.findFirst({
-            where: { workspaceId, status: 'CONNECTED' },
-            select: { sessionId: true }
-        });
-        sessionId = fallback?.sessionId ?? workspaceId;
-    }
 
     await outboundMessagesQueue.add(`send-${message.id}`, {
         workspaceId,

@@ -1,0 +1,72 @@
+[
+  {
+    "id": "cmmp26we2000rxtgnr3udpgcf",
+    "conversationId": "cmmnt8tsp0013i1vckxoed6b6",
+    "remoteId": "SUKI57A15842AD9D75DB",
+    "direction": "OUTBOUND",
+    "type": "TEMPLATE",
+    "content": "bbu",
+    "mediaData": {
+      "buttons": [
+        {
+          "type": "quick_reply",
+          "label": "New Button"
+        }
+      ],
+      "footerText": "sdf",
+      "headerMediaUrl": null,
+      "headerMediaType": null,
+      "templatePayload": {
+        "buttons": [
+          {
+            "type": "quick_reply",
+            "label": "New Button"
+          }
+        ],
+        "footerText": "sdf",
+        "messageText": "bbu",
+        "headerMediaUrl": null,
+        "headerMediaType": null
+      }
+    },
+    "status": "SENT",
+    "createdAt": "2026-03-13T15:35:57.051Z",
+    "updatedAt": "2026-03-13T15:36:01.969Z",
+    "senderUserId": null
+  },
+  {
+    "id": "cmmp26wfv000txtgndcp6datk",
+    "conversationId": "cmmnt8tnb000zi1vc26bdcjdf",
+    "remoteId": "SUKID87C2D98AD9DA87D",
+    "direction": "OUTBOUND",
+    "type": "TEMPLATE",
+    "content": "bbu",
+    "mediaData": {
+      "buttons": [
+        {
+          "type": "quick_reply",
+          "label": "New Button"
+        }
+      ],
+      "footerText": "sdf",
+      "headerMediaUrl": null,
+      "headerMediaType": null,
+      "templatePayload": {
+        "buttons": [
+          {
+            "type": "quick_reply",
+            "label": "New Button"
+          }
+        ],
+        "footerText": "sdf",
+        "messageText": "bbu",
+        "headerMediaUrl": null,
+        "headerMediaType": null
+      }
+    },
+    "status": "SENT",
+    "createdAt": "2026-03-13T15:35:57.116Z",
+    "updatedAt": "2026-03-13T15:36:05.710Z",
+    "senderUserId": null
+  }
+]

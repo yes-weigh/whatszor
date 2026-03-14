@@ -100,7 +100,7 @@ export async function createServer(): Promise<FastifyInstance> {
 
     await server.register(rateLimit, {
         global: true,
-        max: 300,
+        max: env.NODE_ENV === 'development' ? 3000 : 300,
         timeWindow: '1 minute',
         redis: getRedisClient(),
         // SECURITY: Never trust client-provided headers for rate limit identity.
