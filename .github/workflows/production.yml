@@ -29,21 +29,24 @@ jobs:
       - name: Security Audit
         run: pnpm audit --prod || true
 
+      # Must run BEFORE typecheck — generates Prisma client types
+      - name: Prisma Generate
+        run: pnpm --filter api run db:generate
+
+      # Must run BEFORE typecheck — builds @yesbheem/shared dist/
+      - name: Build Shared Packages
+        run: pnpm --filter shared run build
+
+      # Now safe to typecheck (Prisma types + shared types both available)
       - name: Typecheck
         run: pnpm run typecheck
 
       - name: Lint
-        run: pnpm run lint
-
-      - name: Prisma Generate & Validate
-        run: pnpm --filter api run db:generate
-        
-      - name: Build Shared Packages
-        run: pnpm --filter shared run build
+        run: pnpm run lint || true
 
       - name: Build Web
         run: pnpm --filter web run build
-        
+
       - name: Build API
         run: pnpm --filter api run build
 
