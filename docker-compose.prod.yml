@@ -123,6 +123,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${APP_PROTOCOL:-https}://${APP_DOMAIN}/api/v1
     restart: unless-stopped
     depends_on:
       api:

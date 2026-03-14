@@ -18,6 +18,10 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# Build-time env vars for Next.js (NEXT_PUBLIC_* must be available at build time)
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Build shared package then web
 RUN pnpm --filter shared run build
 RUN pnpm --filter web run build
