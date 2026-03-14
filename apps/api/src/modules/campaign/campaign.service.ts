@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import type { CreateCampaignInput, AddCampaignMembersInput, UpdateCampaignInput } from '@yesbheem/shared';
-import { buildCampaignSnapshotForAudience } from './campaign-target.service';
+
 import { ErrorCodes } from '@yesbheem/shared';
 import { logEvent } from '../../core/event-logger';
 import { QueueName, getQueue } from '../../queues';
@@ -13,15 +13,11 @@ export async function createCampaign(workspaceId: string, input: CreateCampaignI
             templateId: input.templateId || null,
             templateVersionId: input.templateVersionId || null,
             templateLanguage: input.templateLanguage || null,
-            whatsappAccountId: input.whatsappAccountId || null,
             scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
-            audienceId: input.audienceId || null,
         },
     });
 
-    if (input.audienceId) {
-        await buildCampaignSnapshotForAudience(workspaceId, campaign.id, input.audienceId);
-    } else if (input.contactIds && input.contactIds.length > 0) {
+    if (input.contactIds && input.contactIds.length > 0) {
         const payload = input.contactIds.map(id => ({ contactId: id }));
         await addCampaignMembers(workspaceId, campaign.id, { members: payload });
     }

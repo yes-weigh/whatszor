@@ -47,19 +47,65 @@ jobs:
       - name: Build API
         run: pnpm --filter api run build
 
-      - name: Docker Compose Build (Dry Run)
+      - name: Docker Compose Validate
         run: docker compose -f docker-compose.prod.yml config
 
-      - name: Deploy to VPS
-        if: github.ref == 'refs/heads/main'
+  deploy:
+    name: Deploy to VPS
+    needs: validate-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to Hostinger VPS
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.VPS_HOST }}       # 148.230.66.84
-          username: ${{ secrets.VPS_USER }}   # root
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
+          command_timeout: 30m
           script: |
-            cd /root/whatszor
-            git pull origin main
-            docker compose -f docker-compose.prod.yml up -d --build
-            docker system prune -f
+            set -e
 
+            # ── 1. Install Docker (if not present) ─────────────────────────────
+            if ! command -v docker &> /dev/null; then
+              echo "Installing Docker..."
+              curl -fsSL https://get.docker.com | sh
+              systemctl enable docker
+              systemctl start docker
+            fi
+
+            # ── 2. Install Git (if not present) ────────────────────────────────
+            if ! command -v git &> /dev/null; then
+              apt-get update -qq && apt-get install -y git
+            fi
+
+            # ── 3. Clone or pull the repository ────────────────────────────────
+            if [ -d /root/whatszor/.git ]; then
+              echo "Repo exists — pulling latest..."
+              cd /root/whatszor
+              git pull origin main
+            else
+              echo "Fresh server — cloning repo..."
+              cd /root
+              git clone https://github.com/yes-weigh/whatszor.git
+              cd /root/whatszor
+            fi
+
+            # ── 4. Write .env file from GitHub secret ──────────────────────────
+            cat > /root/whatszor/.env << 'ENVEOF'
+            ${{ secrets.VPS_ENV }}
+            ENVEOF
+
+            # ── 5. Build & start services ───────────────────────────────────────
+            cd /root/whatszor
+            docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
+            docker compose -f docker-compose.prod.yml up -d --build
+
+            # ── 6. Run DB migrations ────────────────────────────────────────────
+            echo "Running database migrations..."
+            sleep 10
+            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || true
+
+            # ── 7. Prune old images ─────────────────────────────────────────────
+            docker system prune -f
+            echo "✅ Deployment complete!"
