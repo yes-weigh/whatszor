@@ -70,7 +70,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-changeme_super_secret_jwt}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-changeme_super_secret_refresh}
-      - CORS_ORIGIN=https://${APP_DOMAIN}
+      - CORS_ORIGIN=${APP_PROTOCOL:-https}://${APP_DOMAIN}
       - WHATSAPP_API_URL=${WHATSAPP_API_URL}
       - SENTRY_DSN=${SENTRY_DSN}
       - STORAGE_PROVIDER=${STORAGE_PROVIDER:-s3}
@@ -131,7 +131,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://${APP_DOMAIN}/api/v1
+      - NEXT_PUBLIC_API_URL=${APP_PROTOCOL:-https}://${APP_DOMAIN}/api/v1
     healthcheck:
       test: ["CMD", "node", "-e", "const req = require('http').request('http://localhost:3000/login', (r) => { if (r.statusCode < 400) process.exit(0); else process.exit(1); }); req.on('error', () => process.exit(1)); req.end();"]
       interval: 30s
