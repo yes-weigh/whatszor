@@ -7,8 +7,8 @@ const envSchema = z.object({
     PORT: z.string().default('3001').transform(Number),
     API_URL: z.string().url(),
 
-    // Google Gemini API Key
-    GEMINI_API_KEY: z.string().min(1),
+    // Google Gemini API Key (optional — AI features disabled if not set)
+    GEMINI_API_KEY: z.string().optional(),
 
     // Database
     DATABASE_URL: z.string().min(1),
