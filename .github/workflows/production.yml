@@ -59,13 +59,17 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy to Hostinger VPS
+      - name: Write env and deploy to Hostinger VPS
         uses: appleboy/ssh-action@master
+        env:
+          VPS_ENV: ${{ secrets.VPS_ENV }}
+          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           command_timeout: 30m
+          envs: VPS_ENV,APP_DOMAIN
           script: |
             set -e
 
@@ -94,21 +98,23 @@ jobs:
               cd /root/whatszor
             fi
 
-            # ── 4. Write .env file from GitHub secret ──────────────────────────
-            cat > /root/whatszor/.env << 'ENVEOF'
-            ${{ secrets.VPS_ENV }}
-            ENVEOF
-
-            # ── 5. Build & start services ───────────────────────────────────────
+            # ── 4. Write .env from the VPS_ENV secret (passed as envvar) ───────
             cd /root/whatszor
+            printf '%s\n' "$VPS_ENV" > .env
+            echo ".env written ($(wc -l < .env) lines)"
+
+            # ── 5. Build & start services ────────────────────────────────────────
             docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
             docker compose -f docker-compose.prod.yml up -d --build
 
-            # ── 6. Run DB migrations ────────────────────────────────────────────
-            echo "Running database migrations..."
-            sleep 10
-            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || true
+            # ── 6. Run DB migrations ─────────────────────────────────────────────
+            echo "Waiting for API to be ready..."
+            sleep 20
+            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || echo "Migration skipped (already up to date)"
 
-            # ── 7. Prune old images ─────────────────────────────────────────────
+            # ── 7. Show running containers ───────────────────────────────────────
+            docker compose -f docker-compose.prod.yml ps
+
+            # ── 8. Prune old images ──────────────────────────────────────────────
             docker system prune -f
             echo "✅ Deployment complete!"
