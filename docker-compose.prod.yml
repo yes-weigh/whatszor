@@ -12,6 +12,7 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     environment:
+      - APP_PROTOCOL=${APP_PROTOCOL:-https}
       - APP_DOMAIN=${APP_DOMAIN}
       - ACME_EMAIL=${ACME_EMAIL}
     depends_on:
