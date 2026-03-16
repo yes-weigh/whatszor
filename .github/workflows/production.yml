@@ -88,9 +88,10 @@ jobs:
 
             # ── 3. Clone or pull the repository ────────────────────────────────
             if [ -d /root/whatszor/.git ]; then
-              echo "Repo exists — pulling latest..."
+              echo "Repo exists — resetting to latest..."
               cd /root/whatszor
-              git pull origin main
+              git fetch origin main
+              git reset --hard origin/main
             else
               echo "Fresh server — cloning repo..."
               cd /root
