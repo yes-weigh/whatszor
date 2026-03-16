@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
-import type { UpdateWorkspaceInput, InviteMemberInput } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { UpdateWorkspaceInput, InviteMemberInput } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 
 // ── Workspace ──────────────────────────────────────────────
 

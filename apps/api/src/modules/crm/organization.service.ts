@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
-import type { CreateOrganizationInput, UpdateOrganizationInput } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { CreateOrganizationInput, UpdateOrganizationInput } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import { Prisma } from '@prisma/client';
 
 export async function createOrganization(workspaceId: string, input: CreateOrganizationInput) {

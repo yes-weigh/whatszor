@@ -6,7 +6,7 @@ import { logger } from '../core/logger';
 const log = logger.child({ module: 'queues' });
 
 /**
- * Named queues in the YesBheem platform.
+ * Named queues in the Whatszor platform.
  * Each queue has its own concurrency and retry configuration.
  */
 export enum QueueName {
@@ -26,6 +26,12 @@ function getQueueOptions(): QueueOptions {
             port: parseInt(redisUrl.port || '6379', 10),
             password: redisUrl.password || undefined,
             maxRetriesPerRequest: null, // Required for BullMQ
+            // Survive transient Redis TCP resets (ECONNRESET/ETIMEDOUT)
+            retryStrategy: (times: number) => Math.min(times * 200, 30_000),
+            reconnectOnError: (err: Error) => {
+                const codes = ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNREFUSED'];
+                return codes.some(c => err.message.includes(c) || (err as any).code === c);
+            },
         },
         defaultJobOptions: {
             attempts: 5,

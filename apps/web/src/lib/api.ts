@@ -17,12 +17,17 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
-// On 401, clear token and redirect to login
+// On 401, clear token and redirect to login; on 402, redirect to paywall
 api.interceptors.response.use(
     (res) => res,
     (err) => {
-        if (err.response?.status === 401 && typeof window !== 'undefined') {
-            useAuthStore.getState().logout();
+        if (typeof window !== 'undefined') {
+            if (err.response?.status === 401) {
+                useAuthStore.getState().logout();
+                window.location.href = '/login';
+            } else if (err.response?.status === 402) {
+                window.location.href = '/workspace/unlock';
+            }
         }
         return Promise.reject(err);
     }

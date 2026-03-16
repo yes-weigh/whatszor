@@ -27,7 +27,7 @@ function QRModal({ session, onClose }: { session: WASession; onClose: () => void
 
     // Poll this single session's status while modal is open
     const { data } = useQuery<WASession>({
-        queryKey: ['wa-session-status', session.sessionId],
+        queryKey: ['wa-accounts', session.sessionId],
         queryFn: () => api.get(`/whatsapp/sessions/${session.sessionId}/status`).then(r => r.data?.data),
         refetchInterval: 2500,
     });
@@ -37,7 +37,7 @@ function QRModal({ session, onClose }: { session: WASession; onClose: () => void
     // Auto-close when connected
     useEffect(() => {
         if (live.status === 'CONNECTED') {
-            qc.invalidateQueries({ queryKey: ['wa-sessions'] });
+            qc.invalidateQueries({ queryKey: ['wa-accounts'] });
             onClose();
         }
     }, [live.status, qc, onClose]);
@@ -94,7 +94,7 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void, onCreate
         onSuccess: async (account) => {
             // Immediately start the connection
             await api.post(`/whatsapp/sessions/${account.sessionId}/connect`);
-            qc.invalidateQueries({ queryKey: ['wa-sessions'] });
+            qc.invalidateQueries({ queryKey: ['wa-accounts'] });
             onCreated(account);
             onClose();
         },
@@ -143,25 +143,25 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
 
     const disconnectMutation = useMutation({
         mutationFn: () => api.post(`/whatsapp/sessions/${session.sessionId}/disconnect`),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-sessions'] }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] }),
     });
 
     const resyncMutation = useMutation({
         mutationFn: (clearHistory: boolean) =>
             api.post(`/whatsapp/sessions/${session.sessionId}/resync`, { clearHistory }),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-sessions'] }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] }),
     });
 
     const refreshNamesMutation = useMutation({
         mutationFn: () => api.post(`/whatsapp/sessions/${session.sessionId}/refresh-contacts`),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-sessions'] }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] }),
     });
 
     const [showResyncMenu, setShowResyncMenu] = useState(false);
 
     const deleteMutation = useMutation({
         mutationFn: () => api.delete(`/whatsapp/sessions/${session.sessionId}`),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-sessions'] }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] }),
     });
 
     const statusConfig = {
@@ -293,14 +293,14 @@ export function WhatsAppTab() {
     const [connectingSession, setConnectingSession] = useState<WASession | null>(null);
 
     const { data: sessions = [], isLoading } = useQuery<WASession[]>({
-        queryKey: ['wa-sessions'],
+        queryKey: ['wa-accounts'],
         queryFn: () => api.get('/whatsapp/sessions').then(r => r.data?.data ?? []),
         refetchInterval: 4000,
     });
 
     const handleReconnect = async (session: WASession) => {
         await api.post(`/whatsapp/sessions/${session.sessionId}/connect`);
-        qc.invalidateQueries({ queryKey: ['wa-sessions'] });
+        qc.invalidateQueries({ queryKey: ['wa-accounts'] });
         setConnectingSession(session);
     };
 
@@ -318,7 +318,7 @@ export function WhatsAppTab() {
                 <AddAccountModal
                     onClose={() => {
                         setShowAddModal(false);
-                        qc.invalidateQueries({ queryKey: ['wa-sessions'] });
+                        qc.invalidateQueries({ queryKey: ['wa-accounts'] });
                     }}
                     onCreated={(session) => {
                         setConnectingSession(session);
@@ -328,7 +328,7 @@ export function WhatsAppTab() {
             {connectingSession && (
                 <QRModal session={connectingSession} onClose={() => {
                     setConnectingSession(null);
-                    qc.invalidateQueries({ queryKey: ['wa-sessions'] });
+                    qc.invalidateQueries({ queryKey: ['wa-accounts'] });
                 }} />
             )}
 

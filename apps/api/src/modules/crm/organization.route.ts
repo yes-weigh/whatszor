@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { CreateOrganizationSchema, UpdateOrganizationSchema } from '@yesbheem/shared';
+import { CreateOrganizationSchema, UpdateOrganizationSchema } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as organizationService from './organization.service';

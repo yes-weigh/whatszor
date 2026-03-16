@@ -4,6 +4,8 @@ import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth';
 import { useRealtimeEvents } from '@/hooks/use-realtime-events';
 import { useQuickReplies } from '@/hooks/use-quick-replies';
 import {
@@ -12,6 +14,7 @@ import {
     Paperclip, PenSquare, FileImage
 } from 'lucide-react';
 import TemplatePickerModal from './TemplatePickerModal';
+
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -350,6 +353,8 @@ function MessageBubble({ msg }: { msg: Message }) {
 // ── Main Page ────────────────────────────────────────────────
 
 export default function ConversationsPage() {
+    const router = useRouter();
+    const { hasPermission } = useAuthStore();
     const qc = useQueryClient();
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null); // null = All
@@ -365,6 +370,14 @@ export default function ConversationsPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // ── Role guard: OWNER and ADMIN only ───────────────────────
+    useEffect(() => {
+        if (!hasPermission('conversations:read')) {
+            router.replace('/dashboard');
+        }
+    }, [hasPermission, router]);
+
 
     // ── Data fetching ──────────────────────────────────────
 

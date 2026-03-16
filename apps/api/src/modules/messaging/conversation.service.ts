@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
-import type { CreateConversationInput, UpdateConversationInput, SendMessageInput } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { CreateConversationInput, UpdateConversationInput, SendMessageInput } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import { outboundMessagesQueue } from '../../core/queue';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 

@@ -25,7 +25,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'campaigns:read',
     'automation:read',
     'members:read',
-    'conversations:read', 'conversations:reply',
     'media:manage', 'templates:manage',
     'workspace:view'
   ],
@@ -34,7 +33,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'campaigns:read',
     'automation:read',
     'members:read',
-    'conversations:read',
     'workspace:view'
   ]
 };
@@ -70,10 +68,14 @@ export const useAuthStore = create<AuthState>()(
             accessToken: null,
             setAuth: (user, accessToken) => {
                 localStorage.setItem('accessToken', accessToken);
+                // Mirror to cookie so Next.js edge middleware can read it
+                document.cookie = `accessToken=${accessToken}; path=/; SameSite=Strict`;
                 set({ user, accessToken });
             },
             logout: () => {
                 localStorage.removeItem('accessToken');
+                // Clear the cookie too
+                document.cookie = 'accessToken=; path=/; max-age=0';
                 set({ user: null, accessToken: null });
                 window.location.href = '/login';
             },
@@ -85,7 +87,7 @@ export const useAuthStore = create<AuthState>()(
             },
         }),
         {
-            name: 'yesbheem-auth',
+            name: 'whatszor-auth',
             partialize: (s) => ({ user: s.user, accessToken: s.accessToken }),
         }
     )

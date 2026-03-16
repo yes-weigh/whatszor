@@ -31,6 +31,8 @@ import { quickReplyRoutes } from '../modules/quick-replies/quick-reply.route';
 import { errorHandler } from './error-handler';
 import mediaGalleryRoutes from '../modules/media/media-gallery.route';
 import messageTemplateRoutes from '../modules/template/template.route'; // Alias to avoid clash with automation templates
+import { adminRoutes } from '../modules/admin/admin.routes';
+import { licenseRoutes } from '../modules/license/license.routes';
 
 /**
  * Creates and configures the Fastify server instance.
@@ -51,6 +53,7 @@ export async function createServer(): Promise<FastifyInstance> {
     const server = Fastify({
         logger: false, // We use Pino directly
         trustProxy: true,
+        keepAliveTimeout: 30000, // 30s to allow 25s SSE heartbeat
         genReqId: () => crypto.randomUUID(),
         ajv: {
             customOptions: {
@@ -132,6 +135,8 @@ export async function createServer(): Promise<FastifyInstance> {
     await server.register(
         async (api) => {
             await api.register(authRoutes, { prefix: '/auth' });
+            await api.register(adminRoutes, { prefix: '/admin' });
+            await api.register(licenseRoutes, { prefix: '/licenses' });
             await api.register(workspaceRoutes, { prefix: '/workspaces' });
 
             // CRM

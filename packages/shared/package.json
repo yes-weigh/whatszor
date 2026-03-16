@@ -1,8 +1,8 @@
 {
-    "name": "@yesbheem/shared",
+    "name": "@whatszor/shared",
     "version": "0.1.0",
     "private": true,
-    "description": "Shared TypeScript types and Zod schemas for YesBheem",
+    "description": "Shared TypeScript types and Zod schemas for Whatszor",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "scripts": {
@@ -14,7 +14,7 @@
         "zod": "^3.23.8"
     },
     "devDependencies": {
-        "@yesbheem/config": "workspace:*",
+        "@whatszor/config": "workspace:*",
         "typescript": "^5.4.5"
     }
 }

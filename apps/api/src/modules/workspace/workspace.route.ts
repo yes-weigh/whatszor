@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { UpdateWorkspaceSchema, InviteMemberSchema } from '@yesbheem/shared';
+import { UpdateWorkspaceSchema, InviteMemberSchema } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import {

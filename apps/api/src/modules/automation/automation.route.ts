@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import {
     CreateAutomationRuleSchema,
     UpdateAutomationRuleSchema
-} from '@yesbheem/shared';
+} from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as automationService from './automation.service';

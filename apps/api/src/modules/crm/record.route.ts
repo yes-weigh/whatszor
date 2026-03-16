@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { CreateRecordSchema, UpdateRecordSchema } from '@yesbheem/shared';
+import { CreateRecordSchema, UpdateRecordSchema } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as recordService from './record.service';

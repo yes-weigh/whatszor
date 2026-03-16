@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../prisma/client';
-import { ErrorCodes } from '@yesbheem/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import { validateMessageVariables } from './template-renderer';
 import { authenticate } from '../../middleware/authenticate';
 

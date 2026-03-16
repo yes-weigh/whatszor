@@ -26,6 +26,59 @@ enum WorkspaceStatus {
   SUSPENDED
   TRIAL
   CANCELLED
+  EXPIRED
+}
+
+enum GlobalRole {
+  SUPER_ADMIN
+  STAFF
+}
+
+enum PlanTier {
+  FREE
+  STARTER
+  PRO
+  AGENCY
+}
+
+enum KeyStatus {
+  AVAILABLE
+  REDEEMED
+  REVOKED
+}
+
+// ============================================================
+// GLOBAL ADMIN AND LICENSES
+// ============================================================
+
+model GlobalUser {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  name      String?
+  role      GlobalRole @default(STAFF)
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  @@map("global_users")
+}
+
+model LicenseKey {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  planTier      PlanTier  @map("plan_tier")
+  durationDays  Int       @map("duration_days")
+  status        KeyStatus @default(AVAILABLE)
+  workspaceId   String?   @map("workspace_id")
+  generatedById String?   @map("generated_by_id")
+  redeemedAt    DateTime? @map("redeemed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id])
+
+  @@index([key])
+  @@index([status])
+  @@map("license_keys")
 }
 
 // ============================================================
@@ -39,12 +92,14 @@ model Workspace {
   slug      String          @unique
   status    WorkspaceStatus @default(TRIAL)
   plan      String          @default("free")
+  planTier  PlanTier        @default(FREE) @map("plan_tier")
+  expiresAt DateTime?       @map("expires_at")
   settings  Json            @default("{}")
   createdAt DateTime        @default(now()) @map("created_at")
   updatedAt DateTime        @updatedAt @map("updated_at")
 
   // Relations
-  // Relations
+  licenses         LicenseKey[]
   members          WorkspaceMember[]
   contacts         Contact[]
   organizations    Organization[]

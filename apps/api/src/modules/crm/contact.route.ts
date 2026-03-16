@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { CreateContactSchema, UpdateContactSchema } from '@yesbheem/shared';
+import { CreateContactSchema, UpdateContactSchema } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as contactService from './contact.service';

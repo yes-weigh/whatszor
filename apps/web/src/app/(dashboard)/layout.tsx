@@ -20,9 +20,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                        const me = res.data?.data;
                        if (me) {
                            setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, localStorage.getItem('accessToken')!);
+                           // Gate: only ACTIVE workspaces can access dashboard
+                           if (me.workspaceStatus && me.workspaceStatus !== 'ACTIVE') {
+                               router.push('/workspace/unlock');
+                           }
                        }
                    })
                    .catch(() => router.push('/login'));
+            });
+        } else {
+            // Check workspace gating for already-hydrated sessions
+            import('@/lib/api').then(({ default: api }) => {
+                api.get('/auth/me').then(res => {
+                    const me = res.data?.data;
+                    if (me && me.workspaceStatus && me.workspaceStatus !== 'ACTIVE') {
+                        router.push('/workspace/unlock');
+                    }
+                }).catch(() => {});
             });
         }
     }, [isAuthenticated, user, router, setAuth]);

@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
-import type { CreateContactInput, UpdateContactInput } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { CreateContactInput, UpdateContactInput } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import { Prisma } from '@prisma/client';
 import { logEvent } from '../../core/event-logger';
 

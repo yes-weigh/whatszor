@@ -1,5 +1,5 @@
 /**
- * YesBheem API — Entry Point
+ * Whatszor API — Entry Point
  *
  * Startup sequence:
  * 1. Validate environment
@@ -23,7 +23,7 @@ import { waManager } from './modules/whatsapp/whatsapp.service';
 const log = logger.child({ module: 'bootstrap' });
 
 async function bootstrap() {
-    log.info(`Starting YesBheem API [${env.NODE_ENV}]`);
+    log.info(`Starting Whatszor API [${env.NODE_ENV}]`);
 
     // 1. Connect Redis
     await connectRedis();
@@ -51,7 +51,7 @@ async function bootstrap() {
 
     // 6. Listen
     await server.listen({ port: env.PORT, host: '0.0.0.0' });
-    log.info(`🚀 YesBheem API listening on http://0.0.0.0:${env.PORT}`);
+    log.info(`🚀 Whatszor API listening on http://0.0.0.0:${env.PORT}`);
     log.info(`   Health   → GET http://localhost:${env.PORT}/health`);
     log.info(`   Readiness→ GET http://localhost:${env.PORT}/health/ready`);
 

@@ -17,7 +17,14 @@ function createWorker(queueName: QueueName, processor: any, concurrency: number)
             host: redisUrl.hostname,
             port: parseInt(redisUrl.port || '6379', 10),
             password: redisUrl.password || undefined,
-            maxRetriesPerRequest: null,
+            maxRetriesPerRequest: null, // Required for BullMQ
+            // Exponential backoff up to 30s — survives transient ECONNRESET
+            retryStrategy: (times: number) => Math.min(times * 200, 30_000),
+            reconnectOnError: (err: Error) => {
+                const reconnectCodes = ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNREFUSED'];
+                return reconnectCodes.some(code => err.message.includes(code) || (err as any).code === code);
+            },
+            enableOfflineQueue: false, // Fail fast instead of queueing commands when disconnected
         },
         concurrency,
     });

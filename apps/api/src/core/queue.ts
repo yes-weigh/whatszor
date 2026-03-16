@@ -4,7 +4,7 @@ import { logger } from './logger';
 import { waManager } from '../modules/whatsapp/whatsapp.service';
 import { prisma } from '../prisma/client';
 import { createOrGetConversation } from '../modules/messaging/conversation.service';
-import { SystemEventSchema } from '@yesbheem/shared';
+import { SystemEventSchema } from '@whatszor/shared';
 import { GoogleGenAI } from '@google/genai';
 import { env } from '../env';
 import { logEvent } from './event-logger';
@@ -806,6 +806,16 @@ export function initializeWorkers() {
             }
 
             try {
+                const resolveUrl = (url?: string) => {
+                    if (!url) return undefined;
+                    // Provide an absolute filesystem path that Baileys can use with native fs streams
+                    if (url.startsWith('/local-media-placeholder/')) {
+                        const { env } = require('../env');
+                        return require('path').resolve(process.cwd(), env.MEDIA_DIR || 'uploads/media', url.replace('/local-media-placeholder/', ''));
+                    }
+                    return url;
+                };
+
                 let payload: any;
 
                 if (type === 'TEMPLATE' && mediaData?.templatePayload?.buttons?.length > 0) {
@@ -827,16 +837,20 @@ export function initializeWorkers() {
                     };
 
                     if (templateData.headerMediaUrl) {
-                        if (templateData.headerMediaType === 'IMAGE') {
-                            buttonMessage.image = { url: templateData.headerMediaUrl };
+                        const mediaType = templateData.headerMediaType?.toUpperCase();
+                        const resolvedUrl = resolveUrl(templateData.headerMediaUrl);
+                        if (mediaType === 'IMAGE') {
+                            buttonMessage.image = { url: resolvedUrl };
                             buttonMessage.caption = content;
-                        } else if (templateData.headerMediaType === 'VIDEO') {
-                            buttonMessage.video = { url: templateData.headerMediaUrl };
+                        } else if (mediaType === 'VIDEO') {
+                            buttonMessage.video = { url: resolvedUrl };
                             buttonMessage.caption = content;
-                        } else if (templateData.headerMediaType === 'DOCUMENT') {
-                            buttonMessage.document = { url: templateData.headerMediaUrl };
+                        } else if (mediaType === 'DOCUMENT') {
+                            buttonMessage.document = { url: resolvedUrl };
                             buttonMessage.caption = content;
                             buttonMessage.fileName = 'document.pdf';
+                        } else {
+                            buttonMessage.text = content;
                         }
                     } else {
                         buttonMessage.text = content;
@@ -847,11 +861,11 @@ export function initializeWorkers() {
                     // Raw text template with no media and no buttons
                     payload = { text: content };
                 } else if (type === 'IMAGE' && mediaData?.url) {
-                    payload = { image: { url: mediaData.url }, caption: content };
+                    payload = { image: { url: resolveUrl(mediaData.url) }, caption: content };
                 } else if (type === 'VIDEO' && mediaData?.url) {
-                    payload = { video: { url: mediaData.url }, caption: content };
+                    payload = { video: { url: resolveUrl(mediaData.url) }, caption: content };
                 } else if (type === 'DOCUMENT' && mediaData?.url) {
-                    payload = { document: { url: mediaData.url }, fileName: mediaData.fileName || 'document', caption: content };
+                    payload = { document: { url: resolveUrl(mediaData.url) }, fileName: mediaData.fileName || 'document', caption: content };
                 } else {
                     payload = { text: content };
                 }
@@ -937,6 +951,9 @@ export function initializeWorkers() {
 
             } catch (err: any) {
                 log.error({ err, messageId }, 'Failed to send outbound message');
+                
+                require('fs').writeFileSync('D:/whatszor/apps/api/baileys_error.txt', Object.getOwnPropertyNames(err).map(k => `${k}: ${err[k]}`).join('\n') + '\n\n' + err.stack);
+                
                 await prisma.message.update({
                     where: { id: messageId },
                     data: { status: 'FAILED' }

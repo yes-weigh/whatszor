@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { CreateStageSchema, UpdateStageSchema } from '@yesbheem/shared';
+import { CreateStageSchema, UpdateStageSchema } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as stageService from './stage.service';

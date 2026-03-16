@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma/client';
-import type { CreateCampaignInput, AddCampaignMembersInput, UpdateCampaignInput } from '@yesbheem/shared';
+import type { CreateCampaignInput, AddCampaignMembersInput, UpdateCampaignInput } from '@whatszor/shared';
 
-import { ErrorCodes } from '@yesbheem/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import { logEvent } from '../../core/event-logger';
 import { QueueName, getQueue } from '../../queues';
 

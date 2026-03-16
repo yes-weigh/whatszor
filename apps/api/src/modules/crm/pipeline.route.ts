@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { CreatePipelineSchema, UpdatePipelineSchema } from '@yesbheem/shared';
+import { CreatePipelineSchema, UpdatePipelineSchema } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as pipelineService from './pipeline.service';

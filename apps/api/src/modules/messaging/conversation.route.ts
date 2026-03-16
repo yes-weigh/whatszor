@@ -1,13 +1,16 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { CreateConversationSchema, UpdateConversationSchema, SendMessageSchema } from '@yesbheem/shared';
+import { CreateConversationSchema, UpdateConversationSchema, SendMessageSchema } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as conversationService from './conversation.service';
 import { waManager } from '../whatsapp/whatsapp.service';
 import { prisma } from '../../prisma/client';
 
+import { requireActiveWorkspace } from '../../middleware/requireActiveWorkspace';
+
 export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
+    fastify.addHook('preHandler', requireActiveWorkspace);
 
     // ── Profile Picture (proxy via Baileys) ──
     // Must be before /:id to avoid route conflict

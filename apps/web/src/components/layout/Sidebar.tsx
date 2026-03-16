@@ -10,19 +10,24 @@ import { useState } from 'react';
 import { useAuthStore } from '@/store/auth';
 
 const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/conversations', label: 'Conversations', icon: MessageSquare },
-    { href: '/contacts', label: 'Contacts', icon: Users },
-    { href: '/campaigns', label: 'Campaigns', icon: Megaphone },
-    { href: '/automations', label: 'Automations', icon: Zap },
-    { href: '/media', label: 'Media Gallery', icon: Image },
-    { href: '/templates', label: 'Templates', icon: LayoutTemplate },
+    { href: '/dashboard',     label: 'Dashboard',    icon: LayoutDashboard },
+    { href: '/conversations', label: 'Conversations', icon: MessageSquare,  requiredPermission: 'conversations:read' },
+    { href: '/contacts',      label: 'Contacts',      icon: Users },
+    { href: '/campaigns',     label: 'Campaigns',     icon: Megaphone },
+    { href: '/automations',   label: 'Automations',   icon: Zap },
+    { href: '/media',         label: 'Media Gallery', icon: Image },
+    { href: '/templates',     label: 'Templates',     icon: LayoutTemplate },
 ];
 
 export function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
-    const { user } = useAuthStore();
+    const { user, hasPermission } = useAuthStore();
+
+    // Filter nav items the current user has permission to see
+    const visibleNavItems = navItems.filter(item =>
+        !item.requiredPermission || hasPermission(item.requiredPermission)
+    );
 
     return (
         <aside
@@ -35,14 +40,14 @@ export function Sidebar() {
                 </div>
                 {!collapsed && (
                     <span className="font-bold text-sm tracking-tight text-primary">
-                        YesBheem
+                        Whatszor
                     </span>
                 )}
             </div>
 
             {/* Nav */}
             <nav className="flex-1 py-3 px-2 flex flex-col gap-1">
-                {navItems.map(({ href, label, icon: Icon }) => {
+                {visibleNavItems.map(({ href, label, icon: Icon }) => {
                     const active = pathname === href || pathname.startsWith(href + '/');
                     return (
                         <Link

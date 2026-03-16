@@ -39,3 +39,10 @@ coverage/
 
 # WhatsApp sessions (Phase 5)
 wa_sessions/
+
+# API temporary and media files
+apps/api/media/
+apps/api/output.json
+apps/api/baileys_error.txt
+git_status_full.txt
+git_status_utf8.txt

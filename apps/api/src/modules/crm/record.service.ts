@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
-import type { CreateRecordInput, UpdateRecordInput } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { CreateRecordInput, UpdateRecordInput } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import { Prisma } from '@prisma/client';
 
 export async function createRecord(workspaceId: string, input: CreateRecordInput) {

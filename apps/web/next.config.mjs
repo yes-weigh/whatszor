@@ -4,7 +4,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 const nextConfig = {
     reactStrictMode: true,
     output: 'standalone',
-    transpilePackages: ['@yesbheem/shared'],
+    transpilePackages: ['@whatszor/shared'],
     experimental: {
         optimizePackageImports: ['lucide-react'],
         instrumentationHook: true,

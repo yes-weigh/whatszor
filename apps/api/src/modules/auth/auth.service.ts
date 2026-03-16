@@ -9,8 +9,8 @@ import {
     accessTokenTtlSeconds,
 } from '../../core/jwt';
 import { env } from '../../env';
-import type { RegisterInput, LoginInput, AuthTokens } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { RegisterInput, LoginInput, AuthTokens } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 
 const SALT_ROUNDS = 12;
 

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../prisma/client';
 import { getStorageProvider } from '../../core/storage';
-import { ErrorCodes } from '@yesbheem/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import multipart from '@fastify/multipart';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';

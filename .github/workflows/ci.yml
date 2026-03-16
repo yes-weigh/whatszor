@@ -59,4 +59,4 @@ jobs:
       - name: Log in to Docker Hub
         run: echo "Replace with generic Container Registry step (e.g. docker login)"
       - name: Build and Push (Placeholder)
-        run: echo "docker build -t yesbheem/api -f apps/api/Dockerfile ."
+        run: echo "docker build -t whatszor/api -f apps/api/Dockerfile ."

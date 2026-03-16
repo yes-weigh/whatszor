@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import { createHash, randomBytes } from 'crypto';
 import { env } from '../env';
-import type { TokenPayload } from '@yesbheem/shared';
+import type { TokenPayload } from '@whatszor/shared';
 
 const ACCESS_SECRET = new TextEncoder().encode(env.JWT_SECRET + ':access');
 const REFRESH_SECRET = new TextEncoder().encode(env.JWT_SECRET + ':refresh');
@@ -16,7 +16,7 @@ export async function signAccessToken(payload: Omit<TokenPayload, 'type'>): Prom
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime(ACCESS_TTL)
-        .setIssuer('yesbheem')
+        .setIssuer('whatszor')
         .sign(ACCESS_SECRET);
 }
 
@@ -27,7 +27,7 @@ export async function signRefreshToken(payload: Omit<TokenPayload, 'type'>): Pro
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime(REFRESH_TTL)
-        .setIssuer('yesbheem')
+        .setIssuer('whatszor')
         .sign(REFRESH_SECRET);
 }
 
@@ -35,14 +35,14 @@ export async function signRefreshToken(payload: Omit<TokenPayload, 'type'>): Pro
 
 export async function verifyAccessToken(token: string): Promise<TokenPayload> {
     const { payload } = await jwtVerify(token, ACCESS_SECRET, {
-        issuer: 'yesbheem',
+        issuer: 'whatszor',
     });
     return payload as unknown as TokenPayload;
 }
 
 export async function verifyRefreshToken(token: string): Promise<TokenPayload & { jti: string }> {
     const { payload } = await jwtVerify(token, REFRESH_SECRET, {
-        issuer: 'yesbheem',
+        issuer: 'whatszor',
     });
     return payload as unknown as TokenPayload & { jti: string };
 }

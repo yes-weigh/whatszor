@@ -23,11 +23,28 @@ export default function RegisterPage() {
         try {
             const slug = form.workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
             const payload = { ...form, workspaceSlug: slug };
+            // Step 1: Register — returns tokens only (no user object)
             const { data } = await api.post('/auth/register', payload);
-            setAuth(data.data.user, data.data.accessToken);
-            router.push('/dashboard');
+            const { accessToken } = data.data;
+
+            // Step 2: Store the token so /auth/me can use it
+            localStorage.setItem('accessToken', accessToken);
+            document.cookie = `accessToken=${accessToken}; path=/; SameSite=Strict`;
+
+            // Step 3: Fetch the user profile so setAuth has a valid user object
+            const meRes = await api.get('/auth/me');
+            const me = meRes.data?.data;
+            if (!me) throw new Error('Could not retrieve user profile after registration');
+
+            // Step 4: Persist auth state and redirect to license activation
+            // New workspaces start as TRIAL — they must activate a license before accessing the dashboard
+            setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken);
+            router.push('/workspace/unlock');
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Registration failed');
+            // Clear partial auth on failure
+            localStorage.removeItem('accessToken');
+            document.cookie = 'accessToken=; path=/; max-age=0';
+            setError(err.response?.data?.error?.message || err.response?.data?.message || 'Registration failed. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -44,7 +61,7 @@ export default function RegisterPage() {
                         <Bot size={24} color="#fff" />
                     </div>
                     <h1 className="text-2xl font-bold text-primary">Create workspace</h1>
-                    <p className="text-sm mt-1 text-muted">Set up your YesBheem account in seconds</p>
+                    <p className="text-sm mt-1 text-muted">Set up your Whatszor account in seconds</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="card flex flex-col gap-4">

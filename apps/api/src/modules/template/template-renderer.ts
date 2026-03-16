@@ -1,5 +1,5 @@
 import { prisma } from '../../prisma/client';
-import { ErrorCodes } from '@yesbheem/shared';
+import { ErrorCodes } from '@whatszor/shared';
 
 export interface RenderContext {
     contact?: Record<string, any>;

@@ -33,7 +33,7 @@ jobs:
       - name: Prisma Generate
         run: pnpm --filter api run db:generate
 
-      # Must run BEFORE typecheck — builds @yesbheem/shared dist/
+      # Must run BEFORE typecheck — builds @whatszor/shared dist/
       - name: Build Shared Packages
         run: pnpm --filter shared run build
 

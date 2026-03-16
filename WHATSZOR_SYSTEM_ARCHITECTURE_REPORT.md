@@ -3,7 +3,7 @@
 ## SECTION 1 — Project Overview
 
 **What Whatszor is:**
-Whatszor (internally styled as *YesBheem*) is an AI-native WhatsApp CRM and Automation SaaS platform natively designed for high-throughput messaging, multi-agent support, and workflow automation.
+Whatszor (internally styled as *Whatszor*) is an AI-native WhatsApp CRM and Automation SaaS platform natively designed for high-throughput messaging, multi-agent support, and workflow automation.
 
 **The problem it solves:**
 Businesses struggle to maintain centralized control over their WhatsApp communication safely while scaling up. Whatszor provides a secure, multi-tenant environment where entire teams can manage contacts, run broadcast campaigns, build responsive AI workflows, and collaborate on a single WhatsApp Business/Personal number without risking account bans or data silos.
@@ -35,7 +35,7 @@ The codebase is organized as a Modern PNPM Workspace Monorepo, dividing duties d
 
 - `apps/api/`: The Fastify & Node.js backend system. Contains the REST API routes, Baileys socket managers, Prisma database client, and BullMQ worker processes.
 - `apps/web/`: The Next.js 14 frontend dashboard. Contains the React UI, Framer Motion animations, Zustand state, and React Flow builders.
-- `packages/`: (Implied `workspace:*`) Shared dependencies. Includes `@yesbheem/shared` for cross-boundary types, schemas, and configurations.
+- `packages/`: (Implied `workspace:*`) Shared dependencies. Includes `@whatszor/shared` for cross-boundary types, schemas, and configurations.
 - `config files`: Root environment variables, `pnpm-workspace.yaml`, Docker orchestrations (`docker-compose.prod.yml`, `docker-compose.dev.yml`), and Caddy reverse proxy configs.
 
 **Responsibility:** 

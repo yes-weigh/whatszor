@@ -5,8 +5,11 @@ import { prisma } from '../../prisma/client';
 import { randomUUID } from 'crypto';
 import { getAntibanStats } from '../../core/antiban';
 
+import { requireActiveWorkspace } from '../../middleware/requireActiveWorkspace';
+
 export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
+    fastify.addHook('preHandler', requireActiveWorkspace);
 
     /**
      * GET /sessions

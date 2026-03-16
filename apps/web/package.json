@@ -1,8 +1,8 @@
 {
-    "name": "@yesbheem/web",
+    "name": "@whatszor/web",
     "version": "0.1.0",
     "private": true,
-    "description": "YesBheem Frontend — Next.js dashboard",
+    "description": "Whatszor Frontend — Next.js dashboard",
     "scripts": {
         "dev": "next dev -p 3000",
         "build": "next build",
@@ -15,7 +15,7 @@
         "@sentry/nextjs": "^10.43.0",
         "@tanstack/react-query": "^5.45.0",
         "@xyflow/react": "^12.10.1",
-        "@yesbheem/shared": "workspace:*",
+        "@whatszor/shared": "workspace:*",
         "axios": "^1.7.2",
         "clsx": "^2.1.1",
         "date-fns": "^4.1.0",
@@ -35,7 +35,7 @@
         "@types/node": "^20.14.8",
         "@types/react": "^18.3.3",
         "@types/react-dom": "^18.3.0",
-        "@yesbheem/config": "workspace:*",
+        "@whatszor/config": "workspace:*",
         "autoprefixer": "^10.4.19",
         "eslint": "^8.57.0",
         "eslint-config-next": "^14.2.5",

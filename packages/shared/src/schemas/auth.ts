@@ -20,6 +20,11 @@ export const LoginSchema = z.object({
     workspaceSlug: SlugSchema,
 });
 
+export const AdminLoginSchema = z.object({
+    email: EmailSchema,
+    password: z.string().min(1),
+});
+
 export const RefreshTokenSchema = z.object({
     refreshToken: z.string().min(1),
 });
@@ -38,6 +43,7 @@ export const InviteMemberSchema = z.object({
 
 export type RegisterInput = z.infer<typeof RegisterSchema>;
 export type LoginInput = z.infer<typeof LoginSchema>;
+export type AdminLoginInput = z.infer<typeof AdminLoginSchema>;
 export type RefreshTokenInput = z.infer<typeof RefreshTokenSchema>;
 export type UpdateWorkspaceInput = z.infer<typeof UpdateWorkspaceSchema>;
 export type InviteMemberInput = z.infer<typeof InviteMemberSchema>;

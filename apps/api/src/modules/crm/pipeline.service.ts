@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
-import type { CreatePipelineInput, UpdatePipelineInput } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { CreatePipelineInput, UpdatePipelineInput } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 
 export async function createPipeline(workspaceId: string, input: CreatePipelineInput) {
     return prisma.pipeline.create({

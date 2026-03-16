@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { verifyAccessToken } from '../core/jwt';
-import type { TokenPayload } from '@yesbheem/shared';
+import type { TokenPayload } from '@whatszor/shared';
 
 /**
  * Augment Fastify's request type so TypeScript knows about request.user.

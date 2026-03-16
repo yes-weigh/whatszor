@@ -8,9 +8,24 @@ let redisClient: Redis | null = null;
 
 export function createRedisClient(): Redis {
     const client = new Redis(env.REDIS_URL, {
-        maxRetriesPerRequest: null, // Required for BullMQ
+        maxRetriesPerRequest: null,   // Required for BullMQ
         enableReadyCheck: true,
         lazyConnect: true,
+        // Retry with exponential backoff up to 30s — survives transient ECONNRESET.
+        retryStrategy: (times: number) => {
+            const delay = Math.min(times * 200, 30_000);
+            log.warn({ attempt: times, delayMs: delay }, 'Redis reconnecting after error');
+            return delay;
+        },
+        reconnectOnError: (err: Error) => {
+            // Reconnect on ECONNRESET, ETIMEDOUT, ENOTFOUND
+            const reconnectCodes = ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNREFUSED'];
+            if (reconnectCodes.some(code => err.message.includes(code) || (err as any).code === code)) {
+                log.warn({ err: err.message }, 'Redis reconnecting after error code');
+                return true;
+            }
+            return false;
+        },
     });
 
     client.on('connect', () => log.info('Redis connecting...'));

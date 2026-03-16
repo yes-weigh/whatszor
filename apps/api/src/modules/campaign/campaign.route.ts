@@ -3,13 +3,16 @@ import {
     CreateCampaignSchema,
     UpdateCampaignSchema,
     AddCampaignMembersSchema
-} from '@yesbheem/shared';
+} from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as campaignService from './campaign.service';
 
+import { requireActiveWorkspace } from '../../middleware/requireActiveWorkspace';
+
 export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
+    fastify.addHook('preHandler', requireActiveWorkspace);
 
     // List Campaigns
     fastify.get('/', async (req, reply) => {

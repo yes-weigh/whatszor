@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
-import type { CreateStageInput, UpdateStageInput } from '@yesbheem/shared';
-import { ErrorCodes } from '@yesbheem/shared';
+import type { CreateStageInput, UpdateStageInput } from '@whatszor/shared';
+import { ErrorCodes } from '@whatszor/shared';
 import { getPipeline } from './pipeline.service';
 
 export async function createStage(workspaceId: string, input: CreateStageInput) {

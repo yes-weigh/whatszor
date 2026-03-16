@@ -1,5 +1,5 @@
 import { prisma } from '../../prisma/client';
-import { CreateAutomationRuleInput, UpdateAutomationRuleInput } from '@yesbheem/shared';
+import { CreateAutomationRuleInput, UpdateAutomationRuleInput } from '@whatszor/shared';
 import { systemEventsQueue } from '../../core/queue';
 
 export async function getRules(workspaceId: string) {

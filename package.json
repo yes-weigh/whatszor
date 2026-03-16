@@ -1,8 +1,8 @@
 {
-  "name": "yesbheem",
+  "name": "whatszor",
   "version": "0.1.0",
   "private": true,
-  "description": "YesBheem – AI-native WhatsApp CRM SaaS Platform",
+  "description": "Whatszor – AI-native WhatsApp CRM SaaS Platform",
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"

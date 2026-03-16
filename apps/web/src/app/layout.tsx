@@ -6,7 +6,7 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-    title: 'YesBheem — AI WhatsApp CRM',
+    title: 'Whatszor — AI WhatsApp CRM',
     description: 'AI-native WhatsApp CRM and automation platform for small and medium businesses.',
 };
 
