@@ -1,16 +1,18 @@
 # Caddyfile for Reverse Proxy and Automatic HTTPS
 # Routes traffic to Web and API containers
+# APP_PROTOCOL=http  → serves plain HTTP (no TLS, for IP-based access)
+# APP_PROTOCOL=https → Caddy auto-provisions a Let's Encrypt cert for the domain
 
 {
 	email {$ACME_EMAIL}
 }
 
-{$APP_DOMAIN} {
-	# Route /api/* and /health to the backend API
+{$APP_PROTOCOL}://{$APP_DOMAIN} {
+	# Route /api/* to the backend API
 	handle_path /api/* {
 		reverse_proxy api:5000
 	}
-	
+
 	handle /health {
 		reverse_proxy api:5000
 	}
