@@ -9,7 +9,7 @@
 
 {$APP_PROTOCOL}://{$APP_DOMAIN} {
 	# Route /api/* to the backend API
-	handle_path /api/* {
+	handle /api/* {
 		reverse_proxy api:5000
 	}
 
