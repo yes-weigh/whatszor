@@ -106,7 +106,7 @@ jobs:
 
             # ── 5. Build & start services ────────────────────────────────────────
             docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
-            docker compose -f docker-compose.prod.yml up -d --build
+            docker compose -f docker-compose.prod.yml up -d --build --force-recreate
 
             # ── 6. Run DB migrations ─────────────────────────────────────────────
             echo "Waiting for API to be ready..."
