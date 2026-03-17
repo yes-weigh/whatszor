@@ -63,13 +63,12 @@ jobs:
         uses: appleboy/ssh-action@master
         env:
           VPS_ENV: ${{ secrets.VPS_ENV }}
-          APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           command_timeout: 30m
-          envs: VPS_ENV,APP_DOMAIN
+          envs: VPS_ENV
           script: |
             set -e
 
