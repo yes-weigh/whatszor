@@ -113,9 +113,11 @@ jobs:
             sleep 20
             docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || echo "Migration skipped (already up to date)"
 
-            # ── 7. Restart Caddy to pick up new config cleanly ───────────────────
-            docker compose -f docker-compose.prod.yml restart caddy
-            echo "Caddy restarted"
+            # ── 7. Restart Caddy with clean TLS state ────────────────────────────
+            docker compose -f docker-compose.prod.yml stop caddy
+            docker run --rm -v whatszor_caddy-config:/config alpine sh -c "rm -rf /config/*" || true
+            docker compose -f docker-compose.prod.yml up -d caddy
+            echo "Caddy restarted with clean TLS state"
 
             # ── 8. Show running containers ───────────────────────────────────────
             docker compose -f docker-compose.prod.yml ps
