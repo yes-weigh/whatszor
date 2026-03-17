@@ -113,12 +113,9 @@ jobs:
             sleep 20
             docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || echo "Migration skipped (already up to date)"
 
-            # ── 7. Refresh Caddy SSL cert (prevents stale cert after force-recreate) ──
-            echo "Refreshing Caddy SSL certificate..."
-            docker exec whatszor-caddy-1 rm -rf /data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ || true
+            # ── 7. Restart Caddy to pick up new config cleanly ───────────────────
             docker compose -f docker-compose.prod.yml restart caddy
-            sleep 15
-            echo "Caddy restarted with fresh SSL cert"
+            echo "Caddy restarted"
 
             # ── 8. Show running containers ───────────────────────────────────────
             docker compose -f docker-compose.prod.yml ps
