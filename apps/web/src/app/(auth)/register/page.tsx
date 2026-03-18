@@ -61,7 +61,7 @@ export default function RegisterPage() {
                         <Bot size={24} color="#fff" />
                     </div>
                     <h1 className="text-2xl font-bold text-primary">Create workspace</h1>
-                    <p className="text-sm mt-1 text-muted">Set up your Whatszor account in seconds</p>
+                    <p className="text-sm mt-1 text-muted">Set up your Whatsvue account in seconds</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="card flex flex-col gap-4">

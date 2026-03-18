@@ -73,7 +73,7 @@ export default function LoginPage() {
                         <Bot size={24} color="#fff" />
                     </div>
                     <h1 className="text-2xl font-bold text-primary">Welcome back</h1>
-                    <p className="text-sm mt-1 text-muted">Sign in to your Whatszor workspace</p>
+                    <p className="text-sm mt-1 text-muted">Sign in to your Whatsvue workspace</p>
                 </div>
 
                 {/* Card */}

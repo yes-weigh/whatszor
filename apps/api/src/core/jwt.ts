@@ -16,7 +16,7 @@ export async function signAccessToken(payload: Omit<TokenPayload, 'type'>): Prom
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime(ACCESS_TTL)
-        .setIssuer('whatszor')
+        .setIssuer('whatsvue')
         .sign(ACCESS_SECRET);
 }
 
@@ -27,7 +27,7 @@ export async function signRefreshToken(payload: Omit<TokenPayload, 'type'>): Pro
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime(REFRESH_TTL)
-        .setIssuer('whatszor')
+        .setIssuer('whatsvue')
         .sign(REFRESH_SECRET);
 }
 
@@ -35,14 +35,14 @@ export async function signRefreshToken(payload: Omit<TokenPayload, 'type'>): Pro
 
 export async function verifyAccessToken(token: string): Promise<TokenPayload> {
     const { payload } = await jwtVerify(token, ACCESS_SECRET, {
-        issuer: 'whatszor',
+        issuer: 'whatsvue',
     });
     return payload as unknown as TokenPayload;
 }
 
 export async function verifyRefreshToken(token: string): Promise<TokenPayload & { jti: string }> {
     const { payload } = await jwtVerify(token, REFRESH_SECRET, {
-        issuer: 'whatszor',
+        issuer: 'whatsvue',
     });
     return payload as unknown as TokenPayload & { jti: string };
 }

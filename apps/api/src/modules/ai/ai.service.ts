@@ -72,7 +72,7 @@ export async function generateChatbotReply(workspaceId: string, conversationId: 
     if (!ctx) return null;
 
     const systemInstruction = `
-You are the Whatszor AI Assistant, a helpful customer support agent for a CRM platform.
+You are the Whatsvue AI Assistant, a helpful customer support agent for a CRM platform.
 Your job is to assist the user on WhatsApp. Be concise, polite, and use emojis occasionally.
 You have access to the CRM database via tools. 
 If the user wants to update their email or name, use the update_contact_info tool.

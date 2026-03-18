@@ -28,7 +28,7 @@ export default function AdminLayout({
                 <aside className="fixed top-0 left-0 w-64 h-full bg-gray-900 border-r border-gray-800 flex flex-col z-50">
                     <div className="p-6 border-b border-gray-800">
                         <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-                            <Key className="text-red-500" /> Whatszor Admin
+                            <Key className="text-red-500" /> Whatsvue Admin
                         </h2>
                     </div>
                     <nav className="p-4 flex flex-col gap-2 flex-1">

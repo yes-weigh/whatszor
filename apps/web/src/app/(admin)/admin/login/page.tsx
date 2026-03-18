@@ -67,7 +67,7 @@ export default function AdminLoginPage() {
                         <input
                             type="email"
                             className="bg-gray-950 border border-gray-800 text-white text-sm rounded-lg block w-full p-2.5 focus:ring-red-500 focus:border-red-500"
-                            placeholder="admin@whatszor.com"
+                            placeholder="admin@whatsvue.com"
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                             required

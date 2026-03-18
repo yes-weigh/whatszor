@@ -2,7 +2,7 @@
     "name": "@whatszor/web",
     "version": "0.1.0",
     "private": true,
-    "description": "Whatszor Frontend — Next.js dashboard",
+    "description": "Whatsvue Frontend — Next.js dashboard",
     "scripts": {
         "dev": "next dev -p 3000",
         "build": "next build",

@@ -19,7 +19,7 @@ import { waManager } from './modules/whatsapp/whatsapp.service';
 const log = logger.child({ module: 'worker-bootstrap' });
 
 async function bootstrap() {
-    log.info(`Starting Whatszor Worker Process [${env.NODE_ENV}]`);
+    log.info(`Starting Whatsvue Worker Process [${env.NODE_ENV}]`);
 
     // 1. Connect Redis
     await connectRedis();
@@ -35,7 +35,7 @@ async function bootstrap() {
     // Workers might need WhatsApp session access depending on queue operations
     await waManager.restoreAllSessions();
 
-    log.info(`🚀 Whatszor Worker Process started`);
+    log.info(`🚀 Whatsvue Worker Process started`);
 
     // 5. Graceful shutdown
     const shutdown = async (signal: string) => {

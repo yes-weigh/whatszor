@@ -40,7 +40,7 @@ export function Sidebar() {
                 </div>
                 {!collapsed && (
                     <span className="font-bold text-sm tracking-tight text-primary">
-                        Whatszor
+                        Whatsvue
                     </span>
                 )}
             </div>

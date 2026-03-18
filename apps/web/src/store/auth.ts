@@ -87,7 +87,7 @@ export const useAuthStore = create<AuthState>()(
             },
         }),
         {
-            name: 'whatszor-auth',
+            name: 'whatsvue-auth',
             partialize: (s) => ({ user: s.user, accessToken: s.accessToken }),
         }
     )

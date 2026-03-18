@@ -62,7 +62,7 @@ export default function DashboardPage() {
 
     return (
         <div>
-            <Header title="Dashboard" subtitle="Your Whatszor workspace at a glance" />
+            <Header title="Dashboard" subtitle="Your Whatsvue workspace at a glance" />
             <div className="p-6 flex flex-col gap-6">
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
