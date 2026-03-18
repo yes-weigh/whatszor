@@ -261,6 +261,54 @@ export async function sendMessage(
     return message;
 }
 
+export async function approveMessage(
+    workspaceId: string,
+    messageId: string,
+    sessionId?: string
+) {
+    const message = await prisma.message.findUnique({
+        where: { id: messageId },
+        include: { conversation: true }
+    });
+
+    if (!message || message.conversation.workspaceId !== workspaceId) {
+        throw createError('Message not found', ErrorCodes.NOT_FOUND, 404);
+    }
+
+    if ((message.status as any) !== 'SUGGESTED') {
+        throw createError('Message is not in suggested state', ErrorCodes.BAD_REQUEST, 400);
+    }
+
+    // Resolve which WhatsApp account to use
+    let activeSessionId = sessionId;
+    if (!activeSessionId) {
+        const fallback = await prisma.whatsAppAccount.findFirst({
+            where: { workspaceId, status: 'CONNECTED' },
+            select: { sessionId: true }
+        });
+        activeSessionId = fallback?.sessionId ?? workspaceId;
+    }
+
+    // Update status to QUEUED
+    const updated = await prisma.message.update({
+        where: { id: messageId },
+        data: { status: 'QUEUED' }
+    });
+
+    // Add to outbound queue
+    await outboundMessagesQueue.add(`send-approved-${message.id}`, {
+        workspaceId,
+        sessionId: activeSessionId,
+        messageId: message.id,
+        toJid: message.conversation.providerId,
+        type: message.type,
+        content: message.content,
+        mediaData: message.mediaData
+    });
+
+    return updated;
+}
+
 function createError(message: string, code: string, statusCode: number) {
     const err = new Error(message) as Error & { code: string; statusCode: number };
     err.code = code;

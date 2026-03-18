@@ -426,6 +426,7 @@ enum MessageStatus {
   READ
   FAILED
   RECEIVED
+  SUGGESTED
 }
 
 model QuickReply {

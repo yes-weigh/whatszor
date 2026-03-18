@@ -11,7 +11,7 @@ import { useQuickReplies } from '@/hooks/use-quick-replies';
 import {
     MessageSquare, Search, Send, Phone, CheckCheck, Check,
     Smartphone, ChevronDown, X, Loader2, Circle, Download, FileText, Zap,
-    Paperclip, PenSquare, FileImage
+    Paperclip, PenSquare, FileImage, Sparkles
 } from 'lucide-react';
 import TemplatePickerModal from './TemplatePickerModal';
 
@@ -225,10 +225,15 @@ function StatusIcon({ status }: { status: string }) {
     if (status === 'PLAYED') return <CheckCheck size={13} className="text-blue-400" />;
     if (status === 'DELIVERED') return <CheckCheck size={13} className="text-muted" />;
     if (status === 'SENT') return <Check size={13} className="text-muted" />;
+    if (status === 'SUGGESTED') return <Sparkles size={11} className="text-secondary animate-pulse" />;
     return null;
 }
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, onApprove, onEdit }: { 
+    msg: Message; 
+    onApprove: (id: string) => void; 
+    onEdit: (text: string) => void;
+}) {
     const isOut = msg.direction === 'OUTBOUND';
     const isMediaType = ['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT', 'STICKER'].includes(msg.type);
     const hasLocalPath = !!msg.mediaData?.localPath;
@@ -334,9 +339,17 @@ function MessageBubble({ msg }: { msg: Message }) {
             <div className={`max-w-[70%] flex flex-col gap-1 ${isOut ? 'items-end' : 'items-start'}`}>
                 <div className={`px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
                     isOut
-                        ? 'bg-[hsl(235,85%,58%)] text-white rounded-[18px_4px_18px_18px]'
+                        ? msg.status === 'SUGGESTED'
+                            ? 'bg-elevated text-primary border-2 border-dashed border-secondary/40 rounded-[18px_4px_18px_18px]'
+                            : 'bg-[hsl(235,85%,58%)] text-white rounded-[18px_4px_18px_18px]'
                         : 'bg-elevated text-primary border border-theme rounded-[4px_18px_18px_18px]'
                 }`}>
+                    {msg.status === 'SUGGESTED' && (
+                        <div className="flex items-center gap-1.5 mb-1.5 pb-1 border-b border-theme/50 text-[10px] font-bold uppercase tracking-wider text-secondary">
+                            <Sparkles size={10} />
+                            <span>AI Suggestion</span>
+                        </div>
+                    )}
                     {renderContent()}
                 </div>
                 <div className="flex items-center gap-1 px-1">
@@ -345,6 +358,23 @@ function MessageBubble({ msg }: { msg: Message }) {
                     </span>
                     {isOut && <StatusIcon status={msg.status} />}
                 </div>
+
+                {msg.status === 'SUGGESTED' && (
+                    <div className="flex items-center gap-2 mt-1">
+                        <button
+                            onClick={() => onApprove(msg.id)}
+                            className="text-[10px] font-bold px-2 py-1 rounded bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors uppercase"
+                        >
+                            Send
+                        </button>
+                        <button
+                            onClick={() => onEdit(msg.content || '')}
+                            className="text-[10px] font-bold px-2 py-1 rounded bg-muted/10 text-muted hover:bg-muted/20 transition-colors uppercase"
+                        >
+                            Edit
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -499,6 +529,17 @@ export default function ConversationsPage() {
         },
         onSuccess: () => {
             setReplyText('');
+            qc.invalidateQueries({ queryKey: ['messages', selectedConv?.id] });
+            qc.invalidateQueries({ queryKey: ['conversations'] });
+        },
+    });
+    
+    const approveMsg = useMutation({
+        mutationFn: (messageId: string) => 
+            api.post(`/conversations/messages/${messageId}/approve`, { 
+                sessionId: replySession 
+            }),
+        onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['messages', selectedConv?.id] });
             qc.invalidateQueries({ queryKey: ['conversations'] });
         },
@@ -877,7 +918,17 @@ export default function ConversationsPage() {
                                     <p className="text-sm text-muted">No messages yet</p>
                                 </div>
                             )}
-                            {msgs.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
+                            {msgs.map(msg => (
+                                <MessageBubble 
+                                    key={msg.id} 
+                                    msg={msg} 
+                                    onApprove={(id) => approveMsg.mutate(id)}
+                                    onEdit={(text) => {
+                                        setReplyText(text);
+                                        textareaRef.current?.focus();
+                                    }}
+                                />
+                            ))}
                             <div ref={messagesEndRef} />
                         </div>
 

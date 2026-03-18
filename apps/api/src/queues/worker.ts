@@ -62,6 +62,7 @@ let workers: Worker[] = [];
 
 import { processAutomationJob } from '../modules/automation/automation-worker';
 import { processCampaignJob } from '../modules/campaign/campaign-worker';
+import { processAiJob } from '../modules/ai/ai-worker';
 
 export function startWorkers(): void {
     workers = [
@@ -69,7 +70,7 @@ export function startWorkers(): void {
         createWorkerStub(QueueName.WHATSAPP, 10),
         createWorker(QueueName.CAMPAIGN, processCampaignJob, 2),
         createWorker(QueueName.AUTOMATION, processAutomationJob, 5),
-        createWorkerStub(QueueName.AI, 3),
+        createWorker(QueueName.AI, processAiJob, 3),
         createWorkerStub(QueueName.NOTIFICATION, 5),
     ];
 }

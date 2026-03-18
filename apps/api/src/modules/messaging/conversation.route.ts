@@ -77,4 +77,11 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
         const message = await conversationService.sendMessage(req.user.workspaceId, req.user.sub, id, input);
         return reply.status(201).send({ success: true, data: message });
     });
+
+    fastify.post('/messages/:messageId/approve', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
+        const { messageId } = req.params as { messageId: string };
+        const { sessionId } = req.body as { sessionId?: string };
+        const message = await conversationService.approveMessage(req.user.workspaceId, messageId, sessionId);
+        return reply.send({ success: true, data: message });
+    });
 };
