@@ -412,6 +412,8 @@ enum MessageType {
   VIDEO
   DOCUMENT
   AUDIO
+  STICKER
+  REACTION
   TEMPLATE
   SYSTEM
 }

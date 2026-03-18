@@ -1,5 +1,5 @@
 /**
- * Whatszor Background Worker — Entry Point
+ * Whatsvue Background Worker — Entry Point
  *
  * Startup sequence:
  * 1. Validate environment

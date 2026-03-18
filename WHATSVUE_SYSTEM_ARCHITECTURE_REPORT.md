@@ -1,12 +1,12 @@
-# WHATSZOR — SYSTEM ARCHITECTURE & DEVELOPMENT STATUS REPORT
+# WHATSVUE — SYSTEM ARCHITECTURE & DEVELOPMENT STATUS REPORT
 
 ## SECTION 1 — Project Overview
 
-**What Whatszor is:**
-Whatszor (internally styled as *Whatszor*) is an AI-native WhatsApp CRM and Automation SaaS platform natively designed for high-throughput messaging, multi-agent support, and workflow automation.
+**What Whatsvue is:**
+Whatsvue (internally styled as *Whatsvue*) is an AI-native WhatsApp CRM and Automation SaaS platform natively designed for high-throughput messaging, multi-agent support, and workflow automation.
 
 **The problem it solves:**
-Businesses struggle to maintain centralized control over their WhatsApp communication safely while scaling up. Whatszor provides a secure, multi-tenant environment where entire teams can manage contacts, run broadcast campaigns, build responsive AI workflows, and collaborate on a single WhatsApp Business/Personal number without risking account bans or data silos.
+Businesses struggle to maintain centralized control over their WhatsApp communication safely while scaling up. Whatsvue provides a secure, multi-tenant environment where entire teams can manage contacts, run broadcast campaigns, build responsive AI workflows, and collaborate on a single WhatsApp Business/Personal number without risking account bans or data silos.
 
 **The SaaS model:**
 It uses a B2B SaaS Multi-Tenant architectural model:
@@ -279,4 +279,4 @@ graph LR
 - **Phase 19 — Analytics & Reporting:** Track throughput. Build visual recharts tracking team metrics.
 - **Phase 20 — Enterprise Scaling:** Move Baileys socket execution out of the main API monolith to prevent memory bloat on heavy video syncing occurrences. 
 
-_This document accurately represents the exact logical structure of the Whatszor application environment at the current branch state._
+_This document accurately represents the exact logical structure of the Whatsvue application environment at the current branch state._

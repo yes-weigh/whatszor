@@ -328,14 +328,15 @@ export function initializeWorkers() {
                     else if (hasVideo) { type = 'VIDEO'; mediaData = msg.message; }
                     else if (hasAudio) { type = 'AUDIO'; mediaData = msg.message; finalContent = finalContent ?? 'Voice message'; }
                     else if (hasDoc) { type = 'DOCUMENT'; mediaData = msg.message; finalContent = finalContent ?? 'Document'; }
-                    else if (hasSticker) { type = 'STICKER'; finalContent = '🎭 Sticker'; }
+                    else if (hasSticker) { type = 'STICKER'; finalContent = '🎭 Sticker'; mediaData = msg.message?.stickerMessage; }
                     else if (hasReaction) {
                         const emoji = msg.message?.reactionMessage?.text ?? '👍';
                         const reactedTo = (msg.message?.reactionMessage as any)?.quotedMessage?.conversation ?? '';
-                        type = 'TEXT';
+                        type = 'REACTION';
                         finalContent = reactedTo
                             ? `Reacted ${emoji} to: "${reactedTo.substring(0, 30)}"`
                             : `Reacted ${emoji}`;
+                        mediaData = msg.message?.reactionMessage;
                     }
 
                     if (!finalContent && !mediaData) continue; // Ignore empty/system ACKs

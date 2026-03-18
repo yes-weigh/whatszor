@@ -1,5 +1,5 @@
 /**
- * Whatszor API — Entry Point
+ * Whatsvue API — Entry Point
  *
  * Startup sequence:
  * 1. Validate environment

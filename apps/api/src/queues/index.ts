@@ -6,7 +6,7 @@ import { logger } from '../core/logger';
 const log = logger.child({ module: 'queues' });
 
 /**
- * Named queues in the Whatszor platform.
+ * Named queues in the Whatsvue platform.
  * Each queue has its own concurrency and retry configuration.
  */
 export enum QueueName {
