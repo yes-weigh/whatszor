@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { ShieldAlert, KeyRound, Building2, LogOut } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Key, Users, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 export default function AdminLayout({
@@ -11,6 +11,7 @@ export default function AdminLayout({
     children: React.ReactNode;
 }) {
     const pathname = usePathname();
+    const router = useRouter();
     const isLogin = pathname === '/admin/login';
     const { isAuthenticated, user, logout } = useAuthStore();
 
@@ -18,52 +19,44 @@ export default function AdminLayout({
         return <>{children}</>;
     }
 
-    // Only show admin nav if we are supposedly logged into admin
-    const isAdmin = isAuthenticated() && user?.role === 'SUPER_ADMIN';
+    // Only show admin nav if logged in as admin/staff
+    const isAdmin = isAuthenticated() && (user?.role === 'SUPER_ADMIN' || user?.role === 'STAFF');
 
     return (
-        <div className="min-h-screen bg-black flex flex-col">
+        <div className="min-h-screen bg-gray-950 text-gray-200 flex">
             {isAdmin && (
-                <header className="bg-gray-950 border-b border-gray-800 flex items-center justify-between px-6 py-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded bg-red-500/10 flex items-center justify-center border border-red-500/20">
-                            <ShieldAlert size={16} className="text-red-500" />
-                        </div>
-                        <span className="text-lg font-bold text-white tracking-tight">Whatszor Admin</span>
+                <aside className="fixed top-0 left-0 w-64 h-full bg-gray-900 border-r border-gray-800 flex flex-col z-50">
+                    <div className="p-6 border-b border-gray-800">
+                        <h2 className="text-xl font-bold flex items-center gap-2 text-white">
+                            <Key className="text-red-500" /> Whatszor Admin
+                        </h2>
                     </div>
-
-                    <nav className="flex items-center gap-1">
+                    <nav className="p-4 flex flex-col gap-2 flex-1">
                         <Link 
                             href="/admin/dashboard" 
-                            className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${pathname === '/admin/dashboard' ? 'bg-red-500/10 text-red-500' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-900'}`}
+                            className={`flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${pathname === '/admin/dashboard' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
                         >
-                            <KeyRound size={16} />
-                            Licenses
+                            <Key size={18} /> Licenses
                         </Link>
                         <Link 
                             href="/admin/workspaces" 
-                            className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${pathname === '/admin/workspaces' ? 'bg-red-500/10 text-red-500' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-900'}`}
+                            className={`flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${pathname === '/admin/workspaces' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
                         >
-                            <Building2 size={16} />
-                            Dealers
+                            <Users size={18} /> Dealers
                         </Link>
-                        
-                        <div className="w-px h-6 bg-gray-800 mx-2"></div>
-                        
+                        <div className="flex-1" />
                         <button 
-                            onClick={() => {
-                                logout();
-                                window.location.href = '/admin/login';
-                            }}
-                            className="px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-red-400 hover:bg-gray-900 transition-colors"
+                            onClick={() => { logout(); router.push('/admin/login'); }}
+                            className="flex items-center gap-3 p-3 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors w-full text-left font-medium"
                         >
-                            <LogOut size={16} />
-                            Log Out
+                            <LogOut size={18} /> Logout
                         </button>
                     </nav>
-                </header>
+                </aside>
             )}
-            <main className="flex-1 flex flex-col">{children}</main>
+            <main className={`flex-1 flex flex-col min-h-screen ${isAdmin ? 'ml-64' : ''}`}>
+                {children}
+            </main>
         </div>
     );
 }

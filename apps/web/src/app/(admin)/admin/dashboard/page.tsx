@@ -79,35 +79,9 @@ export default function AdminDashboardPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-950 text-gray-200">
-            {/* Sidebar */}
-            <aside className="fixed top-0 left-0 w-64 h-full bg-gray-900 border-r border-gray-800">
-                <div className="p-6 border-b border-gray-800">
-                    <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-                        <Key className="text-red-500" /> Whatszor Admin
-                    </h2>
-                </div>
-                <nav className="p-4 flex flex-col gap-2">
-                    <Link href="/admin/dashboard" className="flex items-center gap-3 p-3 rounded-lg bg-gray-800 text-white font-medium">
-                        <Key size={18} /> Licenses
-                    </Link>
-                    <Link href="/admin/workspaces" className="flex items-center gap-3 p-3 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors">
-                        <Users size={18} /> Dealers
-                    </Link>
-                    <div className="flex-1" />
-                    <button 
-                        onClick={() => { logout(); router.push('/admin/login'); }}
-                        className="flex items-center gap-3 p-3 rounded-lg text-gray-400 hover:text-red-400 transition-colors w-full text-left"
-                    >
-                        <LogOut size={18} /> Logout
-                    </button>
-                </nav>
-            </aside>
-
-            {/* Main content */}
-            <main className="ml-64 p-8">
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-3xl font-bold text-white">License Management</h1>
+        <div className="p-8">
+            <div className="flex justify-between items-center mb-8">
+                <h1 className="text-3xl font-bold text-white">License Management</h1>
                 </div>
 
                 {/* Generator Form */}
@@ -216,7 +190,6 @@ export default function AdminDashboardPage() {
                         </tbody>
                     </table>
                 </div>
-            </main>
         </div>
     );
 }

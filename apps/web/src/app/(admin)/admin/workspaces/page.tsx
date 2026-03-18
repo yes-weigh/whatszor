@@ -93,7 +93,7 @@ export default function AdminWorkspacesPage() {
     }
 
     return (
-        <div className="flex-1 p-8 bg-black min-h-screen text-gray-100">
+        <div className="p-8">
             <div className="max-w-6xl mx-auto space-y-8">
                 {/* Header */}
                 <div className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
