@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Key, Users, LogOut, Copy, RefreshCw } from 'lucide-react';
-import Link from 'next/link';
+import { Copy, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface LicenseKey {
@@ -21,7 +20,7 @@ interface LicenseKey {
 }
 
 export default function AdminDashboardPage() {
-    const { user, logout } = useAuthStore();
+    const { user } = useAuthStore();
     const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [keys, setKeys] = useState<LicenseKey[]>([]);
