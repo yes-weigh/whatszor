@@ -25,3 +25,7 @@
 
 # Optional: Redirect trailing slash to non-trailing slash (e.g., example.com/api/ -> example.com/api)
 # ...or keep it as is.
+
+mail.yesweigh.in {
+    reverse_proxy localhost:8080
+}
