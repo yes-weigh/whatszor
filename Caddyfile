@@ -27,5 +27,5 @@
 # ...or keep it as is.
 
 mail.yesweigh.in {
-    reverse_proxy localhost:8080
+    reverse_proxy 148.230.66.84:8080
 }
