@@ -80,6 +80,16 @@ jobs:
               systemctl start docker
             fi
 
+            # ── 1.5 Ensure swap space exists to prevent OOM ────────────────
+            if [ -z "$(swapon --show)" ]; then
+              echo "Creating 2GB swap file..."
+              fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+              chmod 600 /swapfile
+              mkswap /swapfile
+              swapon /swapfile
+              echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
+
             # ── 2. Install Git (if not present) ────────────────────────────────
             if ! command -v git &> /dev/null; then
               apt-get update -qq && apt-get install -y git

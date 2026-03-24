@@ -24,6 +24,7 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 # Build shared package then web
 RUN pnpm --filter shared run build
+ENV NODE_OPTIONS="--max_old_space_size=1536"
 RUN pnpm --filter web run build
 RUN mkdir -p apps/web/public
 
