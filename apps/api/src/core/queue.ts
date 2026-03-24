@@ -609,17 +609,21 @@ export function initializeWorkers() {
                 return;
             }
 
-            // ── 3. Bulk upsert conversations ───────────────────────────────
+            // ── 3. Bulk upsert conversations (Chunked) ─────────────────────────
             // createMany + skipDuplicates = single INSERT ... ON CONFLICT DO NOTHING
-            await prisma.conversation.createMany({
-                data: jids.map(jid => ({
-                    workspaceId,
-                    provider: 'WHATSAPP' as const,
-                    providerId: jid,
-                    sessionId: sessionId ?? null,
-                })),
-                skipDuplicates: true,
-            });
+            const CONV_BATCH_SIZE = 1000;
+            for (let i = 0; i < jids.length; i += CONV_BATCH_SIZE) {
+                const batch = jids.slice(i, i + CONV_BATCH_SIZE);
+                await prisma.conversation.createMany({
+                    data: batch.map(jid => ({
+                        workspaceId,
+                        provider: 'WHATSAPP' as const,
+                        providerId: jid,
+                        sessionId: sessionId ?? null,
+                    })),
+                    skipDuplicates: true,
+                });
+            }
 
             // Fetch all conversation IDs for our JIDs in one query → in-memory map
             const convRows = await prisma.conversation.findMany({
@@ -744,10 +748,16 @@ export function initializeWorkers() {
 
             // Bulk insert — skipDuplicates handles re-syncs (remoteId+conversationId are unique)
             if (msgRecords.length > 0) {
-                await prisma.message.createMany({
-                    data: msgRecords as any,
-                    skipDuplicates: true,
-                });
+                // Chunk the message records to prevent PostgreSQL "too many parameters" error 
+                // which triggers above 65,535 parameters on large enterprise history sync payloads.
+                const MSG_BATCH_SIZE = 500;
+                for (let i = 0; i < msgRecords.length; i += MSG_BATCH_SIZE) {
+                    const msgBatch = msgRecords.slice(i, i + MSG_BATCH_SIZE);
+                    await prisma.message.createMany({
+                        data: msgBatch as any,
+                        skipDuplicates: true,
+                    });
+                }
             }
 
             // ── 6. Update lastMessage/lastMessageAt per conversation ────────
