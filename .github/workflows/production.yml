@@ -124,7 +124,7 @@ jobs:
 
             # ── 7. Restart Caddy with clean TLS state ────────────────────────────
             docker compose -f docker-compose.prod.yml stop caddy
-            docker run --rm -v whatszor_caddy-config:/config alpine sh -c "rm -rf /config/*" || true
+            # docker run --rm -v whatszor_caddy-config:/config alpine sh -c "rm -rf /config/*" || true
             docker compose -f docker-compose.prod.yml up -d caddy
             echo "Caddy restarted with clean TLS state"
 
