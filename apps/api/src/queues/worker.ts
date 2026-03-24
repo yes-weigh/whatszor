@@ -63,6 +63,8 @@ let workers: Worker[] = [];
 import { processAutomationJob } from '../modules/automation/automation-worker';
 import { processCampaignJob } from '../modules/campaign/campaign-worker';
 import { processAiJob } from '../modules/ai/ai-worker';
+import { processKnowledgeOutreachJob } from '../modules/knowledge/knowledge.worker';
+import { processIncomingKnowledgeJob } from '../modules/knowledge/knowledge.ingestion';
 
 export function startWorkers(): void {
     workers = [
@@ -71,6 +73,8 @@ export function startWorkers(): void {
         createWorker(QueueName.CAMPAIGN, processCampaignJob, 2),
         createWorker(QueueName.AUTOMATION, processAutomationJob, 5),
         createWorker(QueueName.AI, processAiJob, 3),
+        createWorker(QueueName.KNOWLEDGE_OUTREACH, processKnowledgeOutreachJob, 2),
+        createWorker(QueueName.KNOWLEDGE_INGESTION, processIncomingKnowledgeJob, 2),
         createWorkerStub(QueueName.NOTIFICATION, 5),
     ];
 }

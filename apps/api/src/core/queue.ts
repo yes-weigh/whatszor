@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { emit as realtimeEmit } from './realtime';
 import { downloadMediaMessage } from '@itsukichan/baileys';
 import { saveMedia } from './media-storage';
+import { getQueue, QueueName } from '../queues';
 
 // Simple variable parser e.g. {{contact.firstName}}
 function parseVariables(text: string, context: Record<string, any>): string {
@@ -247,6 +248,84 @@ export function initializeWorkers() {
                     if (msg.key.remoteJid === 'status@broadcast') continue;
 
                     const providerId = msg.key.remoteJid as string;
+
+                    // --- KNOWLEDGE BOT INTERCEPTION ---
+                    // If the account receiving this message is designated as the knowledge bot,
+                    // we completely bypass the normal inbox routing and push straight to ingestion.
+                    if (!msg.key.fromMe) {
+                        const account = await prisma.whatsAppAccount.findUnique({
+                            where: { sessionId },
+                            select: { isKnowledgeBot: true }
+                        });
+
+                        if (account?.isKnowledgeBot) {
+                            let senderPhone = providerId.split('@')[0];
+                            
+                            if (providerId.endsWith('@lid')) {
+                                // 1. Check if the message contains the underlying actor directly
+                                if (msg.key.participant && !msg.key.participant.endsWith('@lid')) {
+                                    senderPhone = msg.key.participant.split('@')[0];
+                                } else {
+                                    // 2. Fallback to reverse-engineering via Live contacts maps natively
+                                    const contactsMap = waManager.getContactsStore(sessionId);
+                                    const resolved = contactsMap.get(providerId);
+                                    if (resolved && resolved.jid && !resolved.jid.endsWith('@lid')) {
+                                        senderPhone = resolved.jid.split('@')[0];
+                                    }
+                                }
+                            }
+
+                            // Phase 9: Phone-number Access Control
+                            const isAllowed = await prisma.allowedNumber.findFirst({
+                                where: {
+                                    workspaceId,
+                                    phoneNumber: { in: [senderPhone, `+${senderPhone}`] },
+                                    isActive: true
+                                }
+                            });
+
+                            if (!isAllowed) {
+                                log.warn({ messageId: msg.key.id, senderPhone }, 'Blocked unauthorized knowledge bot access');
+                                
+                                let rawText = '';
+                                if (msg.message?.conversation) rawText = msg.message.conversation;
+                                else if (msg.message?.extendedTextMessage?.text) rawText = msg.message.extendedTextMessage.text;
+                                else if (msg.message?.imageMessage?.caption) rawText = msg.message.imageMessage.caption;
+                                
+                                // Store minimal record for debugging
+                                await prisma.productKnowledgeSource.create({
+                                    data: {
+                                        messageId: msg.key.id,
+                                        dataType: 'TEXT',
+                                        rawText: rawText || '[Media/Unsupported]',
+                                        extractedData: {},
+                                        fieldConfidence: {},
+                                        globalConfidence: 0,
+                                        status: 'BLOCKED',
+                                        isTrustedSource: false
+                                    }
+                                });
+
+                                // Send user-friendly rejection message securely
+                                const rejectionMsg = 'This number is not enabled for product updates. Please contact admin.';
+                                await waManager.getSafeSocket(sessionId).sendMessage(msg.key.remoteJid as string, { text: rejectionMsg }, { quoted: msg as any });
+                                continue;
+                            }
+
+                            // If allowed -> route into the explicit queue safely.
+                            await getQueue(QueueName.KNOWLEDGE_INGESTION).add(msg.key.id, {
+                                workspaceId,
+                                sessionId,
+                                messageId: msg.key.id,
+                                senderPhone,
+                                payload: msg
+                            }, { jobId: msg.key.id });
+
+                            log.info({ messageId: msg.key.id, providerId, senderPhone }, 'Routed incoming authorized message to Product Knowledge Bot pipeline');
+                            continue; // Skip all CRM / Conversational Inbox logic
+                        }
+                    }
+                    // ----------------------------------
 
                     // Extract WhatsApp contact name from the message's pushName
                     const pushName: string | undefined = (msg as any).pushName;

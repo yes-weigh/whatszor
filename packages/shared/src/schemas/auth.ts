@@ -38,6 +38,7 @@ export const UpdateWorkspaceSchema = z.object({
 
 export const InviteMemberSchema = z.object({
     email: EmailSchema,
+    password: z.string().min(8, 'Password must be at least 8 characters'),
     role: z.enum(['ADMIN', 'MEMBER', 'VIEWER']).default('MEMBER'),
 });
 

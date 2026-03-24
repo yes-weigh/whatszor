@@ -33,6 +33,7 @@
         "baileys-antiban": "^1.0.0",
         "bcryptjs": "^3.0.3",
         "bullmq": "^5.8.1",
+        "csv-parse": "^6.2.1",
         "date-fns": "^4.1.0",
         "dotenv": "^16.4.5",
         "fastify": "^4.28.1",
@@ -40,17 +41,18 @@
         "jose": "^6.2.0",
         "pino": "^9.2.0",
         "pino-pretty": "^11.2.1",
+        "prisma": "^5.14.0",
         "qrcode-terminal": "^0.12.0",
-        "zod": "^3.23.8",
-        "prisma": "^5.14.0"
+        "zod": "^3.23.8"
     },
     "devDependencies": {
         "@types/bcryptjs": "^3.0.0",
         "@types/hapi__boom": "^9.0.1",
         "@types/node": "^20.14.8",
         "@types/qrcode-terminal": "^0.12.2",
-        "@whiskeysockets/baileys": "7.0.0-rc.9",
         "@whatszor/config": "workspace:*",
+        "@whiskeysockets/baileys": "7.0.0-rc.9",
+        "form-data": "^4.0.5",
         "tsx": "^4.15.7",
         "typescript": "^5.4.5"
     }

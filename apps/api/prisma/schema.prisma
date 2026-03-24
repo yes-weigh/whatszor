@@ -114,6 +114,8 @@ model Workspace {
   media            Media[]
   templates        Template[]
   QuickReply       QuickReply[]
+  productKnowledge ProductKnowledge[]
+  allowedNumbers   AllowedNumber[]
 
   @@map("workspaces")
 }
@@ -361,6 +363,20 @@ model Conversation {
   @@map("conversations")
 }
 
+model AllowedNumber {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  phoneNumber String   @map("phone_number")
+  label       String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, phoneNumber])
+  @@map("allowed_numbers")
+}
+
 model Message {
   id             String @id @default(cuid())
   conversationId String @map("conversation_id")
@@ -472,6 +488,7 @@ model WhatsAppAccount {
   name        String // Human label e.g. "Sales Team North"
   phoneNumber String?  @map("phone_number") // Populated after successful connection
   status      String   @default("DISCONNECTED") // DISCONNECTED | CONNECTING | CONNECTED
+  isKnowledgeBot Boolean @default(false) @map("is_knowledge_bot") // True if used exclusively for Product Knowledge Engine
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -789,4 +806,84 @@ model TemplateButton {
   version TemplateVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
   @@map("template_buttons")
+}
+
+// ============================================================
+// INTERNAL PRODUCT KNOWLEDGE BASE
+// ============================================================
+
+enum ProductStatus {
+  INCOMPLETE
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum KnowledgeDataType {
+  TEXT
+  IMAGE
+  VIDEO
+  PDF
+  AUDIO
+}
+
+enum KnowledgeSourceStatus {
+  APPLIED            // Extracted data successfully updated the main product
+  DISCARDED          // Admin rejected this specific extraction
+  CONFLICT           // Automatic merge failed due to low confidence or contradiction; needs review
+  FAILED_VALIDATION  // AI returned unusable/malformed data
+  ORPHANED           // Context resolution failed (couldn't map message to a product)
+  BLOCKED            // Phone number was not in the AllowedNumber list
+}
+
+model ProductKnowledge {
+  id                 String        @id @default(cuid())
+  workspaceId        String        @map("workspace_id")
+  sku                String?       // Optional initial identifier
+  name               String
+  description        String?
+  price              Float?
+  category           String?
+  specifications     Json?         @default("{}") // Structured key-value pairs
+  mediaUrls          String[]      @map("media_urls") 
+  status             ProductStatus @default(INCOMPLETE)
+  
+  missingFieldsCount Int           @default(0) @map("missing_fields_count")
+  lastOutreachAt     DateTime?     @map("last_outreach_at")
+  
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  workspace          Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sources            ProductKnowledgeSource[]
+
+  @@index([workspaceId, status])
+  @@index([missingFieldsCount, lastOutreachAt]) // For anti-spam outreach queries
+  @@map("product_knowledge")
+}
+
+model ProductKnowledgeSource {
+  id                 String                @id @default(cuid())
+  productId          String?               @map("product_id")
+  senderUserId       String?               @map("sender_user_id") // Which team member sent this (if known)
+  messageId          String?               @unique @map("message_id") // Link to original WhatsApp Message ID for traceability
+  
+  dataType           KnowledgeDataType     @map("data_type")
+  rawContentUrl      String?               @map("raw_content_url") // S3 link to the raw audio/image/pdf
+  rawText            String?               @map("raw_text") // Initial text or transcribed text
+  
+  extractedData      Json?                 // Zod-validated JSON payload
+  fieldConfidence    Json?                 // Map of field keys to integer confidence scores { "weight": 92 }
+  globalConfidence   Int?                  @map("global_confidence") // Averaged final score
+  status             KnowledgeSourceStatus @default(CONFLICT)
+  isTrustedSource    Boolean               @default(true) @map("is_trusted_source")
+  
+  createdAt          DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  product            ProductKnowledge? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  @@index([productId])
+  @@map("product_knowledge_sources")
 }

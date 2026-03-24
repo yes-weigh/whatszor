@@ -1,4 +1,5 @@
 import { prisma } from '../../prisma/client';
+import bcrypt from 'bcryptjs';
 import type { UpdateWorkspaceInput, InviteMemberInput } from '@whatszor/shared';
 import { ErrorCodes } from '@whatszor/shared';
 
@@ -71,15 +72,20 @@ export async function listMembers(workspaceId: string) {
 }
 
 export async function inviteMember(workspaceId: string, input: InviteMemberInput) {
-    const { email, role } = input;
+    const { email, role, password } = input;
 
-    // Find user by email — they must already have an account
-    const user = await prisma.user.findUnique({ where: { email } });
+    // Find user by email
+    let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-        const err = new Error('User not found. They must register first.') as Error & { code: string; statusCode: number };
-        err.code = ErrorCodes.NOT_FOUND;
-        err.statusCode = 404;
-        throw err;
+        // Create user with the provided password since they don't exist
+        const passwordHash = await bcrypt.hash(password, 12);
+        user = await prisma.user.create({
+            data: {
+                name: email.split('@')[0],
+                email,
+                passwordHash,
+            }
+        });
     }
 
     // Check if already a member

@@ -1,0 +1,7 @@
+﻿development
+[19:13:58.755] [33mWARN[39m: [36m[TEST-B-CONFLICT] CONFLICT detected![39m
+    env: "development"
+    module: "test-phase5"
+    key: "color"
+    existing: "red"
+    new: "blue"

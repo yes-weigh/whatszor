@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Megaphone, Zap, LayoutDashboard,
-    Settings, ChevronLeft, ChevronRight, Bot, Image, LayoutTemplate
+    Settings, ChevronLeft, ChevronRight, Bot, Image, LayoutTemplate, Shield
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 
 const navItems = [
@@ -17,16 +17,22 @@ const navItems = [
     { href: '/automations',   label: 'Automations',   icon: Zap },
     { href: '/media',         label: 'Media Gallery', icon: Image },
     { href: '/templates',     label: 'Templates',     icon: LayoutTemplate },
+    { href: '/dashboard/team',label: 'Team Access',   icon: Shield },
 ];
 
 export function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
     const { user, hasPermission } = useAuthStore();
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     // Filter nav items the current user has permission to see
     const visibleNavItems = navItems.filter(item =>
-        !item.requiredPermission || hasPermission(item.requiredPermission)
+        !item.requiredPermission || (isMounted && hasPermission(item.requiredPermission))
     );
 
     return (
@@ -70,7 +76,7 @@ export function Sidebar() {
                     {!collapsed && <span>Settings</span>}
                 </Link>
 
-                {!collapsed && user && (
+                {isMounted && !collapsed && user && (
                     <div className="flex items-center gap-2 px-3 py-2 mt-1 rounded-lg bg-elevated">
                         <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-accent text-white">
                             {user.name?.charAt(0).toUpperCase()}

@@ -322,6 +322,7 @@ class WhatsAppManager extends EventEmitter {
         phoneNumber: string | null;
         status: string;
         qrCode?: string;
+        isKnowledgeBot: boolean;
     }>> {
         const accounts = await prisma.whatsAppAccount.findMany({
             where: { workspaceId },
@@ -344,6 +345,7 @@ class WhatsAppManager extends EventEmitter {
                 phoneNumber: account.phoneNumber,
                 status: liveStatus,
                 qrCode: qrCode || undefined,
+                isKnowledgeBot: account.isKnowledgeBot,
             };
         });
     }

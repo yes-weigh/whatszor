@@ -5,7 +5,7 @@ import QRCode from 'react-qr-code';
 import api from '@/lib/api';
 import {
     Smartphone, CheckCircle2, MonitorSmartphone, Unplug,
-    Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X
+    Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -18,6 +18,7 @@ interface WASession {
     phoneNumber: string | null;
     status: 'DISCONNECTED' | 'CONNECTING' | 'NEEDS_SCAN' | 'CONNECTED';
     qrCode?: string;
+    isKnowledgeBot: boolean;
 }
 
 // ── QR Modal ───────────────────────────────────────────────────────────────
@@ -164,6 +165,12 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
         onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] }),
     });
 
+    const toggleBotMutation = useMutation({
+        mutationFn: (isKnowledgeBot: boolean) => 
+            api.patch(`/whatsapp/sessions/${session.sessionId}/knowledge-bot`, { isKnowledgeBot }),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] })
+    });
+
     const statusConfig = {
         CONNECTED: { color: 'text-green-600', bg: 'bg-green-50 border-green-200', icon: <Wifi size={14} />, label: 'Connected' },
         CONNECTING: { color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', icon: <Loader2 size={14} className="animate-spin" />, label: 'Connecting…' },
@@ -280,6 +287,25 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
                 >
                     {deleteMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 </button>
+
+                <div className="border-l border-theme h-6 mx-2 hidden sm:block"></div>
+
+                <div 
+                    onClick={() => {
+                        if (!toggleBotMutation.isPending) {
+                            toggleBotMutation.mutate(!session.isKnowledgeBot)
+                        }
+                    }}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-all border ${session.isKnowledgeBot ? 'bg-primary/10 border-primary/30 text-primary shadow-sm' : 'bg-surface border-theme text-secondary hover:bg-hover'}`}
+                    title="Toggle Product Knowledge Bot"
+                >
+                    <Brain size={15} className={session.isKnowledgeBot ? "text-primary" : "text-muted"} />
+                    <span className="text-xs font-semibold tracking-tight select-none mt-[1px]">Knowledge Bot</span>
+                    <div className="relative ml-1 flex items-center">
+                        <div className={`w-7 h-4 rounded-full transition-colors ${session.isKnowledgeBot ? 'bg-primary' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
+                        <div className={`absolute left-0.5 w-3 h-3 bg-white rounded-full transition-transform shadow-sm ${session.isKnowledgeBot ? 'translate-x-3' : 'translate-x-0'}`}></div>
+                    </div>
+                </div>
             </div>
         </div>
     );

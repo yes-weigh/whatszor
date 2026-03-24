@@ -1,11 +1,12 @@
 'use client';
 
 import { Header } from '@/components/layout/Header';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { Settings as SettingsIcon, MessageCircle, Bot, CreditCard, Zap, Users } from 'lucide-react';
 import { WhatsAppTab } from './components/WhatsAppTab';
 import { QuickRepliesTab } from './components/QuickRepliesTab';
+import { MembersTab } from './components/MembersTab';
 import { useRouter } from 'next/navigation';
 
 type Tab = 'general' | 'whatsapp' | 'quick-replies' | 'ai' | 'billing' | 'members';
@@ -15,13 +16,18 @@ const tabs: { id: Tab; label: string; icon: any; externalHref?: string }[] = [
     { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
     { id: 'quick-replies', label: 'Quick Replies', icon: Zap },
     { id: 'ai', label: 'AI Configuration', icon: Bot },
-    { id: 'members', label: 'Team Members', icon: Users, externalHref: '/settings/members' },
+    { id: 'members', label: 'Team Members', icon: Users },
     { id: 'billing', label: 'Billing', icon: CreditCard },
 ];
 
 export default function SettingsPage() {
     const hasPermission = useAuthStore(s => s.hasPermission);
     const router = useRouter();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const filteredTabs = tabs.filter(tab => {
         if (tab.id === 'whatsapp') return hasPermission('workspace:manage');
@@ -34,6 +40,8 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState<Tab>(
         filteredTabs.find(t => t.id === 'whatsapp') ? 'whatsapp' : (filteredTabs[0]?.id || 'general')
     );
+
+    if (!mounted) return null;
 
     return (
         <div className="flex flex-col h-full bg-body">
@@ -82,7 +90,7 @@ export default function SettingsPage() {
                         </div>
                     )}
 
-                    {activeTab === 'members' && null /* navigates away via router */}
+                    {activeTab === 'members' && <MembersTab />}
                 </div>
             </div>
         </div>

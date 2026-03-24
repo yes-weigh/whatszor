@@ -118,10 +118,15 @@ Customer Name: ${ctx.contact?.firstName || 'Unknown'} ${ctx.contact?.lastName ||
         });
 
         if (response.functionCalls && response.functionCalls.length > 0) {
-            messages.push({
-                role: 'model',
-                parts: response.functionCalls.map(fc => ({ functionCall: fc }))
-            });
+            const originalContent = response.candidates?.[0]?.content;
+            if (originalContent) {
+                messages.push(originalContent);
+            } else {
+                messages.push({
+                    role: 'model',
+                    parts: response.functionCalls.map(fc => ({ functionCall: fc }))
+                });
+            }
 
             const functionResponses = [];
 

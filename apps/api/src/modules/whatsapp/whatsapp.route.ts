@@ -314,6 +314,31 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         return reply.send({ success: true, data: { sessionId, ...stats } });
     });
 
+    /**
+     * PATCH /sessions/:sessionId/knowledge-bot
+     * Toggle Product Knowledge Bot listening state safely against active WhatsApp accounts.
+     */
+    fastify.patch('/sessions/:sessionId/knowledge-bot', async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { sessionId } = req.params as { sessionId: string };
+        const { isKnowledgeBot } = req.body as { isKnowledgeBot: boolean };
+
+        const account = await prisma.whatsAppAccount.findFirst({
+            where: { sessionId, workspaceId },
+        });
+
+        if (!account) {
+            return reply.status(404).send({ success: false, message: 'WhatsApp connection not found tightly mapped to this workspace.' });
+        }
+
+        const updated = await prisma.whatsAppAccount.update({
+            where: { id: account.id },
+            data: { isKnowledgeBot }
+        });
+
+        return reply.send({ success: true, data: updated });
+    });
+
     // ── Legacy single-session compat endpoints (kept to avoid breaking existing flows) ──
 
     /** @deprecated Use GET /sessions */

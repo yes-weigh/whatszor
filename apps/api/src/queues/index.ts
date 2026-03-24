@@ -16,6 +16,8 @@ export enum QueueName {
     AUTOMATION = 'automation', // Automation rule execution
     AI = 'ai',               // AI assistant processing
     NOTIFICATION = 'notification', // Internal/email notifications
+    KNOWLEDGE_OUTREACH = 'knowledge_outreach', // Chatbot product info requests
+    KNOWLEDGE_INGESTION = 'knowledge_ingestion', // Chatbot product info inbound parsing
 }
 
 function getQueueOptions(): QueueOptions {
