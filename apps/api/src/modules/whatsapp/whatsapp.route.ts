@@ -160,17 +160,27 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             fastify.log.info({ sessionId }, 'Clearing chat history for fresh resync...');
 
             // Delete all messages for conversations in this session
+            // Also include conversations with sessionId=null (created before session tracking)
             await prisma.message.deleteMany({
-                where: { conversation: { sessionId, workspaceId } },
+                where: {
+                    conversation: {
+                        workspaceId,
+                        provider: 'WHATSAPP',
+                        OR: [{ sessionId }, { sessionId: null }],
+                    },
+                },
             });
 
-            // Delete all conversations for this session
+            // Delete all conversations (sessionId match or null = pre-session-tracking rows)
             await prisma.conversation.deleteMany({
-                where: { sessionId, workspaceId },
+                where: {
+                    workspaceId,
+                    provider: 'WHATSAPP',
+                    OR: [{ sessionId }, { sessionId: null }],
+                },
             });
 
             fastify.log.info({ sessionId }, 'History cleared. Pending fresh reconnect...');
-
         }
 
         // Fire and forget reconnect
