@@ -65,8 +65,12 @@ export async function createOrGetConversation(workspaceId: string, input: Create
 export async function listConversations(workspaceId: string, sessionId?: string) {
     const where: Record<string, unknown> = { workspaceId };
     if (sessionId) {
-        // Show conversations for this specific account only
-        where.sessionId = sessionId;
+        // Show conversations for this account, including conversations that were
+        // synced before the sessionId field was populated (they belong to this workspace).
+        where.OR = [
+            { sessionId },
+            { sessionId: null },
+        ];
     }
 
     const conversations = await (prisma.conversation as any).findMany({

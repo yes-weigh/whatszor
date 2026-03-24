@@ -634,11 +634,13 @@ export function initializeWorkers() {
             for (const row of convRows) convMap.set(row.providerId, row);
 
             // ── 4. Bulk update sessionId + waContactName ───────────────────
-            // We do this in batches to avoid massive IN clauses
-            const needsSession = convRows.filter(r => !r.sessionId && sessionId).map(r => r.id);
-            if (needsSession.length > 0) {
+            // Update sessionId on ALL matched conversations (not just those missing it),
+            // so conversations created before session tracking or under a different session
+            // are properly linked to the current session.
+            if (sessionId && convRows.length > 0) {
+                const allIds = convRows.map(r => r.id);
                 await (prisma.conversation as any).updateMany({
-                    where: { id: { in: needsSession } },
+                    where: { id: { in: allIds } },
                     data: { sessionId },
                 });
             }
