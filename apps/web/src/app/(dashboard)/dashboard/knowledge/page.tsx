@@ -3,7 +3,7 @@
 import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
-import { Settings, CheckCircle, AlertCircle, Clock, Activity, BarChart2, ServerCrash } from 'lucide-react';
+import { Settings, CheckCircle, AlertCircle, Clock, Activity, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function KnowledgeBaseList() {
