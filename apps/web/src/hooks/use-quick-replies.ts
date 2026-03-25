@@ -1,10 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
+export interface QuickReplyMedia {
+    id: string;
+    name: string;
+    url: string;
+    type: string;
+    mimeType?: string | null;
+}
+
 export interface QuickReply {
     id: string;
     shortcut: string;
     content: string;
+    mediaId?: string | null;
+    media?: QuickReplyMedia | null;
     createdAt: string;
 }
 
@@ -20,7 +30,7 @@ export function useQuickReplies() {
     });
 
     const createMutation = useMutation({
-        mutationFn: async (data: { shortcut: string; content: string }) => {
+        mutationFn: async (data: { shortcut: string; content: string; mediaId?: string | null }) => {
             const res = await api.post('/quick-replies', data);
             return res.data.data;
         },
@@ -30,7 +40,7 @@ export function useQuickReplies() {
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ id, ...data }: { id: string; shortcut?: string; content?: string }) => {
+        mutationFn: async ({ id, ...data }: { id: string; shortcut?: string; content?: string; mediaId?: string | null }) => {
             const res = await api.patch(`/quick-replies/${id}`, data);
             return res.data.data;
         },

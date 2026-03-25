@@ -241,13 +241,26 @@ export async function sendMessage(
     // Traditional content messages
     const mediaData = input.mediaData ? (input.mediaData as any) : undefined;
 
+    // Resolve mediaGalleryId → real file URL (so Baileys can fetch/stream it directly)
+    let resolvedMediaData = mediaData;
+    const anyInput = input as any;
+    if (anyInput.mediaGalleryId) {
+        const galleryItem = await prisma.media.findFirst({
+            where: { id: anyInput.mediaGalleryId, workspaceId },
+            select: { url: true, mimeType: true, name: true },
+        });
+        if (galleryItem?.url) {
+            resolvedMediaData = { url: galleryItem.url, fileName: anyInput.fileName || galleryItem.name };
+        }
+    }
+
     const message = await prisma.message.create({
         data: {
             conversationId,
             direction: 'OUTBOUND',
             type: input.type,
             content: input.content ?? null,
-            mediaData,
+            mediaData: resolvedMediaData,
             status: 'QUEUED',
             senderUserId: userId,
         },

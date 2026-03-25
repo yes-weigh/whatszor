@@ -6,15 +6,17 @@ import { useAuthStore } from '@/store/auth';
 import { Settings as SettingsIcon, MessageCircle, Bot, CreditCard, Zap, Users } from 'lucide-react';
 import { WhatsAppTab } from './components/WhatsAppTab';
 import { QuickRepliesTab } from './components/QuickRepliesTab';
+import { AutoRepliesTab } from './components/AutoRepliesTab';
 import { MembersTab } from './components/MembersTab';
 import { useRouter } from 'next/navigation';
 
-type Tab = 'general' | 'whatsapp' | 'quick-replies' | 'ai' | 'billing' | 'members';
+type Tab = 'general' | 'whatsapp' | 'quick-replies' | 'auto-replies' | 'ai' | 'billing' | 'members';
 
 const tabs: { id: Tab; label: string; icon: any; externalHref?: string }[] = [
     { id: 'general', label: 'General', icon: SettingsIcon },
     { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
     { id: 'quick-replies', label: 'Quick Replies', icon: Zap },
+    { id: 'auto-replies', label: 'Auto Replies', icon: Bot },
     { id: 'ai', label: 'AI Configuration', icon: Bot },
     { id: 'members', label: 'Team Members', icon: Users },
     { id: 'billing', label: 'Billing', icon: CreditCard },
@@ -32,6 +34,7 @@ export default function SettingsPage() {
     const filteredTabs = tabs.filter(tab => {
         if (tab.id === 'whatsapp') return hasPermission('workspace:manage');
         if (tab.id === 'quick-replies') return hasPermission('templates:manage');
+        if (tab.id === 'auto-replies') return hasPermission('templates:manage');
         if (tab.id === 'billing') return hasPermission('billing:manage');
         if (tab.id === 'members') return hasPermission('members:read');
         return true;
@@ -77,6 +80,8 @@ export default function SettingsPage() {
                     {activeTab === 'whatsapp' && <WhatsAppTab />}
                     
                     {activeTab === 'quick-replies' && <QuickRepliesTab />}
+                    
+                    {activeTab === 'auto-replies' && <AutoRepliesTab />}
                     
                     {activeTab === 'ai' && (
                         <div className="flex items-center justify-center h-full text-muted">

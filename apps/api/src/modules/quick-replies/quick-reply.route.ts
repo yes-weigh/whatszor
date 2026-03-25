@@ -7,21 +7,28 @@ import * as quickReplyService from './quick-reply.service';
 const CreateQuickReplySchema = z.object({
     shortcut: z.string().min(1).max(50),
     content: z.string().min(1).max(2000),
+    mediaId: z.string().nullable().optional(),
 });
-
 const UpdateQuickReplySchema = CreateQuickReplySchema.partial();
+
+const CreateAutoReplySchema = z.object({
+    keyword: z.string().min(1).max(200),
+    content: z.string().min(1).max(2000),
+    mediaId: z.string().nullable().optional(),
+});
+const UpdateAutoReplySchema = CreateAutoReplySchema.partial();
 
 export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
 
-    // List Quick Replies
+    // ── Quick Replies ────────────────────────────────────────────────
+
     fastify.get('/', async (req, reply) => {
         const { workspaceId } = req.user;
         const data = await quickReplyService.getQuickReplies(workspaceId);
         return reply.send({ success: true, data });
     });
 
-    // Create Quick Reply
     fastify.post('/', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const input = CreateQuickReplySchema.parse(req.body);
@@ -29,7 +36,6 @@ export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         return reply.status(201).send({ success: true, data });
     });
 
-    // Update Quick Reply
     fastify.patch('/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
@@ -38,11 +44,40 @@ export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         return reply.send({ success: true, data });
     });
 
-    // Delete Quick Reply
     fastify.delete('/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
         await quickReplyService.deleteQuickReply(workspaceId, id);
+        return reply.status(204).send();
+    });
+
+    // ── Auto Replies ─────────────────────────────────────────────────
+
+    fastify.get('/auto', async (req, reply) => {
+        const { workspaceId } = req.user;
+        const data = await quickReplyService.getAutoReplies(workspaceId);
+        return reply.send({ success: true, data });
+    });
+
+    fastify.post('/auto', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const input = CreateAutoReplySchema.parse(req.body);
+        const data = await quickReplyService.createAutoReply(workspaceId, input);
+        return reply.status(201).send({ success: true, data });
+    });
+
+    fastify.patch('/auto/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        const input = UpdateAutoReplySchema.parse(req.body);
+        const data = await quickReplyService.updateAutoReply(workspaceId, id, input);
+        return reply.send({ success: true, data });
+    });
+
+    fastify.delete('/auto/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        await quickReplyService.deleteQuickReply(workspaceId, id); // same delete fn works
         return reply.status(204).send();
     });
 };

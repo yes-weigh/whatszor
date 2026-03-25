@@ -606,6 +606,67 @@ export function initializeWorkers() {
 
                         // Queue AI chatbot reply for non-outbound messages
                         if (!msg.key.fromMe && content && !kbHandled) {
+                            // ── Auto-Reply Keyword Matching ─────────────────────
+                            // Check if any auto-reply keyword matches this inbound text.
+                            // If matched, send the preset response instead of (or in addition to) AI.
+                            let autoReplied = false;
+                            try {
+                                const { findMatchingAutoReply } = require('../modules/quick-replies/quick-reply.service');
+                                const autoReply = await findMatchingAutoReply(workspaceId, content);
+                                if (autoReply) {
+                                    log.info({ keyword: autoReply.keyword, conversationId: conversation.id }, 'Auto-reply keyword matched — sending preset response');
+
+                                    // If media is attached, send it first
+                                    if (autoReply.media?.url) {
+                                        const mediaType = autoReply.media.type === 'image' ? 'IMAGE' : autoReply.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
+                                        const mediaMsg = await prisma.message.create({
+                                            data: {
+                                                conversationId: conversation.id,
+                                                direction: 'OUTBOUND',
+                                                type: mediaType,
+                                                content: null,
+                                                mediaData: { url: autoReply.media.url, fileName: autoReply.media.name } as any,
+                                                status: 'QUEUED',
+                                            },
+                                        });
+                                        await outboundMessagesQueue.add(`auto-media-${mediaMsg.id}`, {
+                                            workspaceId,
+                                            sessionId,
+                                            messageId: mediaMsg.id,
+                                            toJid: providerId,
+                                            type: mediaType,
+                                            content: null,
+                                            mediaData: { url: autoReply.media.url, fileName: autoReply.media.name },
+                                        });
+                                    }
+
+                                    // Send the text reply
+                                    const textMsg = await prisma.message.create({
+                                        data: {
+                                            conversationId: conversation.id,
+                                            direction: 'OUTBOUND',
+                                            type: 'TEXT',
+                                            content: autoReply.content,
+                                            status: 'QUEUED',
+                                        },
+                                    });
+                                    await outboundMessagesQueue.add(`auto-text-${textMsg.id}`, {
+                                        workspaceId,
+                                        sessionId,
+                                        messageId: textMsg.id,
+                                        toJid: providerId,
+                                        type: 'TEXT',
+                                        content: autoReply.content,
+                                        mediaData: null,
+                                    });
+
+                                    autoReplied = true;
+                                }
+                            } catch (arErr) {
+                                log.warn({ err: arErr }, 'Auto-reply matching failed — continuing normally');
+                            }
+                            // ────────────────────────────────────────────────────
+
                             await aiQueue.add(`ai-${msg.key.id}`, {
                                 workspaceId,
                                 conversationId: conversation.id,

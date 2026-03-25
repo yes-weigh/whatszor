@@ -448,11 +448,15 @@ enum MessageStatus {
 model QuickReply {
   id          String   @id @default(cuid())
   workspaceId String   @map("workspace_id")
-  shortcut    String // e.g., "/pricing"
+  shortcut    String   // e.g., "/pricing" — used for quick-reply slash commands
   content     String
+  mediaId     String?  @map("media_id")
+  isAutoReply Boolean  @default(false) @map("is_auto_reply")
+  keyword     String?  // trigger phrase for auto-reply (case-insensitive match)
   createdAt   DateTime @default(now()) @map("created_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  media     Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@map("quick_replies")
@@ -748,6 +752,7 @@ model Media {
 
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   templateVersions TemplateVersion[]
+  quickReplies     QuickReply[]
 
   @@index([workspaceId, type])
   @@index([workspaceId, category])

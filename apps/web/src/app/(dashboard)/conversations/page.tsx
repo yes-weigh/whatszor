@@ -411,6 +411,8 @@ export default function ConversationsPage() {
     const [showNewChat, setShowNewChat] = useState(false);
     const [newChatSearch, setNewChatSearch] = useState('');
     const [attachUploading, setAttachUploading] = useState(false);
+    // Media attached from quick reply selection
+    const [pendingQrMedia, setPendingQrMedia] = useState<{ id: string; name: string; type: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -535,6 +537,19 @@ export default function ConversationsPage() {
     const sendMsg = useMutation({
         mutationFn: async () => {
             if (!selectedConv || !replyText.trim()) return;
+
+            // If a quick reply's media is attached, send the media message first
+            if (pendingQrMedia) {
+                const msgType = pendingQrMedia.type === 'image' ? 'IMAGE' : pendingQrMedia.type === 'video' ? 'VIDEO' : 'DOCUMENT';
+                await api.post(`/conversations/${selectedConv.id}/messages`, {
+                    type: msgType,
+                    mediaGalleryId: pendingQrMedia.id,
+                    fileName: pendingQrMedia.name,
+                    sessionId: replySession,
+                });
+            }
+
+            // Then send the text
             return api.post(`/conversations/${selectedConv.id}/messages`, {
                 type: 'TEXT',
                 content: replyText.trim(),
@@ -543,6 +558,7 @@ export default function ConversationsPage() {
         },
         onSuccess: () => {
             setReplyText('');
+            setPendingQrMedia(null);
             qc.invalidateQueries({ queryKey: ['messages', selectedConv?.id] });
             qc.invalidateQueries({ queryKey: ['conversations'] });
         },
@@ -1000,6 +1016,20 @@ export default function ConversationsPage() {
                             )}
 
                             {/* Input row */}
+                            {/* Pending QR media preview pill */}
+                            {pendingQrMedia && (
+                                <div className="flex items-center gap-2 px-3 py-1.5 mb-1 bg-elevated border border-theme rounded-lg text-xs">
+                                    <Paperclip size={12} className="text-accent shrink-0" />
+                                    <span className="text-secondary truncate flex-1">{pendingQrMedia.name}</span>
+                                    <button
+                                        onClick={() => setPendingQrMedia(null)}
+                                        title="Remove attachment"
+                                        className="text-muted hover:text-red-400 transition-colors shrink-0"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            )}
                             <div className="flex gap-2 items-end relative">
                                 {/* Template Trigger */}
                                 <button
@@ -1037,7 +1067,13 @@ export default function ConversationsPage() {
                                                     <button
                                                         key={qr.id}
                                                         onClick={() => {
-                                                            setReplyText(prev => prev + (prev.length > 0 && !prev.endsWith(' ') ? ' ' : '') + qr.content);
+                                                            setReplyText(qr.content);
+                                                            // Attach media from the quick reply if present
+                                                            if (qr.media) {
+                                                                setPendingQrMedia({ id: qr.media.id, name: qr.media.name, type: qr.media.type });
+                                                            } else {
+                                                                setPendingQrMedia(null);
+                                                            }
                                                             setShowQuickReplies(false);
                                                             setTimeout(() => {
                                                                 if (textareaRef.current) {
@@ -1051,6 +1087,11 @@ export default function ConversationsPage() {
                                                     >
                                                         <span className="text-xs font-semibold text-accent">{qr.shortcut}</span>
                                                         <span className="text-xs text-muted truncate">{qr.content}</span>
+                                                        {qr.media && (
+                                                            <span className="text-[10px] text-green-400 flex items-center gap-1 mt-0.5">
+                                                                <Paperclip size={9} /> {qr.media.name.length > 22 ? qr.media.name.slice(0,22)+'…' : qr.media.name}
+                                                            </span>
+                                                        )}
                                                     </button>
                                                 ))}
                                             </div>
