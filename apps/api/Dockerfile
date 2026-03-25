@@ -52,4 +52,4 @@ RUN npx prisma generate
 ENV PORT=5000
 EXPOSE 5000
 
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
