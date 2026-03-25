@@ -34,13 +34,20 @@ async function bootstrap() {
     // 3. Initialize BullMQ queues
     initQueues();
 
-    // 4. Start BullMQ workers (only if enabled)
+    // 4. Initialize BullMQ event bridges — ALWAYS required in the API container.
+    // initializeWorkers() registers waManager.on('history'/'messages'/'contacts') listeners
+    // that bridge WhatsApp events into BullMQ queues. Without this, WA events fire but
+    // nobody queues them and the worker container never receives any jobs.
+    initializeWorkers();
+
+    // Also start BullMQ worker processors in this process if explicitly enabled.
+    // In the standard production setup, WORKER_ENABLED=false here and the separate
+    // worker container runs the processors instead.
     if (env.WORKER_ENABLED) {
         log.info('Workers are enabled on this instance (WORKER_ENABLED=true). Starting workers.');
         startWorkers();
-        initializeWorkers();
     } else {
-        log.info('Workers are disabled on this instance (WORKER_ENABLED=false). Skipping workers.');
+        log.info('Workers are disabled on this instance (WORKER_ENABLED=false). Worker container handles processing.');
     }
 
     // 4.5. Restore global WhatsApp sessions — always, regardless of WORKER_ENABLED.
