@@ -887,9 +887,17 @@ export function initializeWorkers() {
                             });
                             log.warn({ workspaceId, lid, jid, name }, 'Migrated LID conversation to real phone JID');
                         } else {
-                            // Both exist — just ensure the name is set on both and leave them
-                            // (merging conversations risks data loss; user can deduplicate manually)
-                            log.warn({ workspaceId, lid, jid }, 'LID and real-JID conversations both exist — skipping merge');
+                            // Both exist — merge messages from LID conv into real-JID conv, then delete LID conv
+                            try {
+                                await (prisma.message as any).updateMany({
+                                    where: { conversationId: lidConv.id },
+                                    data: { conversationId: realConv.id },
+                                });
+                                await (prisma.conversation as any).delete({ where: { id: lidConv.id } });
+                                log.warn({ workspaceId, lid, jid }, 'Merged LID conversation into real-JID conversation and deleted duplicate');
+                            } catch (mergeErr) {
+                                log.error({ mergeErr, workspaceId, lid, jid }, 'Failed to merge LID conversation — leaving as-is');
+                            }
                         }
                     }
                 }

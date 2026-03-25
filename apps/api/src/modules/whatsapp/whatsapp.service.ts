@@ -221,6 +221,17 @@ class WhatsAppManager extends EventEmitter {
                 this.emit('contacts', { sessionId, workspaceId, contacts });
             }
         });
+
+        // Contacts update: incremental updates pushed by WhatsApp, including when an
+        // unsaved number messages you and WhatsApp resolves their LID asynchronously.
+        sock.ev.on('contacts.update', async (updates: any[]) => {
+            if (updates.length > 0) {
+                log.debug({ sessionId, count: updates.length }, 'Contacts updated');
+                this.storeContacts(sessionId, updates);
+                // Also re-emit so the contacts-sync worker can backfill waContactName
+                this.emit('contacts', { sessionId, workspaceId, contacts: updates });
+            }
+        });
     }
 
     /**
