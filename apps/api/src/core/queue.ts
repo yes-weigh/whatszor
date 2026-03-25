@@ -247,7 +247,20 @@ export function initializeWorkers() {
                     // Ignore status broadcasts on WhatsApp
                     if (msg.key.remoteJid === 'status@broadcast') continue;
 
-                    const providerId = msg.key.remoteJid as string;
+                    const rawJid = msg.key.remoteJid as string;
+
+                    // Resolve @lid JIDs to their phone-based @s.whatsapp.net equivalent.
+                    // WhatsApp multi-device sends @lid (Linked Device ID) for some contacts.
+                    // Without resolving, the same contact creates two separate conversations.
+                    let providerId = rawJid;
+                    if (rawJid.endsWith('@lid')) {
+                        const contactsMap = waManager.getContactsStore(sessionId);
+                        const resolved = contactsMap.get(rawJid);
+                        if (resolved?.jid && !resolved.jid.endsWith('@lid')) {
+                            providerId = resolved.jid;
+                            log.debug({ lid: rawJid, resolved: providerId }, 'Resolved @lid JID to phone JID');
+                        }
+                    }
 
                     // --- KNOWLEDGE BOT INTERCEPTION ---
                     // If the account receiving this message is designated as the knowledge bot,
@@ -591,16 +604,29 @@ export function initializeWorkers() {
                 }
             }
 
+            // ── 1b. Build LID → phone JID reverse map ─────────────────────
+            // Contacts provide both c.id (phone JID) and c.lid (linked-device ID).
+            // Use this map to normalize @lid JIDs before DB inserts.
+            const lid2jid = new Map<string, string>();
+            for (const c of (contacts ?? [])) {
+                if (c.id && c.lid && !c.id.endsWith('@lid')) {
+                    lid2jid.set(c.lid, c.id);
+                }
+            }
+
+            /** Resolve @lid to phone JID if possible, otherwise return as-is */
+            const resolveJid = (jid: string): string => lid2jid.get(jid) ?? jid;
+
             // ── 2. Collect all unique individual JIDs ─────────────────────
             // Gather from chats list + from messages (so even chats with only non-text messages are included)
             const jidSet = new Set<string>();
 
             for (const chat of (chats ?? [])) {
-                if (chat.id && !isGroup(chat.id)) jidSet.add(chat.id);
+                if (chat.id && !isGroup(chat.id)) jidSet.add(resolveJid(chat.id));
             }
             for (const msg of (messages ?? [])) {
                 const jid = msg.key?.remoteJid;
-                if (jid && !isGroup(jid)) jidSet.add(jid);
+                if (jid && !isGroup(jid)) jidSet.add(resolveJid(jid));
             }
 
             const jids = Array.from(jidSet);
@@ -668,8 +694,9 @@ export function initializeWorkers() {
             const latestMsgPerConv = new Map<string, { at: Date; content: string | null; type: string }>();
 
             for (const msg of (messages ?? [])) {
-                const jid: string = msg.key?.remoteJid;
-                if (!jid || isGroup(jid)) continue;
+                const rawJid: string = msg.key?.remoteJid;
+                if (!rawJid || isGroup(rawJid)) continue;
+                const jid = resolveJid(rawJid);
 
                 // Fallback to extract pushName from historical messages
                 const pushName = (msg as any).pushName;
