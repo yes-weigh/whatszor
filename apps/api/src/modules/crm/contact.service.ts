@@ -108,6 +108,28 @@ export async function deleteContact(workspaceId: string, contactId: string) {
     await prisma.contact.delete({ where: { id: contactId } });
 }
 
+export async function deleteManyContacts(workspaceId: string, contactIds: string[]) {
+    if (!contactIds || contactIds.length === 0) return;
+    
+    // Ensure all contacts belong to the workspace before deleting
+    const contacts = await prisma.contact.findMany({
+        where: { id: { in: contactIds }, workspaceId },
+        select: { id: true, phone: true }
+    });
+    
+    if (contacts.length === 0) return;
+    
+    const validIds = contacts.map(c => c.id);
+    await prisma.contact.deleteMany({
+        where: { id: { in: validIds } }
+    });
+    
+    await logEvent(workspaceId, 'contacts_bulk_deleted', 'crm_module', {
+        count: validIds.length,
+        contactIds: validIds
+    });
+}
+
 function createError(message: string, code: string, statusCode: number) {
     const err = new Error(message) as Error & { code: string; statusCode: number };
     err.code = code;

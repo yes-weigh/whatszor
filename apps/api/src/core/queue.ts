@@ -417,6 +417,34 @@ export function initializeWorkers() {
                             log.warn({ err: contactErr, providerId }, 'Failed to auto-create CRM contact');
                         }
                     }
+
+                    // ── Heal @lid contacts on-the-fly ─────────────────────────
+                    // If we resolved rawJid → real phone via remoteJidAlt, this is our best
+                    // chance to also fix any Contact record that is still stuck with the raw
+                    // @lid value as its phone number (happens for first-time WA Business senders).
+                    if (rawJid !== providerId && rawJid.endsWith('@lid') && !msg.key.fromMe && conversation.contactId) {
+                        try {
+                            const realPhoneStr = providerId.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                            const rawLidPhone = rawJid.replace('@lid', '');
+                            // Look for the stuck contact by either the full @lid string or just the numeric part
+                            const stuckContact = await (prisma.contact as any).findFirst({
+                                where: {
+                                    id: conversation.contactId,
+                                    phone: { in: [rawJid, rawLidPhone] }
+                                },
+                                select: { id: true },
+                            });
+                            if (stuckContact) {
+                                await (prisma.contact as any).update({
+                                    where: { id: stuckContact.id },
+                                    data: { phone: realPhoneStr, firstName: (msg as any).pushName || undefined },
+                                });
+                                log.warn({ lid: rawJid, phone: realPhoneStr }, 'Healed Contact.phone from @lid to real phone on inbound message');
+                            }
+                        } catch (healErr) {
+                            log.warn({ err: healErr }, 'Failed to heal @lid contact phone');
+                        }
+                    }
                     // ─────────────────────────────────────────────────────────
 
                     // Update sessionId and waContactName if we have new information

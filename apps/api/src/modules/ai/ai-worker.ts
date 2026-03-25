@@ -43,6 +43,19 @@ export async function processAiJob(job: Job) {
             }
         });
 
+        // Emit realtime event so the frontend chat window updates instantly
+        const { emit: realtimeEmit } = await import('../../core/realtime');
+        realtimeEmit(workspaceId, 'message.new', {
+            conversationId,
+            message
+        });
+
+        // also trigger conversation.updated so the sidebar unread counter/snippet updates
+        realtimeEmit(workspaceId, 'conversation.updated', {
+            conversationId,
+            status: 'ACTIVE',
+        });
+
         log.info({ messageId: message.id }, 'AI suggestion generated');
 
     } catch (err: any) {
@@ -50,3 +63,4 @@ export async function processAiJob(job: Job) {
         throw err;
     }
 }
+

@@ -14,6 +14,7 @@ export type EventType =
     | 'node_executed'
     | 'node_failed'
     | 'webhook_received'
+    | 'contacts_bulk_deleted'
     | 'system_error';
 
 export async function logEvent(

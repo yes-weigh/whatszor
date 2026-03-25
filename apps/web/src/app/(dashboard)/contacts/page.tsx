@@ -5,7 +5,7 @@ import api from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
 import { useRouter } from 'next/navigation';
-import { Users, Search, Phone, Mail } from 'lucide-react';
+import { Users, Search, Phone, Mail, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function ContactsPage() {
@@ -15,6 +15,32 @@ export default function ContactsPage() {
 
     const [isMounted, setIsMounted] = useState(false);
     useEffect(() => { setIsMounted(true); }, []);
+
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+    const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.checked) {
+            setSelectedIds(contacts.map(c => c.id));
+        } else {
+            setSelectedIds([]);
+        }
+    };
+
+    const handleSelectOne = (id: string, e: React.ChangeEvent<HTMLInputElement> | React.MouseEvent) => {
+        e.stopPropagation();
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    const handleDeleteSelected = async () => {
+        if (!confirm(`Are you sure you want to delete ${selectedIds.length} contacts?`)) return;
+        try {
+            await api.delete('/crm/contacts/bulk', { data: { ids: selectedIds } });
+            setSelectedIds([]);
+            refetch();
+        } catch (error) {
+            console.error(error);
+        }
+    };
 
     const [addModal, setAddModal] = useState(false);
     const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '' });
@@ -51,9 +77,16 @@ export default function ContactsPage() {
                             placeholder="Search contacts..."
                             value={search} onChange={e => setSearch(e.target.value)} />
                     </div>
-                    {hasPermission('contacts:create') && (
-                        <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ Add Contact</button>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {selectedIds.length > 0 && isMounted && hasPermission('contacts:delete') && (
+                            <button className="btn btn-outline text-red-500 border-red-500/20 hover:bg-red-500/10" onClick={handleDeleteSelected}>
+                                <Trash2 size={16} /> Delete Selected ({selectedIds.length})
+                            </button>
+                        )}
+                        {isMounted && hasPermission('contacts:create') && (
+                            <button className="btn btn-primary" onClick={() => setAddModal(true)}>+ Add Contact</button>
+                        )}
+                    </div>
                 </div>
 
                 {addModal && (
@@ -97,6 +130,15 @@ export default function ContactsPage() {
                     <table className="w-full">
                         <thead>
                             <tr className="border-b border-theme">
+                                <th className="px-4 py-3 text-left w-10">
+                                    <input type="checkbox"
+                                        className="rounded bg-elevated border-theme text-primary focus:ring-primary focus:ring-offset-background"
+                                        checked={contacts.length > 0 && selectedIds.length === contacts.length}
+                                        onChange={handleSelectAll}
+                                        aria-label="Select all contacts"
+                                        title="Select all contacts"
+                                    />
+                                </th>
                                 {['Name', 'Phone', 'Email', 'Pipeline', 'Tags'].map(h => (
                                     <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">{h}</th>
                                 ))}
@@ -104,7 +146,7 @@ export default function ContactsPage() {
                         </thead>
                         <tbody>
                             {contacts.length === 0 && (
-                                <tr><td colSpan={5} className="px-4 py-12 text-center">
+                                <tr><td colSpan={6} className="px-4 py-12 text-center">
                                     <div className="flex flex-col items-center gap-2">
                                         <Users size={32} className="text-strong" />
                                         <p className="text-sm text-muted">No contacts yet</p>
@@ -115,6 +157,15 @@ export default function ContactsPage() {
                                 <tr key={c.id}
                                     onClick={() => router.push(`/contacts/${c.id}`)}
                                     className="border-b border-theme transition-colors hover:bg-hover cursor-pointer">
+                                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                                        <input type="checkbox"
+                                            className="rounded bg-elevated border-theme text-primary focus:ring-primary focus:ring-offset-background"
+                                            checked={selectedIds.includes(c.id)}
+                                            onChange={(e) => handleSelectOne(c.id, e)}
+                                            aria-label={`Select contact ${c.firstName} ${c.lastName || ''}`.trim()}
+                                            title={`Select contact ${c.firstName} ${c.lastName || ''}`.trim()}
+                                        />
+                                    </td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-accent text-white">

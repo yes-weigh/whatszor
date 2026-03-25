@@ -84,4 +84,10 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
         const message = await conversationService.approveMessage(req.user.workspaceId, messageId, sessionId);
         return reply.send({ success: true, data: message });
     });
+
+    fastify.post('/:id/suggest-reply', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const data = await conversationService.generateSuggestedReply(req.user.workspaceId, id);
+        return reply.send({ success: true, data });
+    });
 };

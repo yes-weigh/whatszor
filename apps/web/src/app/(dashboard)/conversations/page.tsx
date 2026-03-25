@@ -229,10 +229,12 @@ function StatusIcon({ status }: { status: string }) {
     return null;
 }
 
-function MessageBubble({ msg, onApprove, onEdit }: { 
+function MessageBubble({ msg, onApprove, onEdit, onGenerateReply, isLastInbound }: { 
     msg: Message; 
     onApprove: (id: string) => void; 
     onEdit: (text: string) => void;
+    onGenerateReply?: () => void;
+    isLastInbound?: boolean;
 }) {
     const isOut = msg.direction === 'OUTBOUND';
     const isMediaType = ['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT', 'STICKER'].includes(msg.type);
@@ -372,6 +374,18 @@ function MessageBubble({ msg, onApprove, onEdit }: {
                             className="text-[10px] font-bold px-2 py-1 rounded bg-muted/10 text-muted hover:bg-muted/20 transition-colors uppercase"
                         >
                             Edit
+                        </button>
+                    </div>
+                )}
+                
+                {isLastInbound && onGenerateReply && (
+                    <div className="flex items-center gap-2 mt-1">
+                        <button
+                            onClick={onGenerateReply}
+                            className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded bg-primary/5 text-primary hover:bg-primary/10 transition-colors uppercase border border-theme"
+                        >
+                            <Sparkles size={10} className="text-secondary" />
+                            Generate AI Reply
                         </button>
                     </div>
                 )}
@@ -543,6 +557,11 @@ export default function ConversationsPage() {
             qc.invalidateQueries({ queryKey: ['messages', selectedConv?.id] });
             qc.invalidateQueries({ queryKey: ['conversations'] });
         },
+    });
+
+    const generateAiReply = useMutation({
+        mutationFn: (convId: string) => api.post(`/conversations/${convId}/suggest-reply`),
+        // Optimistic UI or just wait for SSE payload to handle the update
     });
 
     const sendTemplate = useMutation({
@@ -918,17 +937,27 @@ export default function ConversationsPage() {
                                     <p className="text-sm text-muted">No messages yet</p>
                                 </div>
                             )}
-                            {msgs.map(msg => (
-                                <MessageBubble 
-                                    key={msg.id} 
-                                    msg={msg} 
-                                    onApprove={(id) => approveMsg.mutate(id)}
-                                    onEdit={(text) => {
-                                        setReplyText(text);
-                                        textareaRef.current?.focus();
-                                    }}
-                                />
-                            ))}
+                            {msgs.map((msg, idx) => {
+                                // Find if this is the last inbound message in the thread
+                                const isLastInbound = msg.direction === 'INBOUND' && 
+                                    msgs.findIndex((m, i) => i > idx && m.direction === 'INBOUND') === -1;
+                                
+                                return (
+                                    <MessageBubble 
+                                        key={msg.id} 
+                                        msg={msg} 
+                                        onApprove={(id) => approveMsg.mutate(id)}
+                                        onEdit={(text) => {
+                                            setReplyText(text);
+                                            textareaRef.current?.focus();
+                                        }}
+                                        isLastInbound={isLastInbound}
+                                        onGenerateReply={selectedConv ? () => {
+                                            generateAiReply.mutate(selectedConv.id);
+                                        } : undefined}
+                                    />
+                                );
+                            })}
                             <div ref={messagesEndRef} />
                         </div>
 

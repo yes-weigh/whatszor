@@ -40,4 +40,14 @@ export const contactRoutes: FastifyPluginAsync = async (fastify: FastifyInstance
         await contactService.deleteContact(req.user.workspaceId, id);
         return reply.send({ success: true, data: { message: 'Contact deleted' } });
     });
+
+    fastify.delete('/bulk', { preHandler: requireRole('contacts:delete') }, async (req, reply) => {
+        // We expect a JSON array of contact IDs in the body, or query param
+        const { ids } = req.body as { ids: string[] };
+        if (!ids || !Array.isArray(ids)) {
+            return reply.status(400).send({ success: false, error: 'Expected an array of contact IDs in the "ids" field' });
+        }
+        await contactService.deleteManyContacts(req.user.workspaceId, ids);
+        return reply.send({ success: true, data: { message: 'Contacts deleted successfully' } });
+    });
 };

@@ -328,6 +328,19 @@ export async function approveMessage(
     return updated;
 }
 
+export async function generateSuggestedReply(workspaceId: string, conversationId: string) {
+    await getConversation(workspaceId, conversationId);
+
+    // Queue an AI generation job
+    const { aiQueue } = await import('../../core/queue');
+    await aiQueue.add(`manual-ai-${Date.now()}`, {
+        workspaceId,
+        conversationId,
+    });
+
+    return { success: true, message: 'AI suggestion queued' };
+}
+
 function createError(message: string, code: string, statusCode: number) {
     const err = new Error(message) as Error & { code: string; statusCode: number };
     err.code = code;
