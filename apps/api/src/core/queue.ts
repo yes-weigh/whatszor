@@ -254,11 +254,34 @@ export function initializeWorkers() {
                     // Without resolving, the same contact creates two separate conversations.
                     let providerId = rawJid;
                     if (rawJid.endsWith('@lid')) {
-                        const contactsMap = waManager.getContactsStore(sessionId);
-                        const resolved = contactsMap.get(rawJid);
-                        if (resolved?.jid && !resolved.jid.endsWith('@lid')) {
-                            providerId = resolved.jid;
-                            log.debug({ lid: rawJid, resolved: providerId }, 'Resolved @lid JID to phone JID');
+                        let resolvedJid: string | undefined;
+
+                        // 1. Check if the message provides the alternative JID natively (new WA business accounts)
+                        if ((msg.key as any).remoteJidAlt && !(msg.key as any).remoteJidAlt.endsWith('@lid')) {
+                            resolvedJid = (msg.key as any).remoteJidAlt;
+                        } 
+                        // 2. Check traditional group/DM participant
+                        else if (msg.key.participant && !msg.key.participant.endsWith('@lid')) {
+                            resolvedJid = msg.key.participant;
+                        } 
+                        // 3. Fallback to our Baileys contacts map cache
+                        else {
+                            const contactsMap = waManager.getContactsStore(sessionId);
+                            const resolved = contactsMap.get(rawJid);
+                            if (resolved?.jid && !resolved.jid.endsWith('@lid')) {
+                                resolvedJid = resolved.jid;
+                            }
+                        }
+
+                        if (resolvedJid) {
+                            providerId = resolvedJid;
+                            log.debug({ lid: rawJid, resolved: providerId, participant: msg.key.participant, alt: (msg.key as any).remoteJidAlt }, 'Resolved @lid JID to phone JID');
+                        } else if (job.attemptsMade < 4) {
+                            // If we still can't resolve it, it might just mean that contacts.upsert hasn't fired yet!
+                            // Throw an error to exponentially backoff and retry this job automatically via BullMQ
+                            throw new Error(`Unresolved @lid ${rawJid} - deferring to wait for contacts sync (attempt ${job.attemptsMade + 1})`);
+                        } else {
+                            log.warn({ lid: rawJid }, 'Failed to resolve @lid after multiple attempts, creating chat with @lid');
                         }
                     }
 
