@@ -79,24 +79,19 @@ export function AutoRepliesTab() {
     const showForm = isCreating || editingId !== null;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="flex flex-col gap-6">
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="flex items-center justify-between">
                 <div>
-                    <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#f1f5f9', margin: 0 }}>Auto Replies</h2>
-                    <p style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                    <h2 className="text-lg font-bold text-slate-100 m-0">Auto Replies</h2>
+                    <p className="text-[13px] text-slate-500 mt-1">
                         Automatically reply when an incoming message matches a keyword exactly.
                     </p>
                 </div>
                 {!showForm && (
                     <button
                         onClick={startCreate}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            padding: '8px 16px', borderRadius: '8px', border: 'none',
-                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff',
-                            fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                        }}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg border-none bg-gradient-to-br from-indigo-500 to-violet-500 text-white text-[13px] font-semibold cursor-pointer"
                     >
                         <Plus size={15} /> New Auto Reply
                     </button>
@@ -105,31 +100,24 @@ export function AutoRepliesTab() {
 
             {/* Create / Edit Form */}
             {showForm && (
-                <div style={{
-                    background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)',
-                    borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px',
-                }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-5 flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                             Trigger Keyword
                         </label>
                         <input
                             value={keyword}
                             onChange={e => setKeyword(e.target.value)}
                             placeholder='e.g. "price" or "delivery time"'
-                            style={{
-                                background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.25)',
-                                borderRadius: '8px', padding: '10px 14px', color: '#e2e8f0',
-                                fontSize: '14px', outline: 'none', width: '100%', boxSizing: 'border-box',
-                            }}
+                            className="bg-slate-900/60 border border-indigo-500/25 rounded-lg px-3.5 py-2.5 text-slate-200 text-sm outline-none w-full box-border"
                         />
-                        <span style={{ fontSize: '11px', color: '#475569' }}>
+                        <span className="text-[11px] text-slate-500">
                             Case-insensitive exact match. Spaces are supported (e.g. "delivery time").
                         </span>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                             Reply Message
                         </label>
                         <textarea
@@ -137,69 +125,50 @@ export function AutoRepliesTab() {
                             onChange={e => setContent(e.target.value)}
                             placeholder='What should be sent when this keyword is received?'
                             rows={4}
-                            style={{
-                                background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(99,102,241,0.25)',
-                                borderRadius: '8px', padding: '10px 14px', color: '#e2e8f0',
-                                fontSize: '14px', outline: 'none', width: '100%', resize: 'vertical', boxSizing: 'border-box',
-                            }}
+                            className="bg-slate-900/60 border border-indigo-500/25 rounded-lg px-3.5 py-2.5 text-slate-200 text-sm outline-none w-full resize-y box-border"
                         />
                     </div>
 
                     {/* Media attachment */}
                     {selectedMedia ? (
-                        <div style={{
-                            display: 'flex', alignItems: 'center', gap: '10px',
-                            padding: '10px 14px', borderRadius: '8px',
-                            background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
-                        }}>
+                        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
                             <img
                                 src={getMediaPreviewUrl(selectedMedia.id)}
                                 alt={selectedMedia.name}
-                                style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }}
+                                className="w-9 h-9 object-cover rounded-md flex-shrink-0"
                                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
                             <MediaTypeIcon type={selectedMedia.type} size={16} />
-                            <span style={{ fontSize: '13px', color: '#e2e8f0', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span className="text-[13px] text-slate-200 flex-1 overflow-hidden overflow-ellipsis whitespace-nowrap">
                                 {selectedMedia.name}
                             </span>
-                            <button onClick={() => setSelectedMedia(null)} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
+                            <button title="Remove attached media" onClick={() => setSelectedMedia(null)} className="text-slate-500 bg-transparent border-none cursor-pointer p-0.5">
                                 <X size={14} />
                             </button>
                         </div>
                     ) : (
                         <button
                             onClick={() => setShowMediaPicker(true)}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                padding: '8px 14px', borderRadius: '8px', cursor: 'pointer',
-                                border: '1px dashed rgba(99,102,241,0.3)', background: 'none', color: '#6366f1',
-                                fontSize: '13px', fontWeight: 500, alignSelf: 'flex-start',
-                            }}
+                            className="flex items-center gap-2 px-3.5 py-2 rounded-lg cursor-pointer border border-dashed border-indigo-500/30 bg-transparent text-indigo-500 text-[13px] font-medium self-start"
                         >
                             <Paperclip size={14} /> Attach Media (optional)
                         </button>
                     )}
 
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <div className="flex gap-2.5">
                         <button
                             onClick={handleSave}
                             disabled={saving || !keyword.trim() || !content.trim()}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: '6px',
-                                padding: '9px 20px', borderRadius: '8px', border: 'none',
-                                background: saving ? 'rgba(99,102,241,0.5)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                                color: '#fff', fontSize: '13px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
-                            }}
+                            className={`flex items-center gap-1.5 px-5 py-2 rounded-lg border-none text-white text-[13px] font-semibold cursor-pointer ${
+                                saving ? 'bg-indigo-500/50 cursor-not-allowed' : 'bg-gradient-to-br from-indigo-500 to-violet-500'
+                            }`}
                         >
-                            {saving ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                            {saving ? <Loader2 size={14} className="animate-spin" /> : null}
                             {isCreating ? 'Create' : 'Save'}
                         </button>
                         <button
                             onClick={reset}
-                            style={{
-                                padding: '9px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)',
-                                background: 'none', color: '#94a3b8', fontSize: '13px', cursor: 'pointer',
-                            }}
+                            className="px-4 py-2 rounded-lg border border-white/10 bg-transparent text-slate-400 text-[13px] cursor-pointer"
                         >
                             Cancel
                         </button>
@@ -209,74 +178,61 @@ export function AutoRepliesTab() {
 
             {/* List */}
             {isPending ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-                    <Loader2 size={24} style={{ color: '#6366f1', animation: 'spin 1s linear infinite' }} />
+                <div className="flex justify-center p-10">
+                    <Loader2 size={24} className="text-indigo-500 animate-spin" />
                 </div>
             ) : autoReplies.length === 0 && !showForm ? (
-                <div style={{
-                    textAlign: 'center', padding: '60px 24px',
-                    border: '1px dashed rgba(99,102,241,0.2)', borderRadius: '12px',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
-                }}>
-                    <Bot size={32} style={{ color: '#475569' }} />
-                    <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>No auto replies yet</p>
+                <div className="text-center py-16 px-6 border border-dashed border-indigo-500/20 rounded-xl flex flex-col items-center gap-3">
+                    <Bot size={32} className="text-slate-600" />
+                    <p className="text-slate-500 text-sm m-0">No auto replies yet</p>
                     <button
                         onClick={startCreate}
-                        style={{
-                            marginTop: '4px', padding: '8px 20px', borderRadius: '8px', border: 'none',
-                            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff',
-                            fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                        }}
+                        className="mt-1 px-5 py-2 rounded-lg border-none bg-gradient-to-br from-indigo-500 to-violet-500 text-white text-[13px] font-semibold cursor-pointer"
                     >
                         Create first auto reply
                     </button>
                 </div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div className="flex flex-col gap-2.5">
                     {autoReplies.map((ar: any) => (
-                        <div key={ar.id} style={{
-                            display: 'flex', alignItems: 'flex-start', gap: '14px',
-                            padding: '16px', borderRadius: '12px',
-                            background: editingId === ar.id ? 'rgba(99,102,241,0.08)' : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${editingId === ar.id ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                        }}>
+                        <div key={ar.id} className={`flex items-start gap-3.5 p-4 rounded-xl border ${
+                            editingId === ar.id ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-white/5 border-white/10'
+                        }`}>
                             {/* Keyword badge */}
-                            <div style={{
-                                padding: '4px 10px', borderRadius: '6px', flexShrink: 0,
-                                background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)',
-                                fontSize: '12px', fontWeight: 700, color: '#10b981', fontFamily: 'monospace',
-                            }}>
+                            <div className="px-2.5 py-1 rounded-md flex-shrink-0 bg-emerald-500/15 border border-emerald-500/25 text-xs font-bold text-emerald-500 font-mono">
                                 {ar.keyword}
                             </div>
 
-                            <div style={{ flex: 1, overflow: 'hidden' }}>
-                                <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#cbd5e1', lineHeight: 1.4 }}>
+                            <div className="flex-1 overflow-hidden">
+                                <p className="m-0 mb-1 text-[13px] text-slate-300 leading-snug">
                                     {ar.content}
                                 </p>
                                 {ar.media && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                                    <div className="flex items-center gap-1.5 mt-1.5">
                                         <img
                                             src={getMediaPreviewUrl(ar.media.id)}
                                             alt={ar.media.name}
-                                            style={{ width: '28px', height: '28px', objectFit: 'cover', borderRadius: '4px' }}
+                                            className="w-7 h-7 object-cover rounded"
                                             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                         />
-                                        <span style={{ fontSize: '11px', color: '#475569' }}>+ {ar.media.name}</span>
+                                        <span className="text-[11px] text-slate-600">+ {ar.media.name}</span>
                                     </div>
                                 )}
                             </div>
 
                             {/* Actions */}
-                            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                            <div className="flex gap-1.5 flex-shrink-0">
                                 <button
+                                    title="Edit auto reply"
                                     onClick={() => startEdit(ar)}
-                                    style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '6px', color: '#94a3b8', cursor: 'pointer' }}
+                                    className="bg-transparent border border-white/10 rounded-md p-1.5 text-slate-400 cursor-pointer"
                                 >
                                     <Edit2 size={13} />
                                 </button>
                                 <button
+                                    title="Delete auto reply"
                                     onClick={() => handleDelete(ar.id)}
-                                    style={{ background: 'none', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', padding: '6px', color: '#ef4444', cursor: 'pointer' }}
+                                    className="bg-transparent border border-red-500/20 rounded-md p-1.5 text-red-500 cursor-pointer"
                                 >
                                     <Trash2 size={13} />
                                 </button>
