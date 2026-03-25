@@ -288,54 +288,69 @@ export function initializeWorkers() {
                                 }
                             }
 
-                            // Phase 9: Phone-number Access Control
-                            const isAllowed = await prisma.allowedNumber.findFirst({
-                                where: {
-                                    workspaceId,
-                                    phoneNumber: { in: [senderPhone, `+${senderPhone}`] },
-                                    isActive: true
-                                }
-                            });
-
-                            if (!isAllowed) {
-                                log.warn({ messageId: msg.key.id, senderPhone }, 'Blocked unauthorized knowledge bot access');
-                                
-                                let rawText = '';
-                                if (msg.message?.conversation) rawText = msg.message.conversation;
-                                else if (msg.message?.extendedTextMessage?.text) rawText = msg.message.extendedTextMessage.text;
-                                else if (msg.message?.imageMessage?.caption) rawText = msg.message.imageMessage.caption;
-                                
-                                // Store minimal record for debugging
-                                await prisma.productKnowledgeSource.create({
-                                    data: {
-                                        messageId: msg.key.id,
-                                        dataType: 'TEXT',
-                                        rawText: rawText || '[Media/Unsupported]',
-                                        extractedData: {},
-                                        fieldConfidence: {},
-                                        globalConfidence: 0,
-                                        status: 'BLOCKED',
-                                        isTrustedSource: false
+                             // Phase 9: Phone-number Access Control
+                             let kbHandled = false;
+                             try {
+                                const isAllowed = await prisma.allowedNumber.findFirst({
+                                    where: {
+                                        workspaceId,
+                                        phoneNumber: { in: [senderPhone, `+${senderPhone}`] },
+                                        isActive: true
                                     }
                                 });
 
-                                // Send user-friendly rejection message securely
-                                const rejectionMsg = 'This number is not enabled for product updates. Please contact admin.';
-                                await waManager.getSafeSocket(sessionId).sendMessage(msg.key.remoteJid as string, { text: rejectionMsg }, { quoted: msg as any });
-                                continue;
+                                if (!isAllowed) {
+                                    log.warn({ messageId: msg.key.id, senderPhone }, 'Blocked unauthorized knowledge bot access');
+                                    
+                                    let rawText = '';
+                                    if (msg.message?.conversation) rawText = msg.message.conversation;
+                                    else if (msg.message?.extendedTextMessage?.text) rawText = msg.message.extendedTextMessage.text;
+                                    else if (msg.message?.imageMessage?.caption) rawText = msg.message.imageMessage.caption;
+                                    
+                                    // Store minimal record for debugging
+                                    try {
+                                        await prisma.productKnowledgeSource.create({
+                                            data: {
+                                                messageId: msg.key.id,
+                                                dataType: 'TEXT',
+                                                rawText: rawText || '[Media/Unsupported]',
+                                                extractedData: {},
+                                                fieldConfidence: {},
+                                                globalConfidence: 0,
+                                                status: 'BLOCKED',
+                                                isTrustedSource: false
+                                            }
+                                        });
+                                    } catch (dbErr) {
+                                        log.warn({ dbErr, messageId: msg.key.id }, 'Could not log blocked KB message (DB table may be missing)');
+                                    }
+
+                                    // Send user-friendly rejection message securely
+                                    try {
+                                        const rejectionMsg = 'This number is not enabled for product updates. Please contact admin.';
+                                        await waManager.getSafeSocket(sessionId).sendMessage(msg.key.remoteJid as string, { text: rejectionMsg }, { quoted: msg as any });
+                                    } catch (sendErr) {
+                                        log.warn({ sendErr }, 'Could not send KB rejection message');
+                                    }
+                                    kbHandled = true;
+                                } else {
+                                    // If allowed -> route into the explicit queue safely.
+                                    await getQueue(QueueName.KNOWLEDGE_INGESTION).add(msg.key.id, {
+                                        workspaceId,
+                                        sessionId,
+                                        messageId: msg.key.id,
+                                        senderPhone,
+                                        payload: msg
+                                    }, { jobId: msg.key.id });
+
+                                    log.info({ messageId: msg.key.id, providerId, senderPhone }, 'Routed incoming authorized message to Product Knowledge Bot pipeline');
+                                    kbHandled = true;
+                                }
+                            } catch (kbErr) {
+                                log.error({ kbErr, messageId: msg.key.id }, 'Knowledge bot interceptor error — falling through to normal inbox');
+                                // kbHandled stays false → message will be processed normally below
                             }
-
-                            // If allowed -> route into the explicit queue safely.
-                            await getQueue(QueueName.KNOWLEDGE_INGESTION).add(msg.key.id, {
-                                workspaceId,
-                                sessionId,
-                                messageId: msg.key.id,
-                                senderPhone,
-                                payload: msg
-                            }, { jobId: msg.key.id });
-
-                            log.info({ messageId: msg.key.id, providerId, senderPhone }, 'Routed incoming authorized message to Product Knowledge Bot pipeline');
-                            continue; // Skip all CRM / Conversational Inbox logic
+                            if (kbHandled) continue; // Skip all CRM / Conversational Inbox logic
                         }
                     }
                     // ----------------------------------
