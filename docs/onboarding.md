@@ -2,6 +2,8 @@
 
 Welcome to the **Product Knowledge Bot**! This bot is designed to automatically extract descriptions, specifications, and features from messages you send to the internal WhatsApp number, securely mapped directly into our Database.
 
+new api key update
+
 ## Target Audience
 Internal staff & administration only.
 
