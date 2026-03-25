@@ -667,11 +667,13 @@ export function initializeWorkers() {
                             }
                             // ────────────────────────────────────────────────────
 
-                            await aiQueue.add(`ai-${msg.key.id}`, {
-                                workspaceId,
-                                conversationId: conversation.id,
-                                text: content
-                            });
+                            if (!autoReplied) {
+                                await aiQueue.add(`ai-${msg.key.id}`, {
+                                    workspaceId,
+                                    conversationId: conversation.id,
+                                    text: content
+                                });
+                            }
 
                             // Emit Event to Event Bus for Graph Automation Engine Rules
                             await systemEventsQueue.add(`event-msg-${msg.key.id}`, {
