@@ -32,13 +32,28 @@ export function formatPhone(phone: string): string {
 
 // ── Conversations ──────────────────────────────────────────
 
+/** Normalize a WhatsApp JID to its canonical form.
+ *  - @c.us → @s.whatsapp.net (legacy format)
+ *  - strips device suffix: 919876543210:12@s.whatsapp.net → 919876543210@s.whatsapp.net
+ *  - groups (@g.us), newsletters (@newsletter), @lid left as-is */
+export function normalizeJid(jid: string): string {
+    if (!jid) return jid;
+    // Strip device suffix (e.g., "9191234:5@s.whatsapp.net" → "9191234@s.whatsapp.net")
+    const noDevice = jid.replace(/:(\d+)@/, '@');
+    // Normalize @c.us → @s.whatsapp.net
+    return noDevice.replace('@c.us', '@s.whatsapp.net');
+}
+
 export async function createOrGetConversation(workspaceId: string, input: CreateConversationInput) {
+    // Normalize JID to prevent duplicates from @c.us vs @s.whatsapp.net or device suffixes
+    const providerId = normalizeJid(input.providerId);
+
     let conversation = await prisma.conversation.findUnique({
         where: {
             workspaceId_provider_providerId: {
                 workspaceId,
                 provider: input.provider,
-                providerId: input.providerId,
+                providerId,
             },
         },
     });
@@ -48,7 +63,7 @@ export async function createOrGetConversation(workspaceId: string, input: Create
             data: {
                 workspaceId,
                 provider: input.provider,
-                providerId: input.providerId,
+                providerId,
                 contactId: input.contactId ?? null,
             },
         });
