@@ -39,12 +39,14 @@ async function bootstrap() {
         log.info('Workers are enabled on this instance (WORKER_ENABLED=true). Starting workers.');
         startWorkers();
         initializeWorkers();
-        
-        // 4.5. Restore global WhatsApp sessions
-        await waManager.restoreAllSessions();
     } else {
         log.info('Workers are disabled on this instance (WORKER_ENABLED=false). Skipping workers.');
     }
+
+    // 4.5. Restore global WhatsApp sessions — always, regardless of WORKER_ENABLED.
+    // The API container is the SOLE owner of Baileys sockets. The worker container
+    // handles only BullMQ job processing and must NOT call restoreAllSessions().
+    await waManager.restoreAllSessions();
 
     // 5. Create Fastify server
     const server = await createServer();
@@ -63,11 +65,12 @@ async function bootstrap() {
             // Stop accepting new requests
             await server.close();
 
-            // Drain workers before closing queues if they were running
+            // Drain BullMQ workers if running in this process
             if (env.WORKER_ENABLED) {
                 await stopWorkers();
-                await waManager.closeAll();
             }
+            // Always close WhatsApp sockets (API always owns them)
+            await waManager.closeAll();
             await closeQueues();
 
             // Disconnect data stores

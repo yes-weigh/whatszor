@@ -14,7 +14,6 @@ import { connectRedis, disconnectRedis } from './core/redis';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
 import { startWorkers, stopWorkers } from './queues/worker';
 import { initializeWorkers } from './core/queue';
-import { waManager } from './modules/whatsapp/whatsapp.service';
 
 const log = logger.child({ module: 'worker-bootstrap' });
 
@@ -28,12 +27,15 @@ async function bootstrap() {
     await connectDatabase();
 
     // 3. Start BullMQ workers
+    // NOTE: This process ONLY handles background queue processing.
+    // WhatsApp socket management lives exclusively in the API process.
     startWorkers();
     initializeWorkers();
 
-    // 4. Restore global WhatsApp sessions
-    // Workers might need WhatsApp session access depending on queue operations
-    await waManager.restoreAllSessions();
+    // DO NOT call waManager.restoreAllSessions() here.
+    // The API container owns all Baileys WebSocket connections.
+    // Having both containers connect with the same credentials causes
+    // WhatsApp to drop one of them (error 401/440), breaking history sync.
 
     log.info(`🚀 Whatsvue Worker Process started`);
 
@@ -43,7 +45,6 @@ async function bootstrap() {
 
         try {
             await stopWorkers();
-            await waManager.closeAll();
             await disconnectDatabase();
             await disconnectRedis();
 
