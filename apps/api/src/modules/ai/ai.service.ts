@@ -15,7 +15,7 @@ async function buildConversationContext(conversationId: string) {
         include: {
             messages: {
                 orderBy: { createdAt: 'desc' },
-                take: 50
+                take: 10
             }
         }
     });
