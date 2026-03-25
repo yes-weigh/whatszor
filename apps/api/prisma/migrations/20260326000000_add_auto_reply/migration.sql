@@ -1,3 +1,3 @@
 -- AlterTable
-ALTER TABLE "QuickReply" ADD COLUMN "isAutoReply" BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE "QuickReply" ADD COLUMN "keyword" TEXT;
+ALTER TABLE "quick_replies" ADD COLUMN "isAutoReply" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "quick_replies" ADD COLUMN "keyword" TEXT;
