@@ -265,6 +265,7 @@ export function initializeWorkers() {
                     // --- KNOWLEDGE BOT INTERCEPTION ---
                     // If the account receiving this message is designated as the knowledge bot,
                     // we completely bypass the normal inbox routing and push straight to ingestion.
+                    let kbHandled = false;
                     if (!msg.key.fromMe) {
                         const account = await prisma.whatsAppAccount.findUnique({
                             where: { sessionId },
@@ -289,7 +290,6 @@ export function initializeWorkers() {
                             }
 
                              // Phase 9: Phone-number Access Control
-                             let kbHandled = false;
                              try {
                                 const isAllowed = await prisma.allowedNumber.findFirst({
                                     where: {
@@ -328,7 +328,7 @@ export function initializeWorkers() {
                                     // Send user-friendly rejection message securely
                                     try {
                                         const rejectionMsg = 'This number is not enabled for product updates. Please contact admin.';
-                                        await waManager.getSafeSocket(sessionId).sendMessage(msg.key.remoteJid as string, { text: rejectionMsg }, { quoted: msg as any });
+                                        await waManager.getSafeSocket(sessionId).sendMessage(providerId, { text: rejectionMsg }, { quoted: msg as any });
                                     } catch (sendErr) {
                                         log.warn({ sendErr }, 'Could not send KB rejection message');
                                     }
@@ -350,7 +350,7 @@ export function initializeWorkers() {
                                 log.error({ kbErr, messageId: msg.key.id }, 'Knowledge bot interceptor error — falling through to normal inbox');
                                 // kbHandled stays false → message will be processed normally below
                             }
-                            if (kbHandled) continue; // Skip all CRM / Conversational Inbox logic
+                            // We purposefully DO NOT continue here, so the intercepted message is still saved to the inbox.
                         }
                     }
                     // ----------------------------------
@@ -554,7 +554,7 @@ export function initializeWorkers() {
                         });
 
                         // Queue AI chatbot reply for non-outbound messages
-                        if (!msg.key.fromMe && content) {
+                        if (!msg.key.fromMe && content && !kbHandled) {
                             await aiQueue.add(`ai-${msg.key.id}`, {
                                 workspaceId,
                                 conversationId: conversation.id,
