@@ -119,8 +119,8 @@ jobs:
 
             # ── 6. Run DB migrations ─────────────────────────────────────────────
             echo "Waiting for API to be ready..."
-            sleep 20
-            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy || echo "Migration skipped (already up to date)"
+            sleep 30
+            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy
 
             # ── 7. Restart Caddy ─────────────────────────────────────────────────────────
             docker compose -f docker-compose.prod.yml stop caddy

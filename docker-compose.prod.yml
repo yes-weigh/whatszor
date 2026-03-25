@@ -82,6 +82,8 @@ services:
       - S3_ENDPOINT=${S3_ENDPOINT}
       - HEALTH_SECRET=${HEALTH_SECRET:-dev-health-secret}
       - WORKER_ENABLED=false
+    volumes:
+      - api-uploads:/app/apps/api/uploads
     healthcheck:
       test: ["CMD", "node", "-e", "const req = require('http').request('http://localhost:5000/health', { headers: { 'x-health-secret': process.env.HEALTH_SECRET } }, (r) => { if (r.statusCode === 200) process.exit(0); else process.exit(1); }); req.on('error', () => process.exit(1)); req.end();"]
       interval: 30s
@@ -119,6 +121,8 @@ services:
       - AWS_REGION=${AWS_REGION}
       - S3_ENDPOINT=${S3_ENDPOINT}
       - HEALTH_SECRET=${HEALTH_SECRET:-dev-health-secret}
+    volumes:
+      - api-uploads:/app/apps/api/uploads
       
   web:
     build:
@@ -147,3 +151,4 @@ volumes:
   redis-data:
   caddy-data:
   caddy-config:
+  api-uploads:
