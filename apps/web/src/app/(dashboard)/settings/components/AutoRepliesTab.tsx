@@ -112,7 +112,7 @@ export function AutoRepliesTab() {
                             className="bg-slate-900/60 border border-indigo-500/25 rounded-lg px-3.5 py-2.5 text-slate-200 text-sm outline-none w-full box-border"
                         />
                         <span className="text-[11px] text-slate-500">
-                            Case-insensitive exact match. Spaces are supported (e.g. "delivery time").
+                            Case-insensitive exact match. Spaces are supported (e.g. &quot;delivery time&quot;).
                         </span>
                     </div>
 
