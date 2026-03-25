@@ -308,6 +308,8 @@ class WhatsAppManager extends EventEmitter {
         for (const contact of contacts) {
             const jid: string = contact.id;
             const lid: string | undefined = contact.lid;
+            // Baileys also exposes remoteJidAlt in some contact events — same phone but alt addressing
+            const remoteJidAlt: string | undefined = contact.remoteJidAlt ?? (contact.key as any)?.remoteJidAlt;
             const name: string = contact.notify || contact.name || '';
             if (!jid || jid.endsWith('@g.us')) continue;
             // Store the real JID → name
@@ -315,6 +317,12 @@ class WhatsAppManager extends EventEmitter {
             // If this real JID has a LID, also store LID → real JID mapping
             if (lid && jid.endsWith('@s.whatsapp.net')) {
                 store.set(lid, { jid, name });
+            }
+            // If there's a remoteJidAlt (WA Business hidden-number accounts), store that mapping too
+            if (remoteJidAlt && remoteJidAlt.endsWith('@s.whatsapp.net')) {
+                // The lid (or jid) itself keys to the alt real JID
+                if (jid.endsWith('@lid')) store.set(jid, { jid: remoteJidAlt, name });
+                if (lid) store.set(lid, { jid: remoteJidAlt, name });
             }
         }
     }

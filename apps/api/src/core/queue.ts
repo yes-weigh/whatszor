@@ -905,6 +905,35 @@ export function initializeWorkers() {
                 // and migrate it to use the real phone JID. This lets us show the real
                 // phone number (+91 85903 44506) instead of the internal LID.
                 if (lid) {
+                    const phoneStr = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+                    const lidPhone = lid.replace('@lid', '');
+
+                    // ── Fix Contact.phone stuck with @lid value ──────────────
+                    // When a contact was first created before the LID was resolved, their
+                    // phone number may have been set to the raw @lid string. Fix it now.
+                    const stuckContact = await (prisma.contact as any).findFirst({
+                        where: { workspaceId, phone: { in: [lidPhone, lid] } },
+                        select: { id: true, phone: true },
+                    });
+
+                    if (stuckContact) {
+                        // Check if a contact with the real phone already exists
+                        const realPhoneContact = await (prisma.contact as any).findFirst({
+                            where: { workspaceId, phone: phoneStr },
+                            select: { id: true },
+                        });
+
+                        if (!realPhoneContact) {
+                            // Safe to update — set the real phone number
+                            await (prisma.contact as any).update({
+                                where: { id: stuckContact.id },
+                                data: { phone: phoneStr, firstName: name || undefined },
+                            });
+                            log.warn({ workspaceId, lid, jid, phone: phoneStr }, 'Fixed Contact.phone from @lid to real phone number');
+                        }
+                    }
+                    // ─────────────────────────────────────────────────────────
+
                     const lidConv = await (prisma.conversation as any).findFirst({
                         where: { workspaceId, providerId: lid },
                         select: { id: true },
