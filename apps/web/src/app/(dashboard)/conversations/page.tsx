@@ -646,43 +646,59 @@ export default function ConversationsPage() {
         <div className="flex h-screen overflow-hidden bg-app">
 
             {/* ── 1. Account Filter Sidebar ──────────────────── */}
-            <aside className="w-16 shrink-0 border-r border-theme flex flex-col items-center py-4 gap-3 bg-surface overflow-y-auto">
+            <aside className="w-56 shrink-0 border-r border-theme flex flex-col py-4 px-3 gap-2 bg-surface overflow-y-auto">
+                <div className="mb-2 px-2 text-xs font-semibold text-secondary uppercase tracking-wider">
+                    WhatsApp Accounts
+                </div>
+
                 {/* All chats */}
                 <button
                     onClick={() => setActiveSessionId(null)}
                     title="All Chats"
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${activeSessionId === null
-                        ? 'bg-accent text-white shadow-lg shadow-accent/30'
-                        : 'bg-elevated text-muted hover:text-primary hover:bg-hover'
+                    className={`w-full h-10 px-2 rounded-xl flex items-center gap-3 transition-all ${activeSessionId === null
+                        ? 'bg-accent/10 text-accent font-medium'
+                        : 'text-secondary hover:bg-hover hover:text-primary'
                         }`}
                 >
-                    <MessageSquare size={18} />
+                    <div className={`w-6 h-6 rounded flex items-center justify-center ${activeSessionId === null ? 'bg-accent text-white shadow-sm' : 'bg-elevated border border-theme text-muted'}`}>
+                         <MessageSquare size={12} />
+                    </div>
+                    <span>All Chats</span>
                 </button>
 
                 {/* Divider */}
-                {accounts.length > 0 && <div className="w-6 h-px bg-theme" />}
+                {accounts.length > 0 && <div className="w-full h-px bg-theme my-1" />}
 
                 {/* Per-account buttons */}
                 {accounts.map((acc, i) => {
                     const isConnected = acc.status === 'CONNECTED' || acc.status === 'CONNECTING';
+                    const active = activeSessionId === acc.sessionId;
                     return (
                         <button
                             key={acc.sessionId}
                             onClick={() => isConnected && setActiveSessionId(acc.sessionId)}
                             title={`${acc.name}${acc.phoneNumber ? ` · ${acc.phoneNumber}` : ''} — ${acc.status}`}
                             disabled={!isConnected}
-                            className={`relative w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-white transition-all ${accountColor(i)} ${!isConnected ? 'opacity-30 cursor-not-allowed grayscale' :
-                                activeSessionId === acc.sessionId
-                                    ? 'ring-2 ring-white/30 scale-105 shadow-lg'
-                                    : 'opacity-70 hover:opacity-100'
+                            className={`w-full h-12 px-2 rounded-xl flex items-center gap-3 transition-all ${!isConnected ? 'opacity-40 cursor-not-allowed grayscale' :
+                                active
+                                    ? 'bg-accent/10'
+                                    : 'hover:bg-hover'
                                 }`}
                         >
-                            {getInitial(acc.name)}
-                            {/* Status dot */}
-                            <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-surface ${acc.status === 'CONNECTED' ? 'bg-emerald-400' :
-                                acc.status === 'CONNECTING' ? 'bg-yellow-400 animate-pulse' :
-                                    'bg-gray-500'
-                                }`} />
+                            <div className={`relative w-8 h-8 rounded-lg flex flex-shrink-0 items-center justify-center text-xs font-bold text-white transition-all ${accountColor(i)} ${active ? 'shadow-md scale-105' : ''}`}>
+                                {getInitial(acc.name)}
+                                {/* Status dot */}
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-surface ${acc.status === 'CONNECTED' ? 'bg-emerald-400' :
+                                    acc.status === 'CONNECTING' ? 'bg-yellow-400 animate-pulse' :
+                                        'bg-gray-500'
+                                    }`} />
+                            </div>
+                            <div className="flex flex-col items-start overflow-hidden">
+                                <span className={`text-sm truncate w-full text-left ${active ? 'text-accent font-semibold' : 'text-primary font-medium'}`}>{acc.name}</span>
+                                {acc.phoneNumber && (
+                                    <span className={`text-xs truncate w-full text-left ${active ? 'text-accent/70' : 'text-secondary'}`}>{acc.phoneNumber}</span>
+                                )}
+                            </div>
                         </button>
                     );
                 })}

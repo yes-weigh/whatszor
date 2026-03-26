@@ -349,6 +349,35 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         return reply.send({ success: true, data: updated });
     });
 
+    /**
+     * PATCH /sessions/:sessionId
+     * Update a WhatsApp account's details (e.g. name).
+     */
+    fastify.patch('/sessions/:sessionId', async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { sessionId } = req.params as { sessionId: string };
+        const { name } = req.body as { name?: string };
+
+        if (!name || name.trim().length < 1) {
+            return reply.status(400).send({ success: false, message: 'Account name is required.' });
+        }
+
+        const account = await prisma.whatsAppAccount.findFirst({
+            where: { sessionId, workspaceId },
+        });
+
+        if (!account) {
+            return reply.status(404).send({ success: false, message: 'Session not found.' });
+        }
+
+        const updated = await prisma.whatsAppAccount.update({
+            where: { id: account.id },
+            data: { name: name.trim() },
+        });
+
+        return reply.send({ success: true, data: updated });
+    });
+
     // ── Legacy single-session compat endpoints (kept to avoid breaking existing flows) ──
 
     /** @deprecated Use GET /sessions */

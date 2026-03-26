@@ -5,7 +5,7 @@ import QRCode from 'react-qr-code';
 import api from '@/lib/api';
 import {
     Smartphone, CheckCircle2, MonitorSmartphone, Unplug,
-    Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain
+    Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain, Edit2
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -141,6 +141,16 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void, onCreate
 
 function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; onReconnect: (s: WASession) => void; onOpenQR: (s: WASession) => void }) {
     const qc = useQueryClient();
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editName, setEditName] = useState(session.name);
+
+    const renameMutation = useMutation({
+        mutationFn: (newName: string) => api.patch(`/whatsapp/sessions/${session.sessionId}`, { name: newName }),
+        onSuccess: () => {
+             qc.invalidateQueries({ queryKey: ['wa-accounts'] });
+             setIsEditingName(false);
+        }
+    });
 
     const disconnectMutation = useMutation({
         mutationFn: () => api.post(`/whatsapp/sessions/${session.sessionId}/disconnect`),
@@ -179,7 +189,7 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
     }[session.status] ?? { color: 'text-zinc-500', bg: 'bg-zinc-50 border-zinc-200', icon: <WifiOff size={14} />, label: session.status };
 
     return (
-        <div className="card flex items-center gap-4">
+        <div className="card flex items-center gap-4 flex-wrap">
             {/* Avatar */}
             <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${session.status === 'CONNECTED' ? 'bg-green-100 text-green-600' : 'bg-surface-elevated text-muted'
                 }`}>
@@ -187,14 +197,62 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
             </div>
 
             {/* Info */}
-            <div className="flex-1 min-w-0">
-                <p className="font-semibold text-primary truncate">{session.name}</p>
-                <p className="text-xs text-secondary">{session.phoneNumber || 'No number yet'}</p>
+            <div className="flex-1 min-w-[120px]">
+                {isEditingName ? (
+                    <div className="flex items-center gap-1.5 mb-0.5 w-full">
+                        <input
+                            autoFocus
+                            title="New account name"
+                            placeholder="Account name"
+                            className="input text-sm py-0.5 px-2 h-7 flex-1 min-w-[60px] max-w-[200px]"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') renameMutation.mutate(editName);
+                                if (e.key === 'Escape') {
+                                    setEditName(session.name);
+                                    setIsEditingName(false);
+                                }
+                            }}
+                            disabled={renameMutation.isPending}
+                        />
+                        {renameMutation.isPending ? (
+                            <Loader2 size={14} className="animate-spin text-secondary flex-shrink-0" />
+                        ) : (
+                            <>
+                                <button title="Save" className="text-green-500 hover:text-green-600 transition-colors flex-shrink-0" onClick={() => renameMutation.mutate(editName)}>
+                                    <CheckCircle2 size={16} />
+                                </button>
+                                <button title="Cancel" className="text-secondary hover:text-red-500 transition-colors flex-shrink-0" onClick={() => {
+                                    setEditName(session.name);
+                                    setIsEditingName(false);
+                                }}>
+                                    <X size={16} />
+                                </button>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 group mb-0.5 w-full">
+                        <p className="font-semibold text-primary truncate max-w-[calc(100%-20px)]">{session.name}</p>
+                        <button
+                            title="Rename account"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-secondary hover:text-primary flex-shrink-0"
+                            onClick={() => {
+                                setEditName(session.name);
+                                setIsEditingName(true);
+                            }}
+                        >
+                            <Edit2 size={12} />
+                        </button>
+                    </div>
+                )}
+                <p className="text-xs text-secondary truncate w-full">{session.phoneNumber || 'No number yet'}</p>
             </div>
 
             {/* Status pill */}
             <button
-                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 ${session.status === 'NEEDS_SCAN' ? 'hover:brightness-95 cursor-pointer ' : ''} rounded-full border ${statusConfig.bg} ${statusConfig.color}`}
+                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 ${session.status === 'NEEDS_SCAN' ? 'hover:brightness-95 cursor-pointer ' : ''} rounded-full border flex-shrink-0 ${statusConfig.bg} ${statusConfig.color}`}
                 onClick={() => {
                     if (session.status === 'NEEDS_SCAN') {
                         onOpenQR(session);
