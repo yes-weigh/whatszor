@@ -15,18 +15,23 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
     // ── Profile Picture (proxy via Baileys) ──
     // Must be before /:id to avoid route conflict
     fastify.get('/profile-picture', async (req, reply) => {
-        const { jid } = req.query as { jid?: string };
+        const { jid, sessionId } = req.query as { jid?: string, sessionId?: string };
         if (!jid) return reply.status(400).send({ success: false, message: 'jid required' });
 
         try {
-            // Find any connected account for this workspace
-            const account = await prisma.whatsAppAccount.findFirst({
-                where: { workspaceId: req.user.workspaceId, status: 'CONNECTED' },
-                select: { sessionId: true }
-            });
-            if (!account) return reply.send({ success: true, data: null });
+            let targetSessionId = sessionId;
 
-            const sock = waManager.getSocket(account.sessionId);
+            if (!targetSessionId) {
+                // Find any connected account for this workspace as fallback
+                const account = await prisma.whatsAppAccount.findFirst({
+                    where: { workspaceId: req.user.workspaceId, status: 'CONNECTED' },
+                    select: { sessionId: true }
+                });
+                if (!account) return reply.send({ success: true, data: null });
+                targetSessionId = account.sessionId;
+            }
+
+            const sock = waManager.getSocket(targetSessionId);
             if (!sock) return reply.send({ success: true, data: null });
 
             const url = await sock.profilePictureUrl(jid, 'image').catch(() => null);

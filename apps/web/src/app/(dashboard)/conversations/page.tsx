@@ -150,8 +150,8 @@ function accountColor(idx: number) {
 // Global profile picture cache — persists across re-renders, avoids duplicate requests
 const profilePicCache = new Map<string, string | null>();
 
-function ContactAvatar({ jid, name, sizeClass = 'w-10 h-10 text-base', delay = 0 }: {
-    jid: string; name: string; sizeClass?: string; delay?: number;
+function ContactAvatar({ jid, name, sessionId, sizeClass = 'w-10 h-10 text-base', delay = 0 }: {
+    jid: string; name: string; sessionId?: string | null; sizeClass?: string; delay?: number;
 }) {
     const [imgUrl, setImgUrl] = useState<string | null | undefined>(
         profilePicCache.has(jid) ? profilePicCache.get(jid)! : undefined
@@ -168,7 +168,9 @@ function ContactAvatar({ jid, name, sizeClass = 'w-10 h-10 text-base', delay = 0
         const timer = setTimeout(async () => {
             if (cancelled) return;
             try {
-                const r = await api.get('/conversations/profile-picture', { params: { jid } });
+                const params: any = { jid };
+                if (sessionId) params.sessionId = sessionId;
+                const r = await api.get('/conversations/profile-picture', { params });
                 const url = r.data?.data ?? null;
                 profilePicCache.set(jid, url);
                 if (!cancelled) setImgUrl(url);
@@ -872,7 +874,7 @@ export default function ConversationsPage() {
                             >
                                 {/* Avatar with WA profile picture (staggering requests to prevent rate limit) */}
                                 <div className="relative shrink-0">
-                                    <ContactAvatar jid={conv.providerId} name={name} sizeClass="w-9 h-9 text-sm" delay={idx * 100} />
+                                    <ContactAvatar jid={conv.providerId} name={name} sessionId={conv.sessionId} sizeClass="w-9 h-9 text-sm" delay={idx * 100} />
                                     {activeSessionId === null && conv.sessionId && (() => {
                                         const convAccount = accounts.find(a => a.sessionId === conv.sessionId);
                                         const accountIdx = convAccount ? accounts.indexOf(convAccount) : -1;
