@@ -130,3 +130,35 @@ export async function usePrismaAuthState(
 export async function deleteSessionAuthData(sessionId: string): Promise<void> {
     await prisma.whatsAppSession.deleteMany({ where: { sessionId } });
 }
+
+/**
+ * Reset the Baileys history-sync timestamp for a session.
+ *
+ * WhatsApp uses the `lastAccountSyncTimestamp` in the stored creds to decide
+ * how far back to send history on reconnect. By setting it to 0, we signal
+ * to WhatsApp that the device needs a full history re-push on the next connect.
+ *
+ * Call this BEFORE waManager.connect() when you have cleared the local DB and
+ * want WhatsApp to re-deliver all past chats.
+ */
+export async function resetHistorySyncTimestamp(sessionId: string): Promise<void> {
+    const session = await prisma.whatsAppSession.findUnique({
+        where: { sessionId_category: { sessionId, category: 'creds' } },
+    });
+    if (!session?.data) return;
+
+    const creds = JSON.parse(JSON.stringify(session.data), BufferJSON.reviver) as any;
+
+    // Reset the sync cursor so WA re-delivers full history on next connect
+    creds.lastAccountSyncTimestamp = 0;
+    // Also clear the app-state key so WA refreshes contact/chat metadata
+    creds.myAppStateKeyId = null;
+
+    const jsonString = JSON.stringify(creds, BufferJSON.replacer);
+    const jsonObj = JSON.parse(jsonString);
+
+    await prisma.whatsAppSession.update({
+        where: { sessionId_category: { sessionId, category: 'creds' } },
+        data: { data: jsonObj },
+    });
+}

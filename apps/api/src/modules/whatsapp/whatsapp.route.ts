@@ -4,6 +4,7 @@ import { waManager } from './whatsapp.service';
 import { prisma } from '../../prisma/client';
 import { randomUUID } from 'crypto';
 import { getAntibanStats } from '../../core/antiban';
+import { resetHistorySyncTimestamp } from './auth.adapter';
 
 import { requireActiveWorkspace } from '../../middleware/requireActiveWorkspace';
 
@@ -181,6 +182,11 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             });
 
             fastify.log.info({ sessionId }, 'History cleared. Pending fresh reconnect...');
+
+            // Reset the Baileys sync cursor so WhatsApp re-delivers full history on next connect.
+            // Without this, WA sees the existing auth creds as "synced" and skips re-pushing chats.
+            await resetHistorySyncTimestamp(sessionId);
+            fastify.log.info({ sessionId }, 'History sync timestamp reset — WA will re-push full history.');
         }
 
         // Fire and forget reconnect
