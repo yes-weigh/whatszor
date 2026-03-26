@@ -5,7 +5,8 @@ import QRCode from 'react-qr-code';
 import api from '@/lib/api';
 import {
     Smartphone, CheckCircle2, MonitorSmartphone, Unplug,
-    Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain, Edit2
+    Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain, Edit2,
+    AlertTriangle, RefreshCcw
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -388,6 +389,54 @@ export function WhatsAppTab() {
         setConnectingSession(session);
     };
 
+    // ── Bulk danger-zone states ────────────────────────────────
+    const [isFlushing, setIsFlushing] = useState(false);
+    const [isResyncingAll, setIsResyncingAll] = useState(false);
+    const [bulkResult, setBulkResult] = useState<string | null>(null);
+
+    const handleFlushAll = async () => {
+        if (!confirm(
+            '⚠️ DANGER: This will permanently delete ALL conversations, messages, and contact names for EVERY connected WhatsApp session, then re-download them fresh.\n\nThis cannot be undone. Continue?'
+        )) return;
+
+        setIsFlushing(true);
+        setBulkResult(null);
+        let done = 0;
+        try {
+            for (const s of sessions) {
+                await api.post(`/whatsapp/sessions/${s.sessionId}/resync`, { clearHistory: true });
+                done++;
+            }
+            setBulkResult(`✅ Flushed & resyncing ${done} session(s). Fresh data will appear within a few minutes.`);
+            qc.invalidateQueries({ queryKey: ['wa-accounts'] });
+        } catch {
+            setBulkResult(`⚠️ Completed ${done}/${sessions.length} sessions before an error. Some sessions may still be syncing.`);
+        } finally {
+            setIsFlushing(false);
+        }
+    };
+
+    const handleResyncAll = async () => {
+        if (!confirm('Quick-resync all connected sessions? This will bounce each connection to pick up any missed messages.')) return;
+
+        setIsResyncingAll(true);
+        setBulkResult(null);
+        let done = 0;
+        try {
+            for (const s of sessions.filter(s => s.status === 'CONNECTED')) {
+                await api.post(`/whatsapp/sessions/${s.sessionId}/resync`, { clearHistory: false });
+                done++;
+            }
+            setBulkResult(`✅ Resync started for ${done} connected session(s).`);
+            qc.invalidateQueries({ queryKey: ['wa-accounts'] });
+        } catch {
+            setBulkResult(`⚠️ Completed ${done} sessions before an error.`);
+        } finally {
+            setIsResyncingAll(false);
+        }
+    };
+
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -467,10 +516,64 @@ export function WhatsAppTab() {
                     </div>
                 )}
 
-                {/* Auto-open QR for sessions that are in NEEDS_SCAN state */}
+                {/* Auto-open QR hint */}
                 {!connectingSession && sessions.find(s => s.status === 'NEEDS_SCAN') && (
                     <div className="text-xs text-secondary text-center">
                         One or more accounts are waiting for QR scan. Click the account&apos;s reconnect button to open the QR code.
+                    </div>
+                )}
+
+                {/* ── Danger Zone ───────────────────────────────── */}
+                {sessions.length > 0 && (
+                    <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/5 p-5 flex flex-col gap-4">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle size={16} className="text-red-400 shrink-0" />
+                            <div>
+                                <h4 className="font-semibold text-red-400 text-sm">Danger Zone</h4>
+                                <p className="text-xs text-muted mt-0.5">These actions affect <strong>all sessions</strong> and cannot be undone.</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            {/* Resync All */}
+                            <div className="flex-1 bg-surface rounded-xl border border-theme p-4 flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                    <RefreshCcw size={15} className="text-blue-400" />
+                                    <span className="text-sm font-semibold text-primary">Resync All Sessions</span>
+                                </div>
+                                <p className="text-xs text-muted">Bounce all connected WhatsApp sockets to pull any missed messages. Chat history is preserved.</p>
+                                <button
+                                    className="btn btn-sm mt-1 self-start border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 bg-transparent"
+                                    onClick={handleResyncAll}
+                                    disabled={isResyncingAll || isFlushing || sessions.filter(s => s.status === 'CONNECTED').length === 0}
+                                >
+                                    {isResyncingAll ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                                    {isResyncingAll ? 'Resyncing…' : `Resync ${sessions.filter(s => s.status === 'CONNECTED').length} connected`}
+                                </button>
+                            </div>
+
+                            {/* Flush All */}
+                            <div className="flex-1 bg-surface rounded-xl border border-red-500/30 p-4 flex flex-col gap-2">
+                                <div className="flex items-center gap-2">
+                                    <Trash2 size={15} className="text-red-400" />
+                                    <span className="text-sm font-semibold text-red-400">Flush All Chats</span>
+                                </div>
+                                <p className="text-xs text-muted">Delete <strong>all conversations &amp; messages</strong> for every session, then re-download fresh from WhatsApp.</p>
+                                <button
+                                    className="btn btn-sm mt-1 self-start border border-red-500/40 text-red-400 hover:bg-red-500/10 bg-transparent"
+                                    onClick={handleFlushAll}
+                                    disabled={isFlushing || isResyncingAll || sessions.length === 0}
+                                >
+                                    {isFlushing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                    {isFlushing ? 'Flushing…' : 'Flush & Resync All'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Result feedback */}
+                        {bulkResult && (
+                            <p className="text-xs text-secondary bg-surface px-3 py-2 rounded-lg border border-theme">{bulkResult}</p>
+                        )}
                     </div>
                 )}
             </div>
