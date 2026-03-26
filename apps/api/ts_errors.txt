@@ -1,0 +1,4 @@
+﻿src/modules/messaging/conversation.service.ts(58,17): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+src/modules/messaging/conversation.service.ts(79,80): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.

@@ -49,14 +49,12 @@ export async function createOrGetConversation(workspaceId: string, input: Create
     const providerId = normalizeJid(input.providerId);
     const sessionId = input.sessionId || null;
 
-    let conversation = await prisma.conversation.findUnique({
+    let conversation = await prisma.conversation.findFirst({
         where: {
-            workspaceId_provider_providerId_sessionId: {
-                workspaceId,
-                provider: input.provider,
-                providerId,
-                sessionId,
-            },
+            workspaceId,
+            provider: input.provider,
+            providerId,
+            sessionId,
         },
     });
 
@@ -73,11 +71,12 @@ export async function createOrGetConversation(workspaceId: string, input: Create
             });
         } catch (e: any) {
             if (e.code === 'P2002') {
-                conversation = await prisma.conversation.findUniqueOrThrow({
+                conversation = await prisma.conversation.findFirstOrThrow({
                     where: {
-                        workspaceId_provider_providerId_sessionId: {
-                            workspaceId, provider: input.provider, providerId, sessionId
-                        }
+                        workspaceId,
+                        provider: input.provider,
+                        providerId,
+                        sessionId,
                     }
                 });
             } else {
