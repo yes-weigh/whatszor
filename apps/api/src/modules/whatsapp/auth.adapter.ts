@@ -132,29 +132,16 @@ export async function deleteSessionAuthData(sessionId: string): Promise<void> {
 }
 
 /**
- * Partial auth reset for history re-sync after a flush.
+ * Reset Baileys history-sync cursors in creds before a reconnect.
  *
- * STRATEGY: Delete all Baileys signal/app-state/prekey rows, keeping only the
- * core `creds` row (the device identity keypair + registration info).
- * Also reset the history sync cursors inside the creds themselves.
+ * Only touches the sync-timestamp fields inside the creds record —
+ * signal keys, prekeys, and app-state keys are intentionally left intact
+ * because deleting them breaks WhatsApp's encrypted session.
  *
- * Result: WhatsApp treats the reconnect as a fresh device coming online and
- * re-delivers full chat history via messaging-history.set — without requiring
- * a new QR code scan, because the registered device identity is preserved.
- *
- * Call this BEFORE waManager.connect() when local DB history has been cleared.
+ * The stale-socket guard in whatsapp.service.ts ensures the new socket
+ * stays alive long enough to receive the messaging-history.set event.
  */
 export async function resetSessionKeysForResync(sessionId: string): Promise<void> {
-    // 1. Delete all signal/app-state/prekey rows for this session
-    //    (everything except the 'creds' row which holds the device identity)
-    await prisma.whatsAppSession.deleteMany({
-        where: {
-            sessionId,
-            category: { not: 'creds' },
-        },
-    });
-
-    // 2. Also reset the sync cursors inside the creds object itself
     const session = await prisma.whatsAppSession.findUnique({
         where: { sessionId_category: { sessionId, category: 'creds' } },
     });
@@ -162,13 +149,11 @@ export async function resetSessionKeysForResync(sessionId: string): Promise<void
 
     const creds = JSON.parse(JSON.stringify(session.data), BufferJSON.reviver) as any;
 
-    // Reset all history-sync related fields to their "fresh device" defaults
+    // Reset sync cursors to "fresh device" values
+    // WhatsApp reads these to decide how far back to send history
     creds.lastAccountSyncTimestamp = 0;
     creds.myAppStateKeyId = null;
     creds.accountSyncCounter = 0;
-    creds.processedHistoryMessages = [];
-    creds.nextPreKeyId = 1;
-    creds.firstUnuploadedPreKeyId = 1;
 
     const jsonString = JSON.stringify(creds, BufferJSON.replacer);
     const jsonObj = JSON.parse(jsonString);
@@ -178,3 +163,4 @@ export async function resetSessionKeysForResync(sessionId: string): Promise<void
         data: { data: jsonObj },
     });
 }
+
