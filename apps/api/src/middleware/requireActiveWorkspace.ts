@@ -1,22 +1,64 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../prisma/client';
 
-// Simple in-memory cache to protect the Prisma Connection Pool
-// TTL: 60 seconds. N+1 frontend requests (like 50 contact avatars loading at once)
-// will now hit this cache instead of opening 50 concurrent database connections.
-const workspaceCache = new Map<string, {
+// ── Thundering-Herd-Safe Workspace Cache ────────────────────────────────────
+//
+// PROBLEM: When 50 profile-picture requests arrive simultaneously on the first
+// page load, all 50 see an empty cache at the same moment and all fire a DB
+// query concurrently — exhausting the Prisma connection pool.
+//
+// FIX: Store a shared in-flight promise. All concurrent requests for the same
+// workspace await the single in-flight DB query instead of spawning their own.
+// Once settled, results are cached for CACHE_TTL_MS so subsequent requests
+// need no DB round-trip at all.
+// ────────────────────────────────────────────────────────────────────────────
+
+const CACHE_TTL_MS = 60_000;
+
+interface WorkspaceEntry {
     status: string;
     expiresAt: Date | null;
     cachedAt: number;
-}>();
-const CACHE_TTL_MS = 60_000;
+}
+
+// Resolved value cache (post-fetch)
+const workspaceCache = new Map<string, WorkspaceEntry>();
+
+// In-flight request deduplication (thundering herd protection)
+const inflight = new Map<string, Promise<WorkspaceEntry | null>>();
+
+async function fetchWorkspace(workspaceId: string): Promise<WorkspaceEntry | null> {
+    // If there is already a request in-flight for this workspaceId,
+    // share that promise instead of opening a new DB connection.
+    let pending = inflight.get(workspaceId);
+    if (pending) return pending;
+
+    const promise = prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { status: true, expiresAt: true }
+    }).then(dbWorkspace => {
+        if (!dbWorkspace) return null;
+        const entry: WorkspaceEntry = {
+            status: dbWorkspace.status,
+            expiresAt: dbWorkspace.expiresAt,
+            cachedAt: Date.now(),
+        };
+        workspaceCache.set(workspaceId, entry);
+        return entry;
+    }).finally(() => {
+        inflight.delete(workspaceId);
+    });
+
+    inflight.set(workspaceId, promise);
+    return promise;
+}
 
 export async function requireActiveWorkspace(
     request: FastifyRequest,
     reply: FastifyReply,
 ): Promise<void> {
     if (!request.user || !request.user.workspaceId) {
-         return reply.status(401).send({
+        return reply.status(401).send({
             success: false,
             error: { code: 'UNAUTHORIZED', message: 'Not authenticated' }
         });
@@ -30,46 +72,31 @@ export async function requireActiveWorkspace(
     const now = Date.now();
     let workspace = workspaceCache.get(request.user.workspaceId);
 
-    // Cache miss or expired
+    // Use cached value if still fresh
     if (!workspace || (now - workspace.cachedAt > CACHE_TTL_MS)) {
-        const dbWorkspace = await prisma.workspace.findUnique({
-            where: { id: request.user.workspaceId },
-            select: { status: true, expiresAt: true }
-        });
-
-        if (!dbWorkspace) {
+        const result = await fetchWorkspace(request.user.workspaceId);
+        if (!result) {
             return reply.status(404).send({
                 success: false,
                 error: { code: 'NOT_FOUND', message: 'Workspace not found' }
             });
         }
-
-        workspace = {
-            status: dbWorkspace.status,
-            expiresAt: dbWorkspace.expiresAt,
-            cachedAt: now
-        };
-        workspaceCache.set(request.user.workspaceId, workspace);
+        workspace = result;
     }
 
-
-
     if (workspace.status === 'SUSPENDED' || workspace.status === 'EXPIRED') {
-        // Return 402 Payment Required so the frontend Axios interceptor can catch it
-        // and redirect to the license activation page
         return reply.status(402).send({
             success: false,
             error: { code: 'PAYMENT_REQUIRED', message: `Workspace is ${workspace.status.toLowerCase()}. Please activate a license key.` }
         });
     }
-    
-    // Require ACTIVE status — TRIAL without expiry means the workspace is unactivated
+
     if (workspace.status === 'TRIAL') {
-        // If there's an expiry and it's in the future, allow access (grace period)
-        if (!workspace.expiresAt || workspace.expiresAt < new Date()) {
+        // Block only if an expiry date IS set AND it has already passed
+        if (workspace.expiresAt && workspace.expiresAt < new Date()) {
             return reply.status(402).send({
                 success: false,
-                error: { code: 'PAYMENT_REQUIRED', message: 'Workspace requires a license key to access this feature.' }
+                error: { code: 'PAYMENT_REQUIRED', message: 'Workspace trial has expired. Please activate a license key.' }
             });
         }
     }
