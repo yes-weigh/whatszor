@@ -4,7 +4,6 @@ import { waManager } from './whatsapp.service';
 import { prisma } from '../../prisma/client';
 import { randomUUID } from 'crypto';
 import { getAntibanStats } from '../../core/antiban';
-import { resetSessionKeysForResync } from './auth.adapter';
 
 import { requireActiveWorkspace } from '../../middleware/requireActiveWorkspace';
 
@@ -181,13 +180,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
                 },
             });
 
-            fastify.log.info({ sessionId }, 'History cleared. Resetting Baileys auth keys for fresh history sync...');
-
-            // Purge signal/app-state/prekey rows but preserve the identity creds.
-            // This forces WhatsApp to treat the reconnect as a fresh device and
-            // re-deliver full chat history via messaging-history.set — no QR needed.
-            await resetSessionKeysForResync(sessionId);
-            fastify.log.info({ sessionId }, 'Auth keys reset — WA will re-push full history on next connect.');
+            fastify.log.info({ sessionId }, 'History cleared — will trigger on-demand resync after reconnect.');
         }
 
         // Fire and forget reconnect
@@ -195,9 +188,20 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             fastify.log.error({ err, sessionId }, 'Failed to reconnect session during resync');
         });
 
+        if (clearHistory) {
+            // After the socket reconnects, trigger an on-demand app-state resync.
+            // sock.resyncAppState() signals WhatsApp that our local state is stale,
+            // causing it to re-deliver the full chat list via messaging-history.set.
+            // Wait 12s for the socket to fully establish before calling it.
+            setTimeout(async () => {
+                const ok = await waManager.requestHistorySync(sessionId);
+                fastify.log.info({ sessionId, ok }, 'Post-flush history resync triggered');
+            }, 12_000);
+        }
+
         return reply.status(202).send({
             success: true,
-            data: { message: clearHistory ? 'History cleared. Fresh sync started.' : 'Resync connection started.' },
+            data: { message: clearHistory ? 'History cleared. Re-fetching from WhatsApp...' : 'Resync connection started.' },
         });
     });
 

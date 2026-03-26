@@ -297,6 +297,37 @@ class WhatsAppManager extends EventEmitter {
     }
 
     /**
+     * Request a full history re-sync from WhatsApp for an already-connected session.
+     *
+     * Calls sock.resyncAppState() which signals to WhatsApp that the local app-state
+     * is out of sync. WA responds by re-delivering the full chat list + history
+     * via messaging-history.set events — no QR scan or reconnect needed.
+     *
+     * Returns true if the resync request was sent, false if session is not connected.
+     */
+    async requestHistorySync(sessionId: string): Promise<boolean> {
+        const sock = this.sockets.get(sessionId) as any;
+        if (!sock) return false;
+
+        try {
+            // resyncAppState triggers WhatsApp to re-deliver the full chat list + history
+            await sock.resyncAppState(['critical_block', 'critical_unblock_to_primary'], true);
+            log.info({ sessionId }, 'History resync requested via resyncAppState');
+            return true;
+        } catch (err) {
+            log.warn({ sessionId, err }, 'resyncAppState failed — trying cleanDirtyBits fallback');
+            try {
+                await sock.cleanDirtyBits('account_sync', 0);
+                log.info({ sessionId }, 'cleanDirtyBits(account_sync) called as fallback');
+                return true;
+            } catch (err2) {
+                log.error({ sessionId, err: err2 }, 'History resync failed');
+                return false;
+            }
+        }
+    }
+
+    /**
      * Returns the anti-ban wrapped safe socket for sending messages.
      * All outbound sendMessage() calls MUST use this instead of getSocket().
      */
