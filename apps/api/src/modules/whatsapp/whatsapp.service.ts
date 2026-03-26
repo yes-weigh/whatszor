@@ -123,6 +123,16 @@ class WhatsAppManager extends EventEmitter {
 
             if (connection === 'close') {
                 const error = (lastDisconnect?.error as Boom)?.output?.statusCode;
+
+                // Guard against stale close events from replaced sockets.
+                // Sequence during resync: disconnect() removes old sock from map →
+                // connect() stores new sock → old sock's async close event fires here.
+                // Without this guard, the old sock's close event deletes the new sock!
+                if (this.sockets.get(sessionId) !== sock) {
+                    log.warn({ sessionId, error }, 'Stale close event for replaced socket — ignoring.');
+                    return;
+                }
+
                 log.warn({ sessionId, error }, 'Connection closed');
 
                 // Notify AntiBan health monitor about the disconnect
@@ -155,6 +165,7 @@ class WhatsAppManager extends EventEmitter {
                     });
                     this.emit('loggedOut', { sessionId, workspaceId });
                 }
+
             } else if (connection === 'open') {
                 log.info({ sessionId }, 'Connection opened successfully!');
                 this.qrCodes.delete(sessionId);
