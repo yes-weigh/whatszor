@@ -47,26 +47,43 @@ export function normalizeJid(jid: string): string {
 export async function createOrGetConversation(workspaceId: string, input: CreateConversationInput) {
     // Normalize JID to prevent duplicates from @c.us vs @s.whatsapp.net or device suffixes
     const providerId = normalizeJid(input.providerId);
+    const sessionId = input.sessionId || null;
 
     let conversation = await prisma.conversation.findUnique({
         where: {
-            workspaceId_provider_providerId: {
+            workspaceId_provider_providerId_sessionId: {
                 workspaceId,
                 provider: input.provider,
                 providerId,
+                sessionId,
             },
         },
     });
 
     if (!conversation) {
-        conversation = await prisma.conversation.create({
-            data: {
-                workspaceId,
-                provider: input.provider,
-                providerId,
-                contactId: input.contactId ?? null,
-            },
-        });
+        try {
+            conversation = await prisma.conversation.create({
+                data: {
+                    workspaceId,
+                    provider: input.provider,
+                    providerId,
+                    sessionId,
+                    contactId: input.contactId ?? null,
+                },
+            });
+        } catch (e: any) {
+            if (e.code === 'P2002') {
+                conversation = await prisma.conversation.findUniqueOrThrow({
+                    where: {
+                        workspaceId_provider_providerId_sessionId: {
+                            workspaceId, provider: input.provider, providerId, sessionId
+                        }
+                    }
+                });
+            } else {
+                throw e;
+            }
+        }
     } else if (input.contactId && !conversation.contactId) {
         conversation = await prisma.conversation.update({
             where: { id: conversation.id },
@@ -80,12 +97,8 @@ export async function createOrGetConversation(workspaceId: string, input: Create
 export async function listConversations(workspaceId: string, sessionId?: string) {
     const where: Record<string, unknown> = { workspaceId };
     if (sessionId) {
-        // Show conversations for this account, including conversations that were
-        // synced before the sessionId field was populated (they belong to this workspace).
-        where.OR = [
-            { sessionId },
-            { sessionId: null },
-        ];
+        // Show conversations belonging to exactly this session
+        where.sessionId = sessionId;
     }
 
     const conversations = await (prisma.conversation as any).findMany({

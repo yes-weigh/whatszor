@@ -6,7 +6,7 @@
 
 */
 -- DropIndex
-DROP INDEX "allowed_numbers_workspace_id_phone_number_key";
+ALTER TABLE "allowed_numbers" DROP CONSTRAINT "allowed_numbers_workspace_id_phone_number_key";
 
 -- AlterTable
 ALTER TABLE "product_knowledge" ALTER COLUMN "updated_at" DROP DEFAULT;

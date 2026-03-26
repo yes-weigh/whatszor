@@ -385,6 +385,7 @@ export function initializeWorkers() {
                     const conversation = await createOrGetConversation(workspaceId, {
                         provider: 'WHATSAPP',
                         providerId,
+                        sessionId,
                     });
 
                     // ── Contact Auto-Creation (Phase 5) ──────────────────────
@@ -447,12 +448,8 @@ export function initializeWorkers() {
                     }
                     // ─────────────────────────────────────────────────────────
 
-                    // Update sessionId and waContactName if we have new information
+                    // Update waContactName if we have new information
                     const updatePayload: Record<string, unknown> = {};
-                    const conv = conversation as any;
-                    if (sessionId && !conv.sessionId) {
-                        updatePayload.sessionId = sessionId;
-                    }
                     // Always refresh the WhatsApp display name from the latest pushName
                     if (pushName && !msg.key.fromMe) {
                         updatePayload.waContactName = pushName;
@@ -782,23 +779,13 @@ export function initializeWorkers() {
 
             // Fetch all conversation IDs for our JIDs in one query → in-memory map
             const convRows = await prisma.conversation.findMany({
-                where: { workspaceId, provider: 'WHATSAPP', providerId: { in: jids } },
+                where: { workspaceId, provider: 'WHATSAPP', providerId: { in: jids }, sessionId: sessionId ?? null },
                 select: { id: true, providerId: true, sessionId: true, waContactName: true, lastMessageAt: true, lastMessage: true },
             });
             const convMap = new Map<string, { id: string; sessionId: string | null; waContactName: string | null; lastMessageAt: Date | null; lastMessage: string | null }>();
             for (const row of convRows) convMap.set(row.providerId, row);
 
-            // ── 4. Bulk update sessionId + waContactName ───────────────────
-            // Update sessionId on ALL matched conversations (not just those missing it),
-            // so conversations created before session tracking or under a different session
-            // are properly linked to the current session.
-            if (sessionId && convRows.length > 0) {
-                const allIds = convRows.map(r => r.id);
-                await (prisma.conversation as any).updateMany({
-                    where: { id: { in: allIds } },
-                    data: { sessionId },
-                });
-            }
+            // ── 4. Bulk update waContactName ───────────────────────────────
 
 
             // NOTE: waContactName update is done AFTER the messages loop below,

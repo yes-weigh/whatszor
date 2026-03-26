@@ -1,0 +1,16 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "whatszor", schema "public" at "localhost:5432"
+
+Error: P3006
+
+Migration `20260325162207_add_media_to_quick_reply` failed to apply cleanly to the shadow database. 
+Error:
+ERROR: cannot drop index allowed_numbers_workspace_id_phone_number_key because constraint allowed_numbers_workspace_id_phone_number_key on table allowed_numbers requires it
+HINT: You can drop constraint allowed_numbers_workspace_id_phone_number_key on table allowed_numbers instead.
+   0: sql_schema_connector::validate_migrations
+           with namespaces=None
+             at schema-engine\connectors\sql-schema-connector\src\lib.rs:335
+   1: schema_core::state::DevDiagnostic
+             at schema-engine\core\src\state.rs:276
+

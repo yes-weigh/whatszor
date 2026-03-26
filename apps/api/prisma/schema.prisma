@@ -357,7 +357,7 @@ model Conversation {
 
   messages Message[]
 
-  @@unique([workspaceId, provider, providerId])
+  @@unique([workspaceId, provider, providerId, sessionId])
   @@index([workspaceId, lastMessageAt])
   @@index([workspaceId, sessionId])
   @@map("conversations")
@@ -373,7 +373,7 @@ model AllowedNumber {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@index([workspaceId, phoneNumber])
+  @@unique([workspaceId, phoneNumber])
   @@map("allowed_numbers")
 }
 

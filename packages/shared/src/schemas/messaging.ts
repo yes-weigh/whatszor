@@ -6,6 +6,7 @@ import { NonEmptyStringSchema, UuidSchema } from './common';
 export const CreateConversationSchema = z.object({
     provider: z.string().toUpperCase(),
     providerId: NonEmptyStringSchema,
+    sessionId: z.string().optional().nullable(),
     contactId: UuidSchema.optional().nullable(),
 });
 

@@ -871,7 +871,22 @@ export default function ConversationsPage() {
                                     }`}
                             >
                                 {/* Avatar with WA profile picture (staggering requests to prevent rate limit) */}
-                                <ContactAvatar jid={conv.providerId} name={name} sizeClass="w-9 h-9 text-sm" delay={idx * 100} />
+                                <div className="relative shrink-0">
+                                    <ContactAvatar jid={conv.providerId} name={name} sizeClass="w-9 h-9 text-sm" delay={idx * 100} />
+                                    {activeSessionId === null && conv.sessionId && (() => {
+                                        const convAccount = accounts.find(a => a.sessionId === conv.sessionId);
+                                        const accountIdx = convAccount ? accounts.indexOf(convAccount) : -1;
+                                        if (accountIdx === -1) return null;
+                                        return (
+                                            <div 
+                                                title={`Via ${convAccount?.name}`}
+                                                className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-surface flex items-center justify-center text-[7px] font-bold text-white shadow-sm ${accountColor(accountIdx)}`}
+                                            >
+                                                {getInitial(convAccount?.name || '')}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
 
                                 {/* Content */}
                                 <div className="flex-1 min-w-0">
