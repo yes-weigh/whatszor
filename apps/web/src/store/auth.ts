@@ -55,7 +55,8 @@ interface User {
 interface AuthState {
     user: User | null;
     accessToken: string | null;
-    setAuth: (user: User, token: string) => void;
+    refreshToken: string | null;
+    setAuth: (user: User, accessToken: string, refreshToken: string) => void;
     logout: () => void;
     isAuthenticated: () => boolean;
     hasPermission: (permission: string) => boolean;
@@ -66,17 +67,20 @@ export const useAuthStore = create<AuthState>()(
         (set, get) => ({
             user: null,
             accessToken: null,
-            setAuth: (user, accessToken) => {
+            refreshToken: null,
+            setAuth: (user, accessToken, refreshToken) => {
                 localStorage.setItem('accessToken', accessToken);
+                if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
                 // Mirror to cookie so Next.js edge middleware can read it
                 document.cookie = `accessToken=${accessToken}; path=/; SameSite=Strict`;
-                set({ user, accessToken });
+                set({ user, accessToken, refreshToken });
             },
             logout: () => {
                 localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
                 // Clear the cookie too
                 document.cookie = 'accessToken=; path=/; max-age=0';
-                set({ user: null, accessToken: null });
+                set({ user: null, accessToken: null, refreshToken: null });
                 window.location.href = '/login';
             },
             isAuthenticated: () => !!get().accessToken,
@@ -88,7 +92,7 @@ export const useAuthStore = create<AuthState>()(
         }),
         {
             name: 'whatsvue-auth',
-            partialize: (s) => ({ user: s.user, accessToken: s.accessToken }),
+            partialize: (s) => ({ user: s.user, accessToken: s.accessToken, refreshToken: s.refreshToken }),
         }
     )
 );

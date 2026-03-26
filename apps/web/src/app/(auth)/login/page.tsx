@@ -21,7 +21,7 @@ export default function LoginPage() {
         setLoading(true);
         try {
             const { data } = await api.post('/auth/login', { workspaceSlug, email, password });
-            const { accessToken } = data.data as { accessToken: string };
+            const { accessToken, refreshToken } = data.data as { accessToken: string; refreshToken: string };
 
             // Decode JWT payload (base64url) — signed but not encrypted, safe to read client-side.
             const [, payloadB64] = accessToken.split('.');
@@ -38,7 +38,8 @@ export default function LoginPage() {
                     workspaceId: decoded.workspaceId,
                     role: decoded.role,
                 },
-                accessToken
+                accessToken,
+                refreshToken
             );
 
             // Fire-and-forget: enrich user name from /auth/me (uses the token we just set).
@@ -46,7 +47,7 @@ export default function LoginPage() {
                 .then(res => {
                     const me = res.data?.data;
                     if (me) {
-                        setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken);
+                        setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken, refreshToken);
                     }
                 })
                 .catch(() => { /* non-critical */ });

@@ -20,7 +20,7 @@ export default function AdminLoginPage() {
         setLoading(true);
         try {
             const { data } = await api.post('/admin/auth/login', { email, password });
-            const { accessToken } = data.data as { accessToken: string };
+            const { accessToken, refreshToken } = data.data as { accessToken: string; refreshToken: string };
 
             const [, payloadB64] = accessToken.split('.');
             const decoded = JSON.parse(
@@ -35,7 +35,8 @@ export default function AdminLoginPage() {
                     workspaceId: decoded.workspaceId,
                     role: decoded.role,
                 },
-                accessToken
+                accessToken,
+                refreshToken
             );
 
             router.push('/admin/dashboard');

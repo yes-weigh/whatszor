@@ -25,10 +25,11 @@ export default function RegisterPage() {
             const payload = { ...form, workspaceSlug: slug };
             // Step 1: Register — returns tokens only (no user object)
             const { data } = await api.post('/auth/register', payload);
-            const { accessToken } = data.data;
+            const { accessToken, refreshToken } = data.data;
 
             // Step 2: Store the token so /auth/me can use it
             localStorage.setItem('accessToken', accessToken);
+            if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
             document.cookie = `accessToken=${accessToken}; path=/; SameSite=Strict`;
 
             // Step 3: Fetch the user profile so setAuth has a valid user object
@@ -38,11 +39,12 @@ export default function RegisterPage() {
 
             // Step 4: Persist auth state and redirect to license activation
             // New workspaces start as TRIAL — they must activate a license before accessing the dashboard
-            setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken);
+            setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken, refreshToken);
             router.push('/workspace/unlock');
         } catch (err: any) {
             // Clear partial auth on failure
             localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
             document.cookie = 'accessToken=; path=/; max-age=0';
             setError(err.response?.data?.error?.message || err.response?.data?.message || 'Registration failed. Please try again.');
         } finally {
