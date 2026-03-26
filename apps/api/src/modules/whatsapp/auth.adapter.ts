@@ -132,16 +132,29 @@ export async function deleteSessionAuthData(sessionId: string): Promise<void> {
 }
 
 /**
- * Reset the Baileys history-sync timestamp for a session.
+ * Partial auth reset for history re-sync after a flush.
  *
- * WhatsApp uses the `lastAccountSyncTimestamp` in the stored creds to decide
- * how far back to send history on reconnect. By setting it to 0, we signal
- * to WhatsApp that the device needs a full history re-push on the next connect.
+ * STRATEGY: Delete all Baileys signal/app-state/prekey rows, keeping only the
+ * core `creds` row (the device identity keypair + registration info).
+ * Also reset the history sync cursors inside the creds themselves.
  *
- * Call this BEFORE waManager.connect() when you have cleared the local DB and
- * want WhatsApp to re-deliver all past chats.
+ * Result: WhatsApp treats the reconnect as a fresh device coming online and
+ * re-delivers full chat history via messaging-history.set — without requiring
+ * a new QR code scan, because the registered device identity is preserved.
+ *
+ * Call this BEFORE waManager.connect() when local DB history has been cleared.
  */
-export async function resetHistorySyncTimestamp(sessionId: string): Promise<void> {
+export async function resetSessionKeysForResync(sessionId: string): Promise<void> {
+    // 1. Delete all signal/app-state/prekey rows for this session
+    //    (everything except the 'creds' row which holds the device identity)
+    await prisma.whatsAppSession.deleteMany({
+        where: {
+            sessionId,
+            category: { not: 'creds' },
+        },
+    });
+
+    // 2. Also reset the sync cursors inside the creds object itself
     const session = await prisma.whatsAppSession.findUnique({
         where: { sessionId_category: { sessionId, category: 'creds' } },
     });
@@ -149,10 +162,13 @@ export async function resetHistorySyncTimestamp(sessionId: string): Promise<void
 
     const creds = JSON.parse(JSON.stringify(session.data), BufferJSON.reviver) as any;
 
-    // Reset the sync cursor so WA re-delivers full history on next connect
+    // Reset all history-sync related fields to their "fresh device" defaults
     creds.lastAccountSyncTimestamp = 0;
-    // Also clear the app-state key so WA refreshes contact/chat metadata
     creds.myAppStateKeyId = null;
+    creds.accountSyncCounter = 0;
+    creds.processedHistoryMessages = [];
+    creds.nextPreKeyId = 1;
+    creds.firstUnuploadedPreKeyId = 1;
 
     const jsonString = JSON.stringify(creds, BufferJSON.replacer);
     const jsonObj = JSON.parse(jsonString);
