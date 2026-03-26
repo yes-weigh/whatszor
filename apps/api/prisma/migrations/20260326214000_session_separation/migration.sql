@@ -1,4 +1,4 @@
-﻿-- DropIndex
+-- DropIndex
 DROP INDEX "conversations_workspace_id_provider_provider_id_key";
 
 -- DropIndex
