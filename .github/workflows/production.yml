@@ -120,6 +120,7 @@ jobs:
             # ── 6. Run DB migrations ─────────────────────────────────────────────
             echo "Waiting for API to be ready..."
             sleep 30
+            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate resolve --rolled-back 20260326214000_session_separation || true
             docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy
 
             # ── 7. Restart Caddy ─────────────────────────────────────────────────────────
