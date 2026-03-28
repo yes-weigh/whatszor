@@ -151,7 +151,7 @@ export async function processIncomingKnowledgeJob(job: Job) {
             // Re-route fallback message back through safe socket to request elaboration from user 
             // NOTE: In an architectural design we'd pull the safeSocket, relying purely on the BullMQ outbound worker:
             import('../../queues').then(({ getQueue, QueueName }) => {
-                getQueue(QueueName.WHATSAPP).add(`orphan-fallback-${messageId}`, {
+                getQueue(QueueName.OUTBOUND_MESSAGES).add(`orphan-fallback-${messageId}`, {
                     workspaceId,
                     sessionId,
                     messageId: `botfb_${Date.now()}`,
@@ -199,7 +199,7 @@ async function executeAIAndMerge(sourceData: any, matchTier: number, workspaceId
         // Enhance Bot UX: Add retry prompts
         if (workspaceId && sessionId && toJid && messageId) {
             import('../../queues').then(({ getQueue, QueueName }) => {
-                getQueue(QueueName.WHATSAPP).add(`failed-fallback-${messageId}`, {
+                getQueue(QueueName.OUTBOUND_MESSAGES).add(`failed-fallback-${messageId}`, {
                     workspaceId,
                     sessionId,
                     messageId: `botfb_${Date.now()}`,

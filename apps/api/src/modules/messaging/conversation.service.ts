@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma/client';
 import type { CreateConversationInput, UpdateConversationInput, SendMessageInput } from '@whatszor/shared';
 import { ErrorCodes } from '@whatszor/shared';
-import { outboundMessagesQueue } from '../../core/queue';
+import { getQueue, QueueName } from '../../queues';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 
 // ── JID Utilities ──────────────────────────────────────────
@@ -278,7 +278,7 @@ export async function sendMessage(
         },
     });
 
-    await outboundMessagesQueue.add(`send-${message.id}`, {
+    await getQueue(QueueName.OUTBOUND_MESSAGES).add(`send-${message.id}`, {
         workspaceId,
         sessionId,
         messageId: message.id,
@@ -340,7 +340,7 @@ export async function approveMessage(
     });
 
     // Add to outbound queue
-    await outboundMessagesQueue.add(`send-approved-${message.id}`, {
+    await getQueue(QueueName.OUTBOUND_MESSAGES).add(`send-approved-${message.id}`, {
         workspaceId,
         sessionId: activeSessionId,
         messageId: message.id,

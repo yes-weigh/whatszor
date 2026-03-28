@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import { CreateAutomationRuleInput, UpdateAutomationRuleInput } from '@whatszor/shared';
-import { systemEventsQueue } from '../../core/queue';
+import { getQueue, QueueName } from '../../queues';
 
 export async function getRules(workspaceId: string) {
     return prisma.automationRule.findMany({
@@ -127,6 +127,6 @@ export async function simulateRule(workspaceId: string, ruleId: string, testPayl
         }
     };
 
-    const job = await systemEventsQueue.add(`sim-${ruleId}-${Date.now()}`, payload);
+    const job = await getQueue(QueueName.SYSTEM_EVENTS).add(`sim-${ruleId}-${Date.now()}`, payload);
     return { jobId: job.id, message: 'Simulation event dispatched to the System Events Queue.' };
 }
