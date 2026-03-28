@@ -6,9 +6,9 @@ import multipart from '@fastify/multipart';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;   // 5MB
-const MAX_VIDEO_SIZE = 20 * 1024 * 1024;  // 20MB
-const MAX_DOC_SIZE = 10 * 1024 * 1024;    // 10MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;  // 10MB
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_DOC_SIZE = 100 * 1024 * 1024;   // 100MB
 
 export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
     // Register multipart plugin for file uploads
