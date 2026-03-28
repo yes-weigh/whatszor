@@ -451,12 +451,14 @@ model QuickReply {
   shortcut    String   // e.g., "/pricing" — used for quick-reply slash commands
   content     String
   mediaId     String?  @map("media_id")
+  templateId  String?  @map("template_id") // If set, sends this template instead of text/media
   isAutoReply Boolean  @default(false) @map("is_auto_reply")
   keyword     String?  // trigger phrase for auto-reply (case-insensitive match)
   createdAt   DateTime @default(now()) @map("created_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   media     Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  template  Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@map("quick_replies")
@@ -774,8 +776,9 @@ model Template {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  versions  TemplateVersion[]
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions     TemplateVersion[]
+  autoReplies  QuickReply[]
 
   @@index([workspaceId])
   @@map("templates")

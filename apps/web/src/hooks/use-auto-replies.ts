@@ -9,15 +9,40 @@ export interface AutoReplyMedia {
     mimeType?: string | null;
 }
 
+export interface AutoReplyTemplate {
+    id: string;
+    name: string;
+    versions: Array<{
+        id: string;
+        messageText: string;
+        footerText?: string | null;
+        buttons: Array<{ id: string; label: string; payload?: string | null }>;
+        media?: AutoReplyMedia | null;
+    }>;
+}
+
 export interface AutoReply {
     id: string;
     keyword: string;
     content: string;
     mediaId?: string | null;
+    templateId?: string | null;
     media?: AutoReplyMedia | null;
+    template?: AutoReplyTemplate | null;
     isAutoReply: boolean;
     createdAt: string;
 }
+
+export type CreateAutoReplyInput =
+    | { keyword: string; content: string; mediaId?: string | null; templateId?: null }
+    | { keyword: string; templateId: string; content?: string; mediaId?: null };
+
+export type UpdateAutoReplyInput = { id: string } & Partial<{
+    keyword: string;
+    content: string;
+    mediaId: string | null;
+    templateId: string | null;
+}>;
 
 export function useAutoReplies() {
     const queryClient = useQueryClient();
@@ -31,7 +56,7 @@ export function useAutoReplies() {
     });
 
     const createMutation = useMutation({
-        mutationFn: async (data: { keyword: string; content: string; mediaId?: string | null }) => {
+        mutationFn: async (data: CreateAutoReplyInput) => {
             const res = await api.post('/quick-replies/auto', data);
             return res.data.data;
         },
@@ -39,7 +64,7 @@ export function useAutoReplies() {
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ id, ...data }: { id: string; keyword?: string; content?: string; mediaId?: string | null }) => {
+        mutationFn: async ({ id, ...data }: UpdateAutoReplyInput) => {
             const res = await api.patch(`/quick-replies/auto/${id}`, data);
             return res.data.data;
         },

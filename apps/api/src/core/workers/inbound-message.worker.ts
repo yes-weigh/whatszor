@@ -339,40 +339,83 @@ export async function processInboundMessage(job: Job): Promise<void> {
                     if (autoReply) {
                         log.info({ keyword: autoReply.keyword, conversationId: conversation.id }, 'Auto-reply matched');
 
-                        if (autoReply.media?.url) {
-                            const mediaType = autoReply.media.type === 'image' ? 'IMAGE'
-                                : autoReply.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
-                            const mediaMsg = await prisma.message.create({
-                                data: {
-                                    conversationId: conversation.id,
-                                    direction: 'OUTBOUND',
-                                    type: mediaType,
-                                    content: null,
-                                    mediaData: { url: autoReply.media.url, fileName: autoReply.media.name } as any,
-                                    status: 'QUEUED',
-                                },
-                            });
-                            await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-media-${mediaMsg.id}`, {
-                                workspaceId, sessionId, messageId: mediaMsg.id, toJid: providerId,
-                                type: mediaType, content: null,
-                                mediaData: { url: autoReply.media.url, fileName: autoReply.media.name },
-                            });
-                        }
+                        // ── Template mode ─────────────────────────────────────
+                        if (autoReply.template) {
+                            const latestVersion = autoReply.template.versions?.[0];
+                            if (latestVersion) {
+                                const templatePayload = {
+                                    messageText: latestVersion.messageText,
+                                    footerText: latestVersion.footerText ?? undefined,
+                                    buttons: (latestVersion.buttons ?? []).map((b: any) => ({
+                                        label: b.label,
+                                        payload: b.payload,
+                                    })),
+                                    headerMediaUrl: latestVersion.media?.url ?? undefined,
+                                    headerMediaType: latestVersion.media?.type?.toUpperCase() ?? undefined,
+                                };
 
-                        const textMsg = await prisma.message.create({
-                            data: {
-                                conversationId: conversation.id,
-                                direction: 'OUTBOUND',
-                                type: 'TEXT',
-                                content: autoReply.content,
-                                status: 'QUEUED',
-                            },
-                        });
-                        await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-text-${textMsg.id}`, {
-                            workspaceId, sessionId, messageId: textMsg.id, toJid: providerId,
-                            type: 'TEXT', content: autoReply.content, mediaData: null,
-                        });
-                        autoReplied = true;
+                                const tplMsg = await prisma.message.create({
+                                    data: {
+                                        conversationId: conversation.id,
+                                        direction: 'OUTBOUND',
+                                        type: 'TEMPLATE',
+                                        content: latestVersion.messageText,
+                                        mediaData: { templatePayload } as any,
+                                        status: 'QUEUED',
+                                    },
+                                });
+                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-tpl-${tplMsg.id}`, {
+                                    workspaceId,
+                                    sessionId,
+                                    messageId: tplMsg.id,
+                                    toJid: providerId,
+                                    type: 'TEMPLATE',
+                                    content: latestVersion.messageText,
+                                    mediaData: { templatePayload },
+                                });
+                                autoReplied = true;
+                            } else {
+                                log.warn({ templateId: autoReply.templateId }, 'Auto-reply template has no versions — skipping');
+                            }
+                        } else {
+                            // ── Standard mode: media then text ───────────────
+                            if (autoReply.media?.url) {
+                                const mediaType = autoReply.media.type === 'image' ? 'IMAGE'
+                                    : autoReply.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
+                                const mediaMsg = await prisma.message.create({
+                                    data: {
+                                        conversationId: conversation.id,
+                                        direction: 'OUTBOUND',
+                                        type: mediaType,
+                                        content: null,
+                                        mediaData: { url: autoReply.media.url, fileName: autoReply.media.name } as any,
+                                        status: 'QUEUED',
+                                    },
+                                });
+                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-media-${mediaMsg.id}`, {
+                                    workspaceId, sessionId, messageId: mediaMsg.id, toJid: providerId,
+                                    type: mediaType, content: null,
+                                    mediaData: { url: autoReply.media.url, fileName: autoReply.media.name },
+                                });
+                            }
+
+                            if (autoReply.content) {
+                                const textMsg = await prisma.message.create({
+                                    data: {
+                                        conversationId: conversation.id,
+                                        direction: 'OUTBOUND',
+                                        type: 'TEXT',
+                                        content: autoReply.content,
+                                        status: 'QUEUED',
+                                    },
+                                });
+                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-text-${textMsg.id}`, {
+                                    workspaceId, sessionId, messageId: textMsg.id, toJid: providerId,
+                                    type: 'TEXT', content: autoReply.content, mediaData: null,
+                                });
+                            }
+                            autoReplied = true;
+                        }
                     }
                 } catch (arErr) {
                     log.warn({ err: arErr }, 'Auto-reply matching failed — continuing');

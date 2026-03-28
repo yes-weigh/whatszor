@@ -13,10 +13,19 @@ const UpdateQuickReplySchema = CreateQuickReplySchema.partial();
 
 const CreateAutoReplySchema = z.object({
     keyword: z.string().min(1).max(200),
-    content: z.string().min(1).max(2000),
+    content: z.string().max(2000).optional().default(''),
     mediaId: z.string().nullable().optional(),
+    templateId: z.string().nullable().optional(),
+}).refine(
+    (d) => !!d.templateId || (d.content && d.content.length > 0),
+    { message: 'Either content or a template must be provided', path: ['content'] },
+);
+const UpdateAutoReplySchema = z.object({
+    keyword: z.string().min(1).max(200).optional(),
+    content: z.string().max(2000).optional(),
+    mediaId: z.string().nullable().optional(),
+    templateId: z.string().nullable().optional(),
 });
-const UpdateAutoReplySchema = CreateAutoReplySchema.partial();
 
 export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
