@@ -57,7 +57,7 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
         finalType = 'TEMPLATE';
         finalContent = rendered.messageText; 
         
-        finalMediaId = rendered.headerMediaId || null;
+        finalMediaId = rendered.headerMediaId || undefined;
         finalMediaData = {
             templatePayload: rendered,
             footerText: rendered.footerText,

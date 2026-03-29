@@ -12,7 +12,7 @@ import { waManager } from '../../modules/whatsapp/whatsapp.service';
 import { logEvent } from '../event-logger';
 import { emit as realtimeEmit } from '../realtime';
 import { env } from '../../env';
-import { join, resolve } from 'path';
+import { resolve } from 'path';
 import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } from '../idempotency';
 
 const log = createLogger({ module: 'worker:outbound-messages' });
@@ -141,7 +141,6 @@ export async function processOutboundMessage(job: Job): Promise<void> {
         }
     }
 
-    try {
         const formattedJid = toJid.includes('@') ? toJid : `${toJid.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
         const result = await socket.sendMessage(formattedJid, payload);
 

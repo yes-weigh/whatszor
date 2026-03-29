@@ -257,8 +257,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
             }
             // ──────────────────────────────────────────────────────────────────
 
-            // ── In-progress logic wrapped in try-catch for release on error ──
-            try {
+            // ── Persist Message ─────────────────────────────────────────────
                 const createdMsg = await prisma.message.create({
                     data: {
                         conversationId: conversation.id,
