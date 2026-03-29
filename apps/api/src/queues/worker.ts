@@ -2,6 +2,8 @@ import { Worker } from 'bullmq';
 import { env } from '../env';
 import { logger } from '../core/logger';
 import { QueueName } from './index';
+import { requestContext } from '../core/context';
+import { getRedisClient } from '../core/redis';
 
 // ── Worker processors ─────────────────────────────────────────────────────────
 import { processInboundMessage } from '../core/workers/inbound-message.worker';
@@ -25,31 +27,43 @@ function buildConnection() {
         password: redisUrl.password || undefined,
         maxRetriesPerRequest: null,
         retryStrategy: (times: number) => Math.min(times * 200, 30_000),
-        reconnectOnError: (err: Error) => {
-            const reconnectCodes = ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'ECONNREFUSED'];
-            return reconnectCodes.some(code => err.message.includes(code) || (err as any).code === code);
-        },
-        enableOfflineQueue: false,
+    };
+}
+
+/**
+ * Wraps a processor with trace context management.
+ * Extracts traceId from job data and runs the processor inside a requestContext.
+ */
+function wrapProcessor(processor: any) {
+    return async (job: any) => {
+        const traceId = job.data?.traceId || `tr-job-${job.id}`;
+        return requestContext.run({ traceId }, async () => {
+            // Set job-specific trace on the logger for this execution
+            const jobLog = log.child({ traceId, jobId: job.id, queue: job.opts.queueName });
+            try {
+                return await processor(job);
+            } catch (err) {
+                jobLog.error({ err }, 'Processor exception');
+                throw err;
+            }
+        });
     };
 }
 
 function createWorker(queueName: QueueName, processor: any, concurrency: number): Worker {
-    const worker = new Worker(queueName, processor, {
+    const worker = new Worker(queueName, wrapProcessor(processor), {
         connection: buildConnection(),
         concurrency,
     });
 
     worker.on('active', (job) => {
-        log.info({ queue: queueName, jobId: job.id, name: job.name }, 'Job started');
+        log.info({ queue: queueName, jobId: job.id, name: job.name, traceId: job.data?.traceId }, 'Job started');
     });
     worker.on('completed', (job) => {
-        log.info({ queue: queueName, jobId: job.id, duration: job.finishedOn! - job.processedOn! }, 'Job completed');
+        log.info({ queue: queueName, jobId: job.id, duration: (job.finishedOn || 0) - (job.processedOn || 0) }, 'Job completed');
     });
     worker.on('failed', (job, err) => {
         log.error({ queue: queueName, jobId: job?.id, attemptsMade: job?.attemptsMade, err: err.message }, 'Job failed');
-    });
-    worker.on('error', (err) => {
-        log.error({ queue: queueName, err: err.message }, 'Worker error');
     });
 
     log.info({ queue: queueName, concurrency }, 'Worker registered');
@@ -57,16 +71,35 @@ function createWorker(queueName: QueueName, processor: any, concurrency: number)
 }
 
 let workers: Worker[] = [];
+let heartbeatTimer: NodeJS.Timeout | null = null;
+
+/** Starts the heartbeat loop to signify worker liveness. */
+async function startHeartbeat() {
+    const redis = getRedisClient();
+    const HEARTBEAT_KEY = 'worker:heartbeat';
+    const INTERVAL = 5000;
+    const TTL = 10;
+
+    const tick = async () => {
+        try {
+            await redis.set(HEARTBEAT_KEY, Date.now().toString(), 'EX', TTL);
+        } catch (err) {
+            log.warn({ err }, 'Worker heartbeat failed');
+        }
+    };
+
+    await tick();
+    heartbeatTimer = setInterval(tick, INTERVAL);
+    log.info({ interval: INTERVAL, ttl: TTL }, 'Worker heartbeat started');
+}
 
 export function startWorkers(): void {
     workers = [
-        // ── WhatsApp inbound pipeline ─────────────────────────────────────────
         createWorker(QueueName.INBOUND_MESSAGES, processInboundMessage, 5),
         createWorker(QueueName.OUTBOUND_MESSAGES, processOutboundMessage, 5),
         createWorker(QueueName.HISTORY_SYNC, processHistorySync, 1),
         createWorker(QueueName.CONTACTS_SYNC, processContactsSync, 2),
         createWorker(QueueName.SYSTEM_EVENTS, processSystemEvent, 3),
-        // ── Feature workers ───────────────────────────────────────────────────
         createWorker(QueueName.CAMPAIGN, processCampaignJob, 2),
         createWorker(QueueName.AUTOMATION, processAutomationJob, 5),
         createWorker(QueueName.AI, processAiJob, 3),
@@ -74,10 +107,15 @@ export function startWorkers(): void {
         createWorker(QueueName.KNOWLEDGE_INGESTION, processIncomingKnowledgeJob, 2),
     ];
 
+    startHeartbeat();
+
     log.info({ count: workers.length, queues: Object.values(QueueName) }, 'All workers started');
 }
 
 export async function stopWorkers(): Promise<void> {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
     await Promise.all(workers.map(w => w.close()));
     log.info('All workers stopped');
 }
+
+export { buildConnection };

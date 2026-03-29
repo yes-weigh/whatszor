@@ -3,14 +3,15 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import sensible from '@fastify/sensible';
 import rateLimit from '@fastify/rate-limit';
+import crypto from 'node:crypto';
+import * as Sentry from '@sentry/node';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { env } from '../env';
 import { logger } from './logger';
 import { getRedisClient } from './redis';
-import crypto from 'crypto';
-import * as Sentry from '@sentry/node';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { prisma } from '../prisma/client';
 import { getQueue, QueueName } from '../queues';
+import { requestContext } from './context';
 import { healthRoutes } from '../modules/health/health.route';
 import { authRoutes } from '../modules/auth/auth.route';
 import { workspaceRoutes } from '../modules/workspace/workspace.route';
@@ -33,7 +34,7 @@ import { quickReplyRoutes } from '../modules/quick-replies/quick-reply.route';
 import { errorHandler } from './error-handler';
 import mediaGalleryRoutes from '../modules/media/media-gallery.route';
 import { knowledgeRoutes } from '../modules/knowledge/knowledge.route';
-import messageTemplateRoutes from '../modules/template/template.route'; // Alias to avoid clash with automation templates
+import messageTemplateRoutes from '../modules/template/template.route'; 
 import { adminRoutes } from '../modules/admin/admin.routes';
 import { licenseRoutes } from '../modules/license/license.routes';
 
@@ -70,15 +71,22 @@ export async function createServer(): Promise<FastifyInstance> {
     // ── Structured Logging & Tracing ────────────────────────
 
     server.addHook('onRequest', async (request, _reply) => {
-        request.log = logger.child({ reqId: request.id });
-        request.log.info({
-            req: {
-                method: request.method,
-                url: request.url,
-                remoteAddress: request.ip,
-                hostname: request.hostname,
-            },
-        }, 'Incoming request');
+        const traceId = (request.headers['x-trace-id'] as string) || request.id;
+        request.log = logger.child({ traceId });
+        (request as any).traceId = traceId;
+
+        return new Promise<void>((resolve) => {
+            requestContext.run({ traceId }, () => {
+                request.log.info({
+                    req: {
+                        method: request.method,
+                        url: request.url,
+                        remoteAddress: request.ip,
+                    },
+                }, 'Incoming request');
+                resolve();
+            });
+        });
     });
 
     server.addHook('onResponse', async (request, reply) => {
@@ -109,8 +117,6 @@ export async function createServer(): Promise<FastifyInstance> {
         max: env.NODE_ENV === 'development' ? 3000 : 300,
         timeWindow: '1 minute',
         redis: getRedisClient(),
-        // SECURITY: Never trust client-provided headers for rate limit identity.
-        // Always derive key from the authenticated user's server-side context.
         keyGenerator: (req) => {
             const user = (req as any).user;
             if (user?.workspaceId) return `ws:${user.workspaceId}:${user.id}`;
@@ -225,7 +231,6 @@ export async function createServer(): Promise<FastifyInstance> {
         },
         { prefix: '/api/v1' },
     );
-
 
     // 404 handler
     server.setNotFoundHandler((_req, reply) => {

@@ -1,7 +1,6 @@
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { prisma } from '../../prisma/client';
 import { getRedisClient } from '../../core/redis';
-
 import { env } from '../../env';
 import { getAllQueues } from '../../queues/index';
 import { waManager } from '../whatsapp/whatsapp.service';
@@ -24,7 +23,6 @@ export const healthRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
             success: true,
             data: {
                 status: 'ok',
-                version: '0.1.0',
                 uptime: Math.floor(process.uptime()),
                 timestamp: new Date().toISOString(),
             },
@@ -33,29 +31,47 @@ export const healthRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
 
     /**
      * GET /health/ready
-     * Readiness probe — checks DB and Redis connectivity.
+     * Readiness probe — checks DB, Redis, and Worker heartbeat.
      */
     fastify.get('/ready', async (_req, reply) => {
-        const checks: Record<string, 'ok' | 'error'> = {};
+        const checks: Record<string, { status: 'ok' | 'error' | 'stale'; latencyMs?: number }> = {};
+        const redis = getRedisClient();
 
-        // Check PostgreSQL
+        // 1. PostgreSQL Check & Latency
+        const dbStart = Date.now();
         try {
             await prisma.$queryRaw`SELECT 1`;
-            checks.database = 'ok';
+            checks.database = { status: 'ok', latencyMs: Date.now() - dbStart };
         } catch {
-            checks.database = 'error';
+            checks.database = { status: 'error' };
         }
 
-        // Check Redis
+        // 2. Redis Check & Latency
+        const redisStart = Date.now();
         try {
-            const redis = getRedisClient();
             await redis.ping();
-            checks.redis = 'ok';
+            checks.redis = { status: 'ok', latencyMs: Date.now() - redisStart };
         } catch {
-            checks.redis = 'error';
+            checks.redis = { status: 'error' };
         }
 
-        const allHealthy = Object.values(checks).every((v) => v === 'ok');
+        // 3. Worker Heartbeat Check
+        try {
+            const lastHeartbeat = await redis.get('worker:heartbeat');
+            if (lastHeartbeat) {
+                const ageMs = Date.now() - parseInt(lastHeartbeat, 10);
+                checks.worker = { 
+                    status: ageMs < 10000 ? 'ok' : 'stale',
+                    latencyMs: ageMs 
+                };
+            } else {
+                checks.worker = { status: 'error' };
+            }
+        } catch {
+            checks.worker = { status: 'error' };
+        }
+
+        const allHealthy = Object.values(checks).every((c) => c.status === 'ok');
 
         return reply.status(allHealthy ? 200 : 503).send({
             success: allHealthy,
@@ -69,15 +85,21 @@ export const healthRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
 
     /**
      * GET /health/queues
-     * Returns stats for all BullMQ queues.
+     * Returns stats for all BullMQ queues including backlog and staleness detection.
      */
     fastify.get('/queues', async (_req, reply) => {
         const queues = getAllQueues();
         const stats: Record<string, any> = {};
 
         for (const [name, queue] of queues.entries()) {
-            const jobCounts = await queue.getJobCounts('wait', 'active', 'completed', 'failed', 'delayed');
-            stats[name] = jobCounts;
+            const counts = await queue.getJobCounts('wait', 'active', 'completed', 'failed', 'delayed');
+            const waiting = await queue.getWaitingCount();
+            
+            stats[name] = {
+                ...counts,
+                isStalled: counts.active > 0 && waiting > 100, // Simple heuristic for stall detection
+                backlogLevel: waiting > 1000 ? 'critical' : waiting > 100 ? 'warning' : 'nominal'
+            };
         }
 
         return reply.status(200).send({

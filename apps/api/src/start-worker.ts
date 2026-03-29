@@ -17,7 +17,13 @@ import { startWorkers, stopWorkers } from './queues/worker';
 const log = logger.child({ module: 'worker-bootstrap' });
 
 async function bootstrap() {
-    log.info(`Starting Whatsvue Worker Process [${env.NODE_ENV}]`);
+    log.info(`Starting Whatsvue Worker Process [${env.NODE_ENV}] [Role: ${env.CONTAINER_ROLE}]`);
+
+    // 0. Enforce role isolation
+    if (env.CONTAINER_ROLE !== 'worker') {
+        log.fatal(`FATAL: Worker process started with CONTAINER_ROLE=${env.CONTAINER_ROLE}. Only 'worker' is allowed here.`);
+        process.exit(1);
+    }
 
     // 1. Connect Redis
     await connectRedis();

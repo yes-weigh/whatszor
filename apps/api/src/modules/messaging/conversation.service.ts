@@ -273,6 +273,7 @@ export async function sendMessage(
             type: input.type,
             content: input.content ?? null,
             mediaData: resolvedMediaData,
+            mediaGalleryId: anyInput.mediaGalleryId || null,
             status: 'QUEUED',
             senderUserId: userId,
         },
@@ -285,7 +286,8 @@ export async function sendMessage(
         toJid: conversation.providerId,
         type: message.type,
         content: message.content,
-        mediaData: message.mediaData
+        mediaData: message.mediaData,
+        mediaGalleryId: message.mediaGalleryId
     });
 
     // Update conversation summary

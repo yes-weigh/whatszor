@@ -6,6 +6,7 @@ import { logger } from '../../core/logger';
 import { EventEmitter } from 'events';
 import { prisma } from '../../prisma/client';
 import { ANTIBAN_CONFIG, loadWarmUpState, registerWrappedSocket, persistWarmUpState, removeAntiBan } from '../../core/antiban';
+import { notificationService } from '../../core/notification.service';
 
 const log = logger.child({ module: 'whatsapp-manager' });
 
@@ -159,6 +160,15 @@ class WhatsAppManager extends EventEmitter {
                     setTimeout(() => this.connect(sessionId, workspaceId), 5000);
                 } else {
                     log.warn({ sessionId }, 'Session logged out.');
+                    // CRITICAL: Notify about primary account logout
+                    await notificationService.notify({
+                        event: 'WHATSAPP_SESSION_LOGOUT',
+                        priority: 'CRITICAL',
+                        message: `WhatsApp session logged out: ${sessionId}`,
+                        metadata: { sessionId, workspaceId },
+                        timestamp: new Date().toISOString(),
+                    });
+                    
                     await prisma.whatsAppAccount.updateMany({
                         where: { sessionId },
                         data: { status: 'DISCONNECTED', phoneNumber: null },

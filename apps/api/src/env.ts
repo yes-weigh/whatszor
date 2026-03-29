@@ -37,12 +37,18 @@ const envSchema = z.object({
     HEALTH_SECRET: z.string().default('dev-health-secret'),
 
     // Production Configs
+    /** @deprecated Embedded auth in REDIS_URL is now preferred. */
     REDIS_PASSWORD: z.string().optional(),
     REDIS_TLS: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
     DATABASE_CONNECTION_LIMIT: z.string().default('10').transform(Number),
     RATE_LIMIT_MAX: z.string().default('300').transform(Number),
     RATE_LIMIT_WINDOW: z.string().default('1 minute'),
     WORKER_ENABLED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+
+    /** Strictly defines the container role to prevent accidental overlap in production. */
+    CONTAINER_ROLE: z.enum(['api', 'worker']).default('api'),
+    SERVICE_NAME: z.string().default('whatszor-api'),
+    ALERT_WEBHOOK_URL: z.string().url().optional(),
 
     // S3 Storage
     STORAGE_PROVIDER: z.enum(['local', 's3']).default('local'),

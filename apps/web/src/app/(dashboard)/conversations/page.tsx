@@ -11,9 +11,10 @@ import { useQuickReplies } from '@/hooks/use-quick-replies';
 import {
     MessageSquare, Search, Send, Phone, CheckCheck, Check,
     Smartphone, ChevronDown, X, Loader2, Circle, Download, FileText, Zap,
-    Paperclip, PenSquare, FileImage, Sparkles
+    Paperclip, PenSquare, FileImage, Sparkles, Upload, Image as GalleryIcon
 } from 'lucide-react';
 import TemplatePickerModal from './TemplatePickerModal';
+import { MediaGalleryPicker } from '@/components/media/MediaGalleryPicker';
 
 
 // ── Types ────────────────────────────────────────────────────
@@ -400,8 +401,10 @@ function MessageBubble({ msg, onApprove, onEdit, onGenerateReply, isLastInbound 
 
 export default function ConversationsPage() {
     const router = useRouter();
-    const { hasPermission } = useAuthStore();
+    const hasPermission = useAuthStore(s => s.hasPermission);
+    const canReadMedia = hasPermission('media:manage');
     const qc = useQueryClient();
+
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null); // null = All
     const [search, setSearch] = useState('');
@@ -412,9 +415,14 @@ export default function ConversationsPage() {
     const [showTemplatePicker, setShowTemplatePicker] = useState(false);
     const [showNewChat, setShowNewChat] = useState(false);
     const [newChatSearch, setNewChatSearch] = useState('');
-    const [attachUploading, setAttachUploading] = useState(false);
+    
     // Media attached from quick reply selection
     const [pendingQrMedia, setPendingQrMedia] = useState<{ id: string; name: string; type: string } | null>(null);
+
+    // Attachment State Machine: IDLE | MENU | UPLOADING | GALLERY
+    type AttachMode = 'IDLE' | 'MENU' | 'UPLOADING' | 'GALLERY';
+    const [attachMode, setAttachMode] = useState<AttachMode>('IDLE');
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -790,7 +798,7 @@ export default function ConversationsPage() {
                 onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file || !selectedConv) return;
-                    setAttachUploading(true);
+                    setAttachMode('UPLOADING');
                     try {
                         const fd = new FormData();
                         fd.append('file', file);
@@ -807,7 +815,10 @@ export default function ConversationsPage() {
                             qc.invalidateQueries({ queryKey: ['messages', selectedConv.id] });
                         }
                     } catch (err) { console.error('Attachment upload failed:', err); }
-                    finally { setAttachUploading(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+                    finally { 
+                        setAttachMode('IDLE'); 
+                        if (fileInputRef.current) fileInputRef.current.value = ''; 
+                    }
                 }}
             />
 
@@ -1133,16 +1144,46 @@ export default function ConversationsPage() {
                                 </div>
 
                                 {/* Media Attachment */}
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={attachUploading}
-                                    title="Attach file"
-                                    className="w-10 h-10 rounded-xl bg-elevated border border-theme hover:bg-hover flex items-center justify-center transition-colors text-muted hover:text-accent shrink-0 disabled:opacity-40"
-                                >
-                                    {attachUploading
-                                        ? <Loader2 size={16} className="animate-spin" />
-                                        : <Paperclip size={16} />}
-                                </button>
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setAttachMode(prev => prev === 'MENU' ? 'IDLE' : 'MENU')}
+                                        disabled={attachMode === 'UPLOADING'}
+                                        title="Attach file"
+                                        className={`w-10 h-10 rounded-xl bg-elevated border border-theme hover:bg-hover flex items-center justify-center transition-colors shrink-0 disabled:opacity-40 ${
+                                            attachMode === 'MENU' ? 'text-accent border-accent/30' : 'text-muted hover:text-accent'
+                                        }`}
+                                    >
+                                        {attachMode === 'UPLOADING'
+                                            ? <Loader2 size={16} className="animate-spin text-accent" />
+                                            : <Paperclip size={16} />}
+                                    </button>
+
+                                    {/* Attachment Menu */}
+                                    {attachMode === 'MENU' && (
+                                        <div className="absolute bottom-full mb-2 left-0 w-48 bg-elevated border border-theme rounded-xl shadow-xl overflow-hidden z-20 flex flex-col p-1 animate-in slide-in-from-bottom-2 duration-150">
+                                            <button
+                                                onClick={() => {
+                                                    setAttachMode('IDLE');
+                                                    fileInputRef.current?.click();
+                                                }}
+                                                className="flex items-center gap-2.5 px-3 py-2 text-sm text-primary hover:bg-hover rounded-lg transition-colors text-left"
+                                            >
+                                                <Upload size={14} className="text-muted" />
+                                                <span>Upload from Device</span>
+                                            </button>
+                                            
+                                            {canReadMedia && (
+                                                <button
+                                                    onClick={() => setAttachMode('GALLERY')}
+                                                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-primary hover:bg-hover rounded-lg transition-colors text-left"
+                                                >
+                                                    <GalleryIcon size={14} className="text-muted" />
+                                                    <span>Choose from Gallery</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
 
                                 <textarea
                                     value={replyText}
@@ -1188,6 +1229,27 @@ export default function ConversationsPage() {
                         }}
                     />
                 )}
+
+                <MediaGalleryPicker 
+                    isOpen={attachMode === 'GALLERY'}
+                    onClose={() => setAttachMode('IDLE')}
+                    onSelect={async (media) => {
+                        if (!selectedConv) return;
+                        setAttachMode('UPLOADING');
+                        try {
+                            await api.post(`/conversations/${selectedConv.id}/messages`, {
+                                type: media.type === 'image' ? 'IMAGE' : media.type === 'video' ? 'VIDEO' : 'DOCUMENT',
+                                mediaGalleryId: media.id,
+                                sessionId: replySession,
+                            });
+                            qc.invalidateQueries({ queryKey: ['messages', selectedConv.id] });
+                        } catch (err) {
+                            console.error('Gallery selection failed:', err);
+                        } finally {
+                            setAttachMode('IDLE');
+                        }
+                    }}
+                />
             </div>
         </div >
     );

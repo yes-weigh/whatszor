@@ -1,6 +1,7 @@
 import Redis from 'ioredis';
 import { env } from '../env';
 import { logger } from './logger';
+import { notificationService } from './notification.service';
 
 const log = logger.child({ module: 'redis' });
 
@@ -8,6 +9,7 @@ let redisClient: Redis | null = null;
 
 export function createRedisClient(): Redis {
     const client = new Redis(env.REDIS_URL, {
+        ...(env.REDIS_PASSWORD ? { password: env.REDIS_PASSWORD } : {}),
         maxRetriesPerRequest: null,   // Required for BullMQ
         enableReadyCheck: true,
         lazyConnect: true,
@@ -30,7 +32,12 @@ export function createRedisClient(): Redis {
 
     client.on('connect', () => log.info('Redis connecting...'));
     client.on('ready', () => log.info('Redis connected and ready'));
-    client.on('error', (err) => log.error({ err }, 'Redis error'));
+    client.on('error', (err) => {
+        log.error({ err }, 'Redis error');
+        if (err.message.includes('ECONNREFUSED') || err.message.includes('ENOTFOUND')) {
+            notificationService.notifyFatal('Redis connection failed', { error: err.message });
+        }
+    });
     client.on('close', () => log.warn('Redis connection closed'));
     client.on('reconnecting', () => log.warn('Redis reconnecting...'));
 

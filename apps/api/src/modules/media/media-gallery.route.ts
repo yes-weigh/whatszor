@@ -21,10 +21,10 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
     const storageProvider = getStorageProvider();
 
     /**
-     * @route POST /api/v1/media-gallery
-     * @desc Uploads a new media asset
+     * Internal handler for media uploads to avoid logic duplication
+     * Supports both POST / and POST /upload
      */
-    fastify.post('/', { preHandler: [authenticate, requireRole('media:manage')] }, async (request, reply) => {
+    const handleUpload = async (request: any, reply: any) => {
         const workspaceId = request.user?.workspaceId;
         if (!workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
@@ -57,8 +57,6 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
              });
         }
 
-        // We can parse fields. Note: in real multipart, fields are accessed via `data.fields` 
-        // Example: Category, language parsing if sent alongside the file in FormData.
         const category = (data.fields.category as any)?.value || null;
         const language = (data.fields.language as any)?.value || null;
 
@@ -71,8 +69,8 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         const media = await prisma.media.create({
             data: {
                 workspaceId,
-                name: data.filename, // Default name to filename, can be PATCHed later
-                storageProvider: 'local', // Assuming local for now, could be dynamic
+                name: data.filename,
+                storageProvider: 'local',
                 storageKey: uploadResult.storageKey,
                 url: uploadResult.url,
                 type,
@@ -83,11 +81,16 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
             }
         });
 
-        // Optional hooks for background processing (BullMQ) could be triggered here
-        // e.g. await mediaProcessingQueue.add('generate-thumbnail', { mediaId: media.id });
+        return reply.status(201).send({ success: true, data: media });
+    };
 
-        return reply.status(201).send(media);
-    });
+    /**
+     * @route POST /api/v1/media-gallery
+     * @route POST /api/v1/media-gallery/upload
+     * @desc Uploads a new media asset (Supports legacy /upload path)
+     */
+    fastify.post('/', { preHandler: [authenticate, requireRole('media:manage')] }, handleUpload);
+    fastify.post('/upload', { preHandler: [authenticate, requireRole('media:manage')] }, handleUpload);
 
     /**
      * @route GET /api/v1/media-gallery

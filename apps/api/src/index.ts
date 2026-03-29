@@ -23,7 +23,13 @@ import { waManager } from './modules/whatsapp/whatsapp.service';
 const log = logger.child({ module: 'bootstrap' });
 
 async function bootstrap() {
-    log.info(`Starting Whatsvue API [${env.NODE_ENV}]`);
+    log.info(`Starting Whatsvue API [${env.NODE_ENV}] [Role: ${env.CONTAINER_ROLE}]`);
+
+    // 0. Enforce role isolation
+    if (env.CONTAINER_ROLE === 'worker') {
+        log.fatal('FATAL: API process started with CONTAINER_ROLE=worker. Use start-worker.js instead.');
+        process.exit(1);
+    }
 
     // 1. Connect Redis
     await connectRedis();

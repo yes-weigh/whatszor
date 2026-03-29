@@ -401,6 +401,9 @@ model Message {
   // Relationships
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  // Track if this message was sent from the Media Gallery
+  mediaGalleryId String? @map("media_gallery_id")
+
   // Tracking who sent an outbound message (AI, System, or a specific User)
   senderUserId String? @map("sender_user_id")
 

@@ -22,9 +22,15 @@ export const logger = pino(
     {
         level: env.LOG_LEVEL,
         base: {
+            service: env.SERVICE_NAME,
             env: env.NODE_ENV,
+            role: env.CONTAINER_ROLE,
         },
         timestamp: pino.stdTimeFunctions.isoTime,
     },
     transport ? pino.transport(transport) : undefined,
 );
+
+/** Helper to add trace contextual metadata. */
+export const withTrace = (traceId: string) => logger.child({ traceId });
+
