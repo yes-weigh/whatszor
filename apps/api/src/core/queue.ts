@@ -35,10 +35,18 @@ export function initializeWorkers(): void {
     waManager.on('messages', async (data) => {
         try {
             const { workspaceId, sessionId, messages } = data;
-            await getQueue(QueueName.INBOUND_MESSAGES).add(
-                `inbound-${workspaceId}-${Date.now()}`,
-                { workspaceId, sessionId, messages },
-            );
+            for (const msg of messages) {
+                const messageId = msg.key.id;
+                const remoteJid = msg.key.remoteJid;
+                if (!messageId || !remoteJid) continue;
+
+                const jobId = `wa:${workspaceId}:${remoteJid}:${messageId}`;
+                await getQueue(QueueName.INBOUND_MESSAGES).add(
+                    jobId,
+                    { workspaceId, sessionId, messages: [msg] }, // Process one by one for strict idempotency
+                    { jobId }
+                );
+            }
         } catch (error) {
             log.error({ error, data }, 'Failed to enqueue inbound messages');
         }

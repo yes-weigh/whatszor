@@ -11,7 +11,7 @@ export interface RenderContext {
 export interface RenderedTemplate {
     messageText: string;
     footerText: string | null;
-    headerMediaUrl: string | null;
+    headerMediaId: string | null;
     headerMediaType: string | null;
     buttons: Array<{ type: string; label: string; payload?: string }>;
 }
@@ -82,13 +82,11 @@ export async function renderTemplateVersion(
     const finalMessageText = parseVariables(version.messageText, context);
     
     // 2. Resolve Header Media
-    let headerMediaUrl = null;
+    let headerMediaId: string | null = null;
     let headerMediaType = null;
     
     if (version.media) {
-        // Here we rely on the DB url. If we need a short-lived signed URL,
-        // we would call storageProvider.getUrl(version.media.storageKey) instead.
-        headerMediaUrl = version.media.url;
+        headerMediaId = version.media.id;
         headerMediaType = version.media.type;
     }
 
@@ -102,7 +100,7 @@ export async function renderTemplateVersion(
     return {
         messageText: finalMessageText,
         footerText: version.footerText,
-        headerMediaUrl,
+        headerMediaId,
         headerMediaType,
         buttons
     };

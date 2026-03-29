@@ -21,7 +21,7 @@ export interface ComposeMessageRequest {
     // Direct content (mutually exclusive with templateVersionId)
     type?: 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | 'AUDIO' | 'TEMPLATE';
     content?: string;
-    mediaUrl?: string; // Standard direct media
+    mediaId?: string; // Standard direct media reference
     
     // Template content (mutually exclusive with Direct content)
     templateVersionId?: string;
@@ -37,7 +37,7 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
     const { 
         workspaceId, conversationId, senderUserId,
         providerId, sessionId, campaignId, delay,
-        type, content, mediaUrl, 
+        type, content, mediaId, 
         templateVersionId, templateVariables 
     } = request;
 
@@ -47,6 +47,7 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
     let finalType = type || 'TEXT';
     let finalContent = content;
     let finalMediaData: any = null;
+    let finalMediaId = mediaId;
 
     if (templateVersionId) {
         log.debug({ templateVersionId }, 'Resolving template version');
@@ -56,16 +57,14 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
         finalType = 'TEMPLATE';
         finalContent = rendered.messageText; 
         
+        finalMediaId = rendered.headerMediaId || null;
         finalMediaData = {
             templatePayload: rendered,
             footerText: rendered.footerText,
-            headerMediaUrl: rendered.headerMediaUrl,
+            headerMediaId: rendered.headerMediaId,
             headerMediaType: rendered.headerMediaType,
             buttons: rendered.buttons
         };
-    } else if (mediaUrl) {
-        // Direct media send (not through template)
-        finalMediaData = { url: mediaUrl };
     }
 
     // 2. Persist the Domain Message to DB 
@@ -78,6 +77,7 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
             type: finalType as any,
             content: finalContent,
             mediaData: finalMediaData,
+            mediaId: finalMediaId || null,
             status: 'QUEUED', // Status transitions PENDING -> QUEUED -> SENT -> DELIVERED
             senderUserId
         }
@@ -86,7 +86,7 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
     log.info({ messageId: message.id }, 'Outbound message enqueued locally');
 
     // 3. Dispatch to final Message Worker
-    await outboundMessagesQueue.add(`send-${message.id}`, {
+    await (outboundMessagesQueue as any).add(`send-${message.id}`, {
         workspaceId,
         messageId: message.id,
         toJid: providerId,
@@ -94,6 +94,7 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
         type: message.type,
         content: message.content,
         mediaData: message.mediaData,
+        mediaId: message.mediaId,
         campaignId
     }, { delay: delay || 0 });
 

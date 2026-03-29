@@ -22,8 +22,8 @@ export const UpdateConversationSchema = z.object({
 export const SendMessageSchema = z.object({
     type: z.enum(['TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT', 'AUDIO', 'TEMPLATE', 'SYSTEM']).default('TEXT'),
     content: z.string().optional().nullable(),
-    mediaData: z.record(z.unknown()).optional().nullable(),
-    mediaGalleryId: z.string().optional().nullable(), // Media Gallery item ID — resolved server-side to real file path
+    mediaData: z.record(z.unknown()).optional().nullable(), // Strictly for metadata (fileName, caption). NO URLS.
+    mediaId: z.string().optional().nullable(), // Media Gallery item ID — mandatory for binary types
     fileName: z.string().optional().nullable(), // Optional filename hint for media
     sessionId: z.string().optional().nullable(), // Which WhatsApp account to send from
     templateVersionId: z.string().optional(),

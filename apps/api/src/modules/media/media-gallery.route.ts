@@ -27,13 +27,13 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
     const handleUpload = async (request: any, reply: any) => {
         const workspaceId = request.user?.workspaceId;
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ message: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED }, 401);
         }
 
         const data = await request.file();
         
         if (!data) {
-             return reply.status(400).send({ error: 'Bad Request', message: 'No file uploaded' });
+             return reply.sendError({ message: 'No file uploaded', code: 'BAD_REQUEST' }, 400);
         }
 
         const mimeType = data.mimetype;
@@ -51,10 +51,10 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         const buffer = await data.toBuffer();
         
         if (buffer.length > maxSize) {
-             return reply.status(400).send({ 
-                 error: 'Bad Request', 
-                 message: `File size exceeds the limit for ${type}. Max allowed is ${maxSize / (1024*1024)}MB.`
-             });
+             return reply.sendError({ 
+                 message: `File size exceeds the limit for ${type}. Max allowed is ${maxSize / (1024*1024)}MB.`,
+                 code: 'BAD_REQUEST'
+             }, 400);
         }
 
         const category = (data.fields.category as any)?.value || null;
@@ -81,7 +81,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
             }
         });
 
-        return reply.status(201).send({ success: true, data: media });
+        return reply.sendSuccess(media, 201);
     };
 
     /**
@@ -99,7 +99,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
     fastify.get('/', { preHandler: [authenticate] }, async (request, reply) => {
         const workspaceId = request.user?.workspaceId;
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ message: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED }, 401);
         }
 
         const query = request.query as any;
@@ -120,7 +120,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
             orderBy: { createdAt: 'desc' }
         });
 
-        return reply.send({ media });
+        return reply.sendSuccess({ media });
     });
 
     /**
@@ -142,7 +142,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         const { id } = request.params as { id: string };
 
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ message: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED }, 401);
         }
 
         const media = await prisma.media.findUnique({
@@ -150,7 +150,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         });
 
         if (!media) {
-            return reply.status(404).send({ error: 'Not Found', message: 'Media not found or unauthorized' });
+            return reply.sendError({ message: 'Media not found or unauthorized', code: 'NOT_FOUND' }, 404);
         }
 
         // Let the storage adapter handle resolving the correct path and streaming
@@ -173,7 +173,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         const { id } = request.params as { id: string };
 
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ message: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED }, 401);
         }
 
         const media = await prisma.media.findUnique({
@@ -181,7 +181,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         });
 
         if (!media) {
-            return reply.status(404).send({ error: 'Not Found', message: 'Media not found' });
+            return reply.sendError({ message: 'Media not found', code: 'NOT_FOUND' }, 404);
         }
 
         // Delete from storage
@@ -205,7 +205,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         const body = request.body as any;
 
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ message: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED }, 401);
         }
 
         // Make sure it belongs to workspace
@@ -214,7 +214,7 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         });
 
         if (!existing) {
-             return reply.status(404).send({ error: 'Not Found' });
+             return reply.sendError({ message: 'Media not found', code: 'NOT_FOUND' }, 404);
         }
 
         const data: any = {};
@@ -227,6 +227,6 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
             data
         });
 
-        return reply.send(updated);
+        return reply.sendSuccess(updated);
     });
 }

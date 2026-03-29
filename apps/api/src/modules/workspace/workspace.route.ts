@@ -21,7 +21,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
      */
     fastify.get('/me', async (req, reply) => {
         const workspace = await getWorkspace(req.user.workspaceId);
-        return reply.send({ success: true, data: workspace });
+        return reply.sendSuccess(workspace);
     });
 
     /**
@@ -34,7 +34,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
         async (req, reply) => {
             const body = UpdateWorkspaceSchema.parse(req.body);
             const workspace = await updateWorkspace(req.user.workspaceId, body);
-            return reply.send({ success: true, data: workspace });
+            return reply.sendSuccess(workspace);
         },
     );
 
@@ -44,7 +44,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
      */
     fastify.get('/me/members', async (req, reply) => {
         const members = await listMembers(req.user.workspaceId);
-        return reply.send({ success: true, data: members });
+        return reply.sendSuccess(members);
     });
 
     /**
@@ -57,7 +57,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
         async (req, reply) => {
             const body = InviteMemberSchema.parse(req.body);
             const member = await inviteMember(req.user.workspaceId, body);
-            return reply.status(201).send({ success: true, data: member });
+            return reply.sendSuccess(member, 201);
         },
     );
 
@@ -71,7 +71,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
         async (req, reply) => {
             const { memberId } = req.params as { memberId: string };
             await removeMember(req.user.workspaceId, memberId, req.user.sub);
-            return reply.status(200).send({ success: true, data: { message: 'Member removed' } });
+            return reply.sendSuccess({ message: 'Member removed' });
         },
     );
 
@@ -86,7 +86,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
             const { memberId } = req.params as { memberId: string };
             const { role } = req.body as { role: import('@prisma/client').UserRole };
             const updated = await updateMemberRole(req.user.workspaceId, memberId, role);
-            return reply.status(200).send({ success: true, data: updated });
+            return reply.sendSuccess(updated);
         },
     );
 };

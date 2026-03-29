@@ -33,9 +33,16 @@ const processQueue = (error: any, token: string | null = null) => {
     failedQueue = [];
 };
 
-// On 401, check refresh token, otherwise redirect
+// Intercept responses to unwrap the standardized ApiResponse wrapper
 api.interceptors.response.use(
-    (res) => res,
+    (res) => {
+        // If the response matches our standard wrapper, unwrap the data field
+        if (res.data && typeof res.data === 'object' && res.data.success === true && 'data' in res.data) {
+            // We replace res.data with the inner data payload to keep existing hooks working
+            res.data = res.data.data;
+        }
+        return res;
+    },
     async (err) => {
         const originalRequest = err.config;
 

@@ -9,12 +9,13 @@
  * 5. Register graceful shutdown hooks
  */
 import { env } from './env';
-import { logger } from './core/logger';
+import { createLogger } from './core/logger';
+import { alertWorkerCrash } from './core/alert';
 import { connectRedis, disconnectRedis } from './core/redis';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
 import { startWorkers, stopWorkers } from './queues/worker';
 
-const log = logger.child({ module: 'worker-bootstrap' });
+const log = createLogger({ module: 'worker-bootstrap', action: 'startup' });
 
 async function bootstrap() {
     log.info(`Starting Whatsvue Worker Process [${env.NODE_ENV}] [Role: ${env.CONTAINER_ROLE}]`);
@@ -60,18 +61,20 @@ async function bootstrap() {
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-    process.on('uncaughtException', (err) => {
+    process.on('uncaughtException', async (err) => {
         log.fatal({ err }, 'Uncaught exception in worker');
+        await alertWorkerCrash(err).catch(() => {});
         process.exit(1);
     });
 
-    process.on('unhandledRejection', (reason) => {
+    process.on('unhandledRejection', async (reason) => {
         log.fatal({ reason }, 'Unhandled promise rejection in worker');
+        await alertWorkerCrash(reason).catch(() => {});
         process.exit(1);
     });
 }
 
 bootstrap().catch((err) => {
-    logger.fatal({ err }, 'Failed to start worker process');
+    createLogger({ module: 'worker-bootstrap', action: 'startup' }).fatal({ err }, 'Failed to start worker process');
     process.exit(1);
 });

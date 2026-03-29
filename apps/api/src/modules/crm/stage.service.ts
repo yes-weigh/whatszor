@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import type { CreateStageInput, UpdateStageInput } from '@whatszor/shared';
-import { ErrorCodes } from '@whatszor/shared';
+import { ErrorCodes, createError } from '@whatszor/shared';
 import { getPipeline } from './pipeline.service';
 
 export async function createStage(workspaceId: string, input: CreateStageInput) {
@@ -60,9 +60,3 @@ export async function deleteStage(workspaceId: string, stageId: string) {
     await prisma.stage.delete({ where: { id: stageId } });
 }
 
-function createError(message: string, code: string, statusCode: number) {
-    const err = new Error(message) as Error & { code: string; statusCode: number };
-    err.code = code;
-    err.statusCode = statusCode;
-    return err;
-}

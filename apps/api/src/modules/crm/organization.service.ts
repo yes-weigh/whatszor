@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import type { CreateOrganizationInput, UpdateOrganizationInput } from '@whatszor/shared';
-import { ErrorCodes } from '@whatszor/shared';
+import { ErrorCodes, createError } from '@whatszor/shared';
 import { Prisma } from '@prisma/client';
 
 export async function createOrganization(workspaceId: string, input: CreateOrganizationInput) {
@@ -62,9 +62,3 @@ export async function deleteOrganization(workspaceId: string, orgId: string) {
     await prisma.organization.delete({ where: { id: orgId } });
 }
 
-function createError(message: string, code: string, statusCode: number) {
-    const err = new Error(message) as Error & { code: string; statusCode: number };
-    err.code = code;
-    err.statusCode = statusCode;
-    return err;
-}

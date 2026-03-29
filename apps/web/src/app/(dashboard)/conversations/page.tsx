@@ -553,7 +553,7 @@ export default function ConversationsPage() {
                 const msgType = pendingQrMedia.type === 'image' ? 'IMAGE' : pendingQrMedia.type === 'video' ? 'VIDEO' : 'DOCUMENT';
                 await api.post(`/conversations/${selectedConv.id}/messages`, {
                     type: msgType,
-                    mediaGalleryId: pendingQrMedia.id,
+                    mediaId: pendingQrMedia.id,
                     fileName: pendingQrMedia.name,
                     sessionId: replySession,
                 });
@@ -804,11 +804,11 @@ export default function ConversationsPage() {
                         fd.append('file', file);
                         fd.append('category', file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document');
                         const uploadRes = await api.post('/media-gallery/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-                        const mediaUrl = uploadRes.data?.data?.url;
-                        if (mediaUrl) {
+                        const mediaId = uploadRes.data?.data?.id;
+                        if (mediaId) {
                             await api.post(`/conversations/${selectedConv.id}/messages`, {
                                 type: file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : 'DOCUMENT',
-                                mediaUrl,
+                                mediaId,
                                 fileName: file.name,
                                 sessionId: replySession,
                             });
@@ -1239,7 +1239,7 @@ export default function ConversationsPage() {
                         try {
                             await api.post(`/conversations/${selectedConv.id}/messages`, {
                                 type: media.type === 'image' ? 'IMAGE' : media.type === 'video' ? 'VIDEO' : 'DOCUMENT',
-                                mediaGalleryId: media.id,
+                                mediaId: media.id,
                                 sessionId: replySession,
                             });
                             qc.invalidateQueries({ queryKey: ['messages', selectedConv.id] });

@@ -35,9 +35,9 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
             if (!sock) return reply.send({ success: true, data: null });
 
             const url = await sock.profilePictureUrl(jid, 'image').catch(() => null);
-            return reply.send({ success: true, data: url });
+            return reply.sendSuccess(url);
         } catch {
-            return reply.send({ success: true, data: null });
+            return reply.sendSuccess(null);
         }
     });
 
@@ -46,26 +46,26 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
     fastify.post('/', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
         const input = CreateConversationSchema.parse(req.body);
         const conv = await conversationService.createOrGetConversation(req.user.workspaceId, input);
-        return reply.status(200).send({ success: true, data: conv });
+        return reply.sendSuccess(conv);
     });
 
     fastify.get('/', async (req, reply) => {
         const { sessionId } = req.query as { sessionId?: string };
         const result = await conversationService.listConversations(req.user.workspaceId, sessionId);
-        return reply.send({ success: true, data: result });
+        return reply.sendSuccess(result);
     });
 
     fastify.get('/:id', async (req, reply) => {
         const { id } = req.params as { id: string };
         const conv = await conversationService.getConversation(req.user.workspaceId, id);
-        return reply.send({ success: true, data: conv });
+        return reply.sendSuccess(conv);
     });
 
     fastify.patch('/:id', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const input = UpdateConversationSchema.parse(req.body);
         const conv = await conversationService.updateConversation(req.user.workspaceId, id, input);
-        return reply.send({ success: true, data: conv });
+        return reply.sendSuccess(conv);
     });
 
     // ── Messages within a Conversation ──
@@ -73,26 +73,26 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
     fastify.get('/:id/messages', async (req, reply) => {
         const { id } = req.params as { id: string };
         const messages = await conversationService.getMessages(req.user.workspaceId, id);
-        return reply.send({ success: true, data: messages });
+        return reply.sendSuccess(messages);
     });
 
     fastify.post('/:id/messages', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const input = SendMessageSchema.parse(req.body);
         const message = await conversationService.sendMessage(req.user.workspaceId, req.user.sub, id, input);
-        return reply.status(201).send({ success: true, data: message });
+        return reply.sendSuccess(message, 201);
     });
 
     fastify.post('/messages/:messageId/approve', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
         const { messageId } = req.params as { messageId: string };
         const { sessionId } = req.body as { sessionId?: string };
         const message = await conversationService.approveMessage(req.user.workspaceId, messageId, sessionId);
-        return reply.send({ success: true, data: message });
+        return reply.sendSuccess(message);
     });
 
     fastify.post('/:id/suggest-reply', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const data = await conversationService.generateSuggestedReply(req.user.workspaceId, id);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 };

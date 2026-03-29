@@ -1,9 +1,10 @@
 import { Worker } from 'bullmq';
 import { env } from '../env';
-import { logger } from '../core/logger';
-import { QueueName } from './index';
+import { createLogger } from '../core/logger';
+import { QueueName, getAllQueues } from './index';
 import { requestContext } from '../core/context';
 import { getRedisClient } from '../core/redis';
+import { alertQueueBacklog } from '../core/alert';
 
 // ── Worker processors ─────────────────────────────────────────────────────────
 import { processInboundMessage } from '../core/workers/inbound-message.worker';
@@ -17,7 +18,7 @@ import { processAiJob } from '../modules/ai/ai-worker';
 import { processKnowledgeOutreachJob } from '../modules/knowledge/knowledge.worker';
 import { processIncomingKnowledgeJob } from '../modules/knowledge/knowledge.ingestion';
 
-const log = logger.child({ module: 'workers' });
+const log = createLogger({ module: 'workers', action: 'lifecycle' });
 
 function buildConnection() {
     const redisUrl = new URL(env.REDIS_URL);
@@ -34,16 +35,44 @@ function buildConnection() {
  * Wraps a processor with trace context management.
  * Extracts traceId from job data and runs the processor inside a requestContext.
  */
-function wrapProcessor(processor: any) {
+function wrapProcessor(queueName: QueueName, processor: any) {
     return async (job: any) => {
         const traceId = job.data?.traceId || `tr-job-${job.id}`;
-        return requestContext.run({ traceId }, async () => {
-            // Set job-specific trace on the logger for this execution
-            const jobLog = log.child({ traceId, jobId: job.id, queue: job.opts.queueName });
+        const jobLog = createLogger({
+            module: `worker:${queueName}`,
+            action: 'process',
+            traceId,
+            workspaceId: job.data?.workspaceId,
+        });
+
+        return requestContext.run({ traceId, workspaceId: job.data?.workspaceId }, async () => {
+            jobLog.info(
+                { jobId: job.id, jobName: job.name, queueName, attempt: job.attemptsMade + 1 },
+                'Job processing started'
+            );
+            const startTime = Date.now();
             try {
-                return await processor(job);
-            } catch (err) {
-                jobLog.error({ err }, 'Processor exception');
+                const result = await processor(job);
+                const duration = Date.now() - startTime;
+                jobLog.info(
+                    { jobId: job.id, queueName, duration },
+                    'Job processing succeeded'
+                );
+                return result;
+            } catch (err: any) {
+                const duration = Date.now() - startTime;
+                const isRetrying = job.attemptsMade + 1 < (job.opts?.attempts || 1);
+                if (isRetrying) {
+                    jobLog.warn(
+                        { jobId: job.id, queueName, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts, duration, err: err.message },
+                        'Job failed — will retry'
+                    );
+                } else {
+                    jobLog.error(
+                        { jobId: job.id, queueName, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts, duration, err: err.message },
+                        'Job processor threw exception'
+                    );
+                }
                 throw err;
             }
         });
@@ -51,19 +80,27 @@ function wrapProcessor(processor: any) {
 }
 
 function createWorker(queueName: QueueName, processor: any, concurrency: number): Worker {
-    const worker = new Worker(queueName, wrapProcessor(processor), {
+    const worker = new Worker(queueName, wrapProcessor(queueName, processor), {
         connection: buildConnection(),
         concurrency,
     });
 
-    worker.on('active', (job) => {
-        log.info({ queue: queueName, jobId: job.id, name: job.name, traceId: job.data?.traceId }, 'Job started');
-    });
-    worker.on('completed', (job) => {
-        log.info({ queue: queueName, jobId: job.id, duration: (job.finishedOn || 0) - (job.processedOn || 0) }, 'Job completed');
-    });
     worker.on('failed', (job, err) => {
-        log.error({ queue: queueName, jobId: job?.id, attemptsMade: job?.attemptsMade, err: err.message }, 'Job failed');
+        if (!job) return;
+        const isTerminal = job.attemptsMade >= (job.opts.attempts || 1);
+        const terminalLog = createLogger({
+            module: `worker:${queueName}`,
+            action: 'terminal-failure',
+            traceId: job.data?.traceId,
+            workspaceId: job.data?.workspaceId,
+        });
+
+        if (isTerminal) {
+            terminalLog.fatal(
+                { jobId: job.id, queueName, attemptsMade: job.attemptsMade, err: err.message },
+                'Job exhausted all retries — entering DLQ state'
+            );
+        }
     });
 
     log.info({ queue: queueName, concurrency }, 'Worker registered');
@@ -72,6 +109,11 @@ function createWorker(queueName: QueueName, processor: any, concurrency: number)
 
 let workers: Worker[] = [];
 let heartbeatTimer: NodeJS.Timeout | null = null;
+let backlogMonitorTimer: NodeJS.Timeout | null = null;
+
+// Thresholds (waiting jobs) for alerting
+const BACKLOG_WARN_THRESHOLD = 100;
+const BACKLOG_CRIT_THRESHOLD = 1000;
 
 /** Starts the heartbeat loop to signify worker liveness. */
 async function startHeartbeat() {
@@ -93,6 +135,39 @@ async function startHeartbeat() {
     log.info({ interval: INTERVAL, ttl: TTL }, 'Worker heartbeat started');
 }
 
+/** Polls all queues every 60s, logs metrics, and fires alerts at thresholds. */
+async function startBacklogMonitor() {
+    const INTERVAL = 60_000;
+    const monitorLog = createLogger({ module: 'workers', action: 'backlog-monitor' });
+
+    const tick = async () => {
+        const queues = getAllQueues();
+        for (const [name, queue] of queues.entries()) {
+            try {
+                const counts = await queue.getJobCounts('wait', 'active', 'completed', 'failed', 'delayed');
+                const waiting = counts.wait ?? 0;
+
+                monitorLog.info(
+                    { queueName: name, ...counts },
+                    'Queue metrics snapshot'
+                );
+
+                if (waiting >= BACKLOG_CRIT_THRESHOLD) {
+                    await alertQueueBacklog(name, waiting).catch(() => {});
+                } else if (waiting >= BACKLOG_WARN_THRESHOLD) {
+                    monitorLog.warn({ queueName: name, waiting }, 'Queue backlog above warning threshold');
+                }
+            } catch (err) {
+                monitorLog.warn({ err, queueName: name }, 'Failed to sample queue metrics');
+            }
+        }
+    };
+
+    await tick(); // Run immediately on startup
+    backlogMonitorTimer = setInterval(tick, INTERVAL);
+    monitorLog.info({ interval: INTERVAL }, 'Queue backlog monitor started');
+}
+
 export function startWorkers(): void {
     workers = [
         createWorker(QueueName.INBOUND_MESSAGES, processInboundMessage, 5),
@@ -108,12 +183,14 @@ export function startWorkers(): void {
     ];
 
     startHeartbeat();
+    startBacklogMonitor();
 
     log.info({ count: workers.length, queues: Object.values(QueueName) }, 'All workers started');
 }
 
 export async function stopWorkers(): Promise<void> {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (backlogMonitorTimer) clearInterval(backlogMonitorTimer);
     await Promise.all(workers.map(w => w.close()));
     log.info('All workers stopped');
 }

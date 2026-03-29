@@ -24,8 +24,12 @@
     "clean": "pnpm -r exec rm -rf dist .next node_modules"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@vitest/coverage-v8": "^4.1.2",
+    "@vitest/ui": "^4.1.2",
     "concurrently": "^9.2.1",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.2"
   },
   "pnpm": {
     "overrides": {

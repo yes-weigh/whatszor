@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import type { CreateRecordInput, UpdateRecordInput } from '@whatszor/shared';
-import { ErrorCodes } from '@whatszor/shared';
+import { ErrorCodes, createError } from '@whatszor/shared';
 import { Prisma } from '@prisma/client';
 
 export async function createRecord(workspaceId: string, input: CreateRecordInput) {
@@ -111,9 +111,3 @@ export async function deleteRecord(workspaceId: string, recordId: string) {
     await prisma.record.delete({ where: { id: recordId } });
 }
 
-function createError(message: string, code: string, statusCode: number) {
-    const err = new Error(message) as Error & { code: string; statusCode: number };
-    err.code = code;
-    err.statusCode = statusCode;
-    return err;
-}

@@ -14,7 +14,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
     }, async (req, reply) => {
         const body = RegisterSchema.parse(req.body);
         const tokens = await registerUser(body);
-        return reply.status(201).send({ success: true, data: tokens });
+        return reply.sendSuccess(tokens, 201);
     });
 
     /**
@@ -27,7 +27,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
     }, async (req, reply) => {
         const body = LoginSchema.parse(req.body);
         const tokens = await loginUser(body);
-        return reply.status(200).send({ success: true, data: tokens });
+        return reply.sendSuccess(tokens);
     });
 
     /**
@@ -37,7 +37,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
     fastify.post('/refresh', async (req, reply) => {
         const { refreshToken } = RefreshTokenSchema.parse(req.body);
         const tokens = await refreshTokens(refreshToken);
-        return reply.status(200).send({ success: true, data: tokens });
+        return reply.sendSuccess(tokens);
     });
 
     /**
@@ -47,7 +47,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
     fastify.post('/logout', async (req, reply) => {
         const { refreshToken } = RefreshTokenSchema.parse(req.body);
         await logoutUser(refreshToken);
-        return reply.status(200).send({ success: true, data: { message: 'Logged out successfully' } });
+        return reply.sendSuccess({ message: 'Logged out successfully' });
     });
 
     /**
@@ -60,7 +60,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
             where: { id: sub },
             select: { id: true, name: true, email: true },
         });
-        if (!user) return reply.status(404).send({ success: false, error: 'User not found' });
+        if (!user) return reply.sendError({ message: 'User not found', code: 'NOT_FOUND' }, 404);
 
         // Fetch workspace status for gating enforcement
         let workspaceStatus: string | null = null;
@@ -72,9 +72,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
             workspaceStatus = workspace?.status ?? null;
         }
 
-        return reply.send({
-            success: true,
-            data: { id: user.id, name: user.name, email: user.email, workspaceId, role, workspaceStatus },
+        return reply.sendSuccess({ 
+            id: user.id, 
+            name: user.name, 
+            email: user.email, 
+            workspaceId, 
+            role, 
+            workspaceStatus 
         });
     });
 };

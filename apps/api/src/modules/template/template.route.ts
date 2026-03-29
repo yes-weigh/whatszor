@@ -15,18 +15,18 @@ export default async function templateRoutes(fastify: FastifyInstance) {
         const b = request.body as any;
 
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
         }
 
         if (!b.name || !b.messageText) {
-            return reply.status(400).send({ error: 'Bad Request', message: 'Name and messageText are required' });
+            return reply.sendError({ code: 'BAD_REQUEST', message: 'Name and messageText are required' }, 400);
         }
 
         // Validate variables against allowed namespaces
         try {
             validateMessageVariables(b.messageText);
         } catch (e: any) {
-            return reply.status(400).send(e);
+            return reply.sendError({ code: 'BAD_REQUEST', message: e.message || 'Invalid template variables' }, 400);
         }
 
         // Start a transaction to ensure atomic creation of Root + Version 1
@@ -61,7 +61,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
             return { ...root, versions: [version] };
         });
 
-        return reply.status(201).send(template);
+        return reply.sendSuccess(template, 201);
     });
 
     /**
@@ -74,18 +74,18 @@ export default async function templateRoutes(fastify: FastifyInstance) {
         const b = request.body as any;
 
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
         }
 
         if (!b.messageText) {
-            return reply.status(400).send({ error: 'Bad Request', message: 'messageText is required' });
+            return reply.sendError({ code: 'BAD_REQUEST', message: 'messageText is required' }, 400);
         }
 
         // Validate namespace variables
         try {
             validateMessageVariables(b.messageText);
         } catch (e: any) {
-             return reply.status(400).send(e);
+             return reply.sendError({ code: 'BAD_REQUEST', message: e.message || 'Invalid template variables' }, 400);
         }
 
         const template = await prisma.template.findUnique({
@@ -93,7 +93,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
         });
 
         if (!template) {
-            return reply.status(404).send({ error: 'Not Found', message: 'Template not found' });
+            return reply.sendError({ code: 'NOT_FOUND', message: 'Template not found' }, 404);
         }
 
         // Create new version atomically
@@ -126,7 +126,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
             });
         });
 
-        return reply.status(201).send(newVersion);
+        return reply.sendSuccess(newVersion, 201);
     });
 
     /**
@@ -136,7 +136,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
     fastify.get('/', async (request, reply) => {
         const workspaceId = request.user?.workspaceId;
         if (!workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
         }
 
         const templates = await prisma.template.findMany({
@@ -151,7 +151,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
             orderBy: { createdAt: 'desc' }
         });
 
-        return reply.send({ templates });
+        return reply.sendSuccess({ templates });
     });
 
     /**
@@ -162,7 +162,7 @@ export default async function templateRoutes(fastify: FastifyInstance) {
         const workspaceId = request.user?.workspaceId;
         const { id } = request.params as { id: string };
 
-        if (!workspaceId) return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+        if (!workspaceId) return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
 
         const template = await prisma.template.findUnique({
             where: { id, workspaceId },
@@ -174,9 +174,9 @@ export default async function templateRoutes(fastify: FastifyInstance) {
             }
         });
 
-        if (!template) return reply.status(404).send({ error: 'Not Found' });
+        if (!template) return reply.sendError({ code: 'NOT_FOUND', message: 'Template not found' }, 404);
 
-        return reply.send(template);
+        return reply.sendSuccess(template);
     });
 
     /**
@@ -187,11 +187,11 @@ export default async function templateRoutes(fastify: FastifyInstance) {
         const workspaceId = request.user?.workspaceId;
         const { id } = request.params as { id: string };
 
-        if (!workspaceId) return reply.status(401).send({ error: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED });
+        if (!workspaceId) return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
 
         // Ensure it belongs to the workspace
         const exists = await prisma.template.findUnique({ where: { id, workspaceId } });
-        if (!exists) return reply.status(404).send({ error: 'Not found' });
+        if (!exists) return reply.sendError({ code: 'NOT_FOUND', message: 'Template not found' }, 404);
 
         await prisma.template.delete({ where: { id } });
 

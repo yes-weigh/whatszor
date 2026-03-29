@@ -7,11 +7,12 @@ import crypto from 'node:crypto';
 import * as Sentry from '@sentry/node';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { env } from '../env';
-import { logger } from './logger';
+import { createLogger } from './logger';
 import { getRedisClient } from './redis';
 import { prisma } from '../prisma/client';
 import { getQueue, QueueName } from '../queues';
 import { requestContext } from './context';
+import { registerResponseDecorators } from './response-decorators';
 import { healthRoutes } from '../modules/health/health.route';
 import { authRoutes } from '../modules/auth/auth.route';
 import { workspaceRoutes } from '../modules/workspace/workspace.route';
@@ -51,7 +52,7 @@ export async function createServer(): Promise<FastifyInstance> {
             tracesSampleRate: 1.0,
             profilesSampleRate: 1.0,
         });
-        logger.info('Sentry initialized');
+        createLogger({ module: 'system', action: 'startup' }).info('Sentry initialized');
     }
 
     const server = Fastify({
@@ -68,34 +69,48 @@ export async function createServer(): Promise<FastifyInstance> {
         },
     });
 
+    // ── Standard Response Decorators ────────────────────────
+    registerResponseDecorators(server);
+
     // ── Structured Logging & Tracing ────────────────────────
 
-    server.addHook('onRequest', async (request, _reply) => {
+    server.addHook('onRequest', (request, _reply, done) => {
         const traceId = (request.headers['x-trace-id'] as string) || request.id;
-        request.log = logger.child({ traceId });
         (request as any).traceId = traceId;
 
-        return new Promise<void>((resolve) => {
-            requestContext.run({ traceId }, () => {
-                request.log.info({
-                    req: {
-                        method: request.method,
-                        url: request.url,
-                        remoteAddress: request.ip,
-                    },
-                }, 'Incoming request');
-                resolve();
-            });
+        requestContext.run({ traceId }, () => {
+             // Create logger inside the requestContext so it captures traceId
+             request.log = createLogger({ module: 'http', action: 'incoming' });
+             request.log.info({
+                 req: {
+                     method: request.method,
+                     url: request.url,
+                     remoteAddress: request.ip,
+                 },
+                 workspaceId: (request as any).user?.workspaceId
+             }, 'Incoming request');
+             done();
         });
     });
 
-    server.addHook('onResponse', async (request, reply) => {
-        request.log.info({
+    server.addHook('onResponse', (request, reply, done) => {
+        const httpLogger = request.log || createLogger({ module: 'http', action: 'completed' });
+        const resData = {
             res: {
                 statusCode: reply.statusCode,
                 responseTime: reply.elapsedTime,
             },
-        }, 'Request completed');
+            workspaceId: (request as any).user?.workspaceId
+        };
+        
+        if (reply.statusCode >= 500) {
+            httpLogger.error(resData, 'Request completed with error');
+        } else if (reply.statusCode >= 400) {
+            httpLogger.warn(resData, 'Request completed with client error');
+        } else {
+            httpLogger.info(resData, 'Request completed successfully');
+        }
+        done();
     });
 
     // ── Security ──────────────────────────────────────────────
@@ -243,6 +258,6 @@ export async function createServer(): Promise<FastifyInstance> {
         });
     });
 
-    logger.info('Fastify server configured');
+    createLogger({ module: 'system', action: 'startup' }).info('Fastify server configured');
     return server;
 }

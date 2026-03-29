@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import type { CreateContactInput, UpdateContactInput } from '@whatszor/shared';
-import { ErrorCodes } from '@whatszor/shared';
+import { ErrorCodes, createError } from '@whatszor/shared';
 import { Prisma } from '@prisma/client';
 import { logEvent } from '../../core/event-logger';
 
@@ -130,9 +130,3 @@ export async function deleteManyContacts(workspaceId: string, contactIds: string
     });
 }
 
-function createError(message: string, code: string, statusCode: number) {
-    const err = new Error(message) as Error & { code: string; statusCode: number };
-    err.code = code;
-    err.statusCode = statusCode;
-    return err;
-}

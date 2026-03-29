@@ -1,9 +1,9 @@
 import Redis from 'ioredis';
 import { env } from '../env';
-import { logger } from './logger';
-import { notificationService } from './notification.service';
+import { createLogger } from './logger';
+import { alertRedisDisconnect } from './alert';
 
-const log = logger.child({ module: 'redis' });
+const log = createLogger({ module: 'redis', action: 'connection' });
 
 let redisClient: Redis | null = null;
 
@@ -35,7 +35,7 @@ export function createRedisClient(): Redis {
     client.on('error', (err) => {
         log.error({ err }, 'Redis error');
         if (err.message.includes('ECONNREFUSED') || err.message.includes('ENOTFOUND')) {
-            notificationService.notifyFatal('Redis connection failed', { error: err.message });
+            alertRedisDisconnect(err).catch(() => {});
         }
     });
     client.on('close', () => log.warn('Redis connection closed'));

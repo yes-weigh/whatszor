@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import type { CreatePipelineInput, UpdatePipelineInput } from '@whatszor/shared';
-import { ErrorCodes } from '@whatszor/shared';
+import { ErrorCodes, createError } from '@whatszor/shared';
 
 export async function createPipeline(workspaceId: string, input: CreatePipelineInput) {
     return prisma.pipeline.create({
@@ -54,9 +54,3 @@ export async function deletePipeline(workspaceId: string, pipelineId: string) {
     await prisma.pipeline.delete({ where: { id: pipelineId } });
 }
 
-function createError(message: string, code: string, statusCode: number) {
-    const err = new Error(message) as Error & { code: string; statusCode: number };
-    err.code = code;
-    err.statusCode = statusCode;
-    return err;
-}

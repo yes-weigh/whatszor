@@ -15,7 +15,7 @@
  */
 import { Job } from 'bullmq';
 import { prisma } from '../../prisma/client';
-import { logger } from '../logger';
+import { createLogger } from '../logger';
 import { waManager } from '../../modules/whatsapp/whatsapp.service';
 import { createOrGetConversation } from '../../modules/messaging/conversation.service';
 import { downloadMediaMessage } from '@itsukichan/baileys';
@@ -24,11 +24,12 @@ import { logEvent } from '../event-logger';
 import { emit as realtimeEmit } from '../realtime';
 import { getQueue, QueueName } from '../../queues';
 import { randomUUID } from 'crypto';
+import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } from '../idempotency';
 // Top-level import eliminates the require() hack — no circular dep because
 // quick-reply.service only imports prisma, it never imports any queue.
 import { findMatchingAutoReply } from '../../modules/quick-replies/quick-reply.service';
 
-const log = logger.child({ module: 'worker:inbound-messages' });
+const log = createLogger({ module: 'worker:inbound-messages' });
 
 export async function processInboundMessage(job: Job): Promise<void> {
     const { workspaceId, sessionId, messages } = job.data;
@@ -242,32 +243,33 @@ export async function processInboundMessage(job: Job): Promise<void> {
             if (!finalContent && !mediaData) continue;
             // ──────────────────────────────────────────────────────────────────
 
-            // ── Idempotent message insert ──────────────────────────────────────
-            const existingMessage = await prisma.message.findUnique({
-                where: {
-                    conversationId_remoteId: {
-                        conversationId: conversation.id,
-                        remoteId: msg.key.id as string,
-                    },
-                },
-            });
-
-            if (existingMessage) {
-                log.debug({ messageId: msg.key.id }, 'Message already exists, skipping');
+            // ── Atomic Idempotency check ──────────────────────────────────────
+            const idempotencyKey = `wa:in:${workspaceId}:${msg.key.id}`;
+            const existingState = await acquireIdempotencyLock(idempotencyKey);
+            
+            if (existingState === 'COMPLETED') {
+                log.info({ messageId: msg.key.id }, 'Message already processed (COMPLETED), skipping');
                 continue;
             }
+            if (existingState === 'PROCESSING') {
+                log.warn({ messageId: msg.key.id }, 'Message currently being processed by another worker, skipping duplicate');
+                continue;
+            }
+            // ──────────────────────────────────────────────────────────────────
 
-            const createdMsg = await prisma.message.create({
-                data: {
-                    conversationId: conversation.id,
-                    remoteId: msg.key.id,
-                    direction: msg.key.fromMe ? 'OUTBOUND' : 'INBOUND',
-                    type: type as any,
-                    content: finalContent,
-                    mediaData: mediaData as any,
-                    status: msg.key.fromMe ? 'SENT' : 'RECEIVED',
-                },
-            });
+            // ── In-progress logic wrapped in try-catch for release on error ──
+            try {
+                const createdMsg = await prisma.message.create({
+                    data: {
+                        conversationId: conversation.id,
+                        remoteId: msg.key.id,
+                        direction: msg.key.fromMe ? 'OUTBOUND' : 'INBOUND',
+                        type: type as any,
+                        content: finalContent,
+                        mediaData: mediaData as any,
+                        status: msg.key.fromMe ? 'SENT' : 'RECEIVED',
+                    },
+                });
             // ──────────────────────────────────────────────────────────────────
 
             // ── Media download (non-blocking) ──────────────────────────────────
@@ -456,7 +458,14 @@ export async function processInboundMessage(job: Job): Promise<void> {
 
             log.info({ messageId: msg.key.id, conversationId: conversation.id }, 'Inbound message processed');
 
+            // ── Mark as COMPLETED in Redis ────────────────────────
+            await completeIdempotency(idempotencyKey);
+
         } catch (err) {
+            // ── Release Lock on Failure to Allow Retry ─────────────
+            const idempotencyKey = `wa:in:${workspaceId}:${msg?.key?.id}`;
+            await releaseIdempotencyLock(idempotencyKey);
+
             log.error({ err, messageId: msg?.key?.id }, 'Error processing inbound message');
             // Re-throw so BullMQ retry logic triggers for jobs that are retryable.
             // Individual message errors inside a batch should NOT fail the whole job.

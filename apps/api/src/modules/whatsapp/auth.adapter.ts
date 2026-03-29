@@ -6,6 +6,7 @@ import {
 } from '@itsukichan/baileys';
 import { prisma } from '../../prisma/client';
 import { Prisma } from '@prisma/client';
+import { createLogger } from '../../core/logger';
 
 /**
  * A custom Baileys authentication state adapter backed by Prisma.
@@ -58,7 +59,7 @@ export async function usePrismaAuthState(
             }
             return null;
         } catch (error) {
-            console.error(`[Baileys Auth] Read Error (${id}):`, error);
+            createLogger({ module: 'whatsapp', action: 'auth-read' }).error({ err: error }, `[Baileys Auth] Read Error (${id})`);
             return null;
         }
     };

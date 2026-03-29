@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 export interface RequestStore {
     traceId: string;
+    workspaceId?: string;
     [key: string]: any;
 }
 

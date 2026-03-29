@@ -3,6 +3,7 @@ import { Boom } from '@hapi/boom';
 import { wrapSocket } from 'baileys-antiban';
 import { usePrismaAuthState, deleteSessionAuthData } from './auth.adapter';
 import { logger } from '../../core/logger';
+import { alertSessionDrop } from '../../core/alert';
 import { EventEmitter } from 'events';
 import { prisma } from '../../prisma/client';
 import { ANTIBAN_CONFIG, loadWarmUpState, registerWrappedSocket, persistWarmUpState, removeAntiBan } from '../../core/antiban';
@@ -161,13 +162,16 @@ class WhatsAppManager extends EventEmitter {
                 } else {
                     log.warn({ sessionId }, 'Session logged out.');
                     // CRITICAL: Notify about primary account logout
-                    await notificationService.notify({
-                        event: 'WHATSAPP_SESSION_LOGOUT',
-                        priority: 'CRITICAL',
-                        message: `WhatsApp session logged out: ${sessionId}`,
-                        metadata: { sessionId, workspaceId },
-                        timestamp: new Date().toISOString(),
-                    });
+                    await Promise.all([
+                        notificationService.notify({
+                            event: 'WHATSAPP_SESSION_LOGOUT',
+                            priority: 'CRITICAL',
+                            message: `WhatsApp session logged out: ${sessionId}`,
+                            metadata: { sessionId, workspaceId },
+                            timestamp: new Date().toISOString(),
+                        }),
+                        alertSessionDrop(sessionId, workspaceId),
+                    ]);
                     
                     await prisma.whatsAppAccount.updateMany({
                         where: { sessionId },

@@ -32,29 +32,20 @@ export async function mediaRoutes(fastify: FastifyInstance) {
             });
 
             if (!msg) {
-                return reply.status(404).send({
-                    success: false,
-                    error: { code: 'NOT_FOUND', message: 'Message not found' },
-                });
+                return reply.sendError({ code: 'NOT_FOUND', message: 'Message not found' }, 404);
             }
 
             const mediaData = msg.mediaData as Record<string, any> | null;
             const localPath: string | undefined = mediaData?.localPath;
 
             if (!localPath) {
-                return reply.status(404).send({
-                    success: false,
-                    error: { code: 'NO_MEDIA', message: 'No local media file. Use POST /download to fetch it.' },
-                });
+                return reply.sendError({ code: 'NO_MEDIA', message: 'No local media file. Use POST /download to fetch it.' }, 404);
             }
 
             const exists = await getMediaPath(localPath);
             if (!exists) {
                 log.warn({ messageId, localPath }, 'Media file missing from disk');
-                return reply.status(404).send({
-                    success: false,
-                    error: { code: 'FILE_NOT_FOUND', message: 'Media file not found on server' },
-                });
+                return reply.sendError({ code: 'FILE_NOT_FOUND', message: 'Media file not found on server' }, 404);
             }
 
             const mimeType = (mediaData?.mimeType as string | undefined) || 'application/octet-stream';
@@ -105,18 +96,12 @@ export async function mediaRoutes(fastify: FastifyInstance) {
             });
 
             if (!msg) {
-                return reply.status(404).send({
-                    success: false,
-                    error: { code: 'NOT_FOUND', message: 'Message not found' },
-                });
+                return reply.sendError({ code: 'NOT_FOUND', message: 'Message not found' }, 404);
             }
 
             const mediaData = msg.mediaData as Record<string, any> | null;
             if (!mediaData) {
-                return reply.status(400).send({
-                    success: false,
-                    error: { code: 'NO_MEDIA_DATA', message: 'Message has no media data' },
-                });
+                return reply.sendError({ code: 'NO_MEDIA_DATA', message: 'Message has no media data' }, 400);
             }
 
             // If already on disk, stream it directly — no re-download needed
@@ -144,10 +129,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
                 : waManager.getSocket(workspaceId);
 
             if (!socket) {
-                return reply.status(503).send({
-                    success: false,
-                    error: { code: 'SESSION_OFFLINE', message: 'WhatsApp session is not connected' },
-                });
+                return reply.sendError({ code: 'SESSION_OFFLINE', message: 'WhatsApp session is not connected' }, 503);
             }
 
             // Reconstruct a minimal WAMessage.
@@ -206,10 +188,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
 
             } catch (err) {
                 log.warn({ err, messageId: msg.id }, 'On-demand media download failed');
-                return reply.status(502).send({
-                    success: false,
-                    error: { code: 'DOWNLOAD_FAILED', message: 'WhatsApp media download failed — URL may have expired' },
-                });
+                return reply.sendError({ code: 'DOWNLOAD_FAILED', message: 'WhatsApp media download failed — URL may have expired' }, 502);
             }
         }
     );

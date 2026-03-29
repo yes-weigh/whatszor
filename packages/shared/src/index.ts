@@ -12,3 +12,4 @@ export * from './schemas/messaging';
 export * from './schemas/campaign';
 export * from './schemas/automation';
 export * from './schemas/events';
+export * from './utils/errors';

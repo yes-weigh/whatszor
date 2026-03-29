@@ -35,14 +35,14 @@ export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
     fastify.get('/', async (req, reply) => {
         const { workspaceId } = req.user;
         const data = await quickReplyService.getQuickReplies(workspaceId);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     fastify.post('/', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const input = CreateQuickReplySchema.parse(req.body);
         const data = await quickReplyService.createQuickReply(workspaceId, input);
-        return reply.status(201).send({ success: true, data });
+        return reply.sendSuccess(data, 201);
     });
 
     fastify.patch('/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
@@ -50,7 +50,7 @@ export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const { id } = req.params as { id: string };
         const input = UpdateQuickReplySchema.parse(req.body);
         const data = await quickReplyService.updateQuickReply(workspaceId, id, input);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     fastify.delete('/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
@@ -65,14 +65,14 @@ export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
     fastify.get('/auto', async (req, reply) => {
         const { workspaceId } = req.user;
         const data = await quickReplyService.getAutoReplies(workspaceId);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     fastify.post('/auto', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const input = CreateAutoReplySchema.parse(req.body);
         const data = await quickReplyService.createAutoReply(workspaceId, input);
-        return reply.status(201).send({ success: true, data });
+        return reply.sendSuccess(data, 201);
     });
 
     fastify.patch('/auto/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {
@@ -80,7 +80,7 @@ export const quickReplyRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const { id } = req.params as { id: string };
         const input = UpdateAutoReplySchema.parse(req.body);
         const data = await quickReplyService.updateAutoReply(workspaceId, id, input);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     fastify.delete('/auto/:id', { preHandler: requireRole('templates:manage') }, async (req, reply) => {

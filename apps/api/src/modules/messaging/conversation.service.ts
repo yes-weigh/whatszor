@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/client';
 import type { CreateConversationInput, UpdateConversationInput, SendMessageInput } from '@whatszor/shared';
-import { ErrorCodes } from '@whatszor/shared';
+import { ErrorCodes, createError } from '@whatszor/shared';
 import { getQueue, QueueName } from '../../queues';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 
@@ -251,20 +251,10 @@ export async function sendMessage(
     }
 
     // Traditional content messages
-    const mediaData = input.mediaData ? (input.mediaData as any) : undefined;
-
-    // Resolve mediaGalleryId → real file URL (so Baileys can fetch/stream it directly)
-    let resolvedMediaData = mediaData;
-    const anyInput = input as any;
-    if (anyInput.mediaGalleryId) {
-        const galleryItem = await prisma.media.findFirst({
-            where: { id: anyInput.mediaGalleryId, workspaceId },
-            select: { url: true, mimeType: true, name: true },
-        });
-        if (galleryItem?.url) {
-            resolvedMediaData = { url: galleryItem.url, fileName: anyInput.fileName || galleryItem.name };
-        }
-    }
+    const mediaData: any = input.mediaData ? { ...(input.mediaData as any) } : {};
+    if (input.fileName) mediaData.fileName = input.fileName;
+    // CRITICAL: We NO LONGER resolve mediaId to a URL here.
+    // The worker resolves it directly via storageKey for security and performance.
 
     const message = await prisma.message.create({
         data: {
@@ -272,14 +262,15 @@ export async function sendMessage(
             direction: 'OUTBOUND',
             type: input.type,
             content: input.content ?? null,
-            mediaData: resolvedMediaData,
-            mediaGalleryId: anyInput.mediaGalleryId || null,
+            mediaData: mediaData, 
+            mediaId: input.mediaId || null,
             status: 'QUEUED',
             senderUserId: userId,
         },
     });
 
-    await getQueue(QueueName.OUTBOUND_MESSAGES).add(`send-${message.id}`, {
+    const jobId = `out:${workspaceId}:${conversationId}:${message.id}`;
+    await getQueue(QueueName.OUTBOUND_MESSAGES).add(jobId, {
         workspaceId,
         sessionId,
         messageId: message.id,
@@ -287,8 +278,9 @@ export async function sendMessage(
         type: message.type,
         content: message.content,
         mediaData: message.mediaData,
-        mediaGalleryId: message.mediaGalleryId
-    });
+        // Worker will use this mediaId to resolve the real file path
+        mediaId: message.mediaId
+    }, { jobId });
 
     // Update conversation summary
     let contentPreview = 'Media message';
@@ -342,7 +334,8 @@ export async function approveMessage(
     });
 
     // Add to outbound queue
-    await getQueue(QueueName.OUTBOUND_MESSAGES).add(`send-approved-${message.id}`, {
+    const jobId = `out:${workspaceId}:${message.conversationId}:${message.id}`;
+    await getQueue(QueueName.OUTBOUND_MESSAGES).add(jobId, {
         workspaceId,
         sessionId: activeSessionId,
         messageId: message.id,
@@ -350,7 +343,7 @@ export async function approveMessage(
         type: message.type,
         content: message.content,
         mediaData: message.mediaData
-    });
+    }, { jobId });
 
     return updated;
 }
@@ -368,9 +361,3 @@ export async function generateSuggestedReply(workspaceId: string, conversationId
     return { success: true, message: 'AI suggestion queued' };
 }
 
-function createError(message: string, code: string, statusCode: number) {
-    const err = new Error(message) as Error & { code: string; statusCode: number };
-    err.code = code;
-    err.statusCode = statusCode;
-    return err;
-}

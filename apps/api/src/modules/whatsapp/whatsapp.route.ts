@@ -18,7 +18,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
     fastify.get('/sessions', async (req, reply) => {
         const { workspaceId } = req.user;
         const sessions = await waManager.getSessions(workspaceId);
-        return reply.send({ success: true, data: sessions });
+        return reply.sendSuccess(sessions);
     });
 
     /**
@@ -31,7 +31,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { name } = req.body as { name?: string };
 
         if (!name || name.trim().length < 1) {
-            return reply.status(400).send({ success: false, message: 'Account name is required.' });
+            return reply.sendError({ message: 'Account name is required.', code: 'BAD_REQUEST' }, 400);
         }
 
         const sessionId = randomUUID();
@@ -45,7 +45,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             },
         });
 
-        return reply.status(201).send({ success: true, data: account });
+        return reply.sendSuccess(account, 201);
     });
 
     /**
@@ -61,7 +61,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'Session not found.' });
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
 
         // Fire and forget — socket boots async
@@ -69,7 +69,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             fastify.log.error({ err, sessionId }, 'Failed to connect session');
         });
 
-        return reply.status(202).send({ success: true, data: { message: 'Connection initialization started.' } });
+        return reply.sendSuccess({ message: 'Connection initialization started.' }, 202);
     });
 
     /**
@@ -85,7 +85,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'Session not found.' });
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
 
         const socket = waManager.getSocket(sessionId);
@@ -98,16 +98,13 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         else if (isConnected) status = 'CONNECTED';
         else if (socket) status = 'CONNECTING';
 
-        return reply.send({
-            success: true,
-            data: {
-                sessionId,
-                name: account.name,
-                phoneNumber: account.phoneNumber,
-                status,
-                qrCode: qrCode || null,
-                user: isConnected ? creds : null,
-            },
+        return reply.sendSuccess({
+            sessionId,
+            name: account.name,
+            phoneNumber: account.phoneNumber,
+            status,
+            qrCode: qrCode || null,
+            user: isConnected ? creds : null,
         });
     });
 
@@ -124,12 +121,12 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'Session not found.' });
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
 
         await waManager.disconnect(sessionId);
 
-        return reply.send({ success: true, data: { message: 'Disconnected.' } });
+        return reply.sendSuccess({ message: 'Disconnected.' });
     });
 
     /**
@@ -150,7 +147,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'Session not found.' });
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
 
         // Disconnect active socket first WITHOUT logging out
@@ -199,10 +196,9 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             }, 12_000);
         }
 
-        return reply.status(202).send({
-            success: true,
-            data: { message: clearHistory ? 'History cleared. Re-fetching from WhatsApp...' : 'Resync connection started.' },
-        });
+        return reply.sendSuccess({
+            message: clearHistory ? 'History cleared. Re-fetching from WhatsApp...' : 'Resync connection started.'
+        }, 202);
     });
 
     /**
@@ -215,7 +211,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { sessionId } = req.params as { sessionId: string };
 
         if (!waManager.getSocket(sessionId)) {
-            return reply.status(400).send({ success: false, message: 'Session not currently connected.' });
+            return reply.sendError({ message: 'Session not currently connected.', code: 'BAD_REQUEST' }, 400);
         }
 
         // Read from our own contacts store (populated on contacts.upsert + messaging-history.set)
@@ -262,9 +258,8 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             }
         }
 
-        return reply.send({
-            success: true,
-            data: { message: `Names refreshed: ${namesFixed}, LIDs migrated to real phones: ${lidsMigrated}` },
+        return reply.sendSuccess({
+            message: `Names refreshed: ${namesFixed}, LIDs migrated to real phones: ${lidsMigrated}`
         });
     });
 
@@ -282,7 +277,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'Session not found.' });
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
 
         fastify.log.info({ sessionId }, 'Removing account — cascading delete of conversations and messages...');
@@ -297,7 +292,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
 
         await waManager.deleteAccount(sessionId);
 
-        return reply.send({ success: true, data: { message: 'Account and all associated conversations removed.' } });
+        return reply.sendSuccess({ message: 'Account and all associated conversations removed.' });
     });
 
     /**
@@ -316,23 +311,12 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'Session not found.' });
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
 
         const stats = getAntibanStats(sessionId);
 
-        if (!stats) {
-            return reply.send({
-                success: true,
-                data: {
-                    sessionId,
-                    status: 'not_initialised',
-                    message: 'Session has not been connected yet — no AntiBan instance exists.',
-                },
-            });
-        }
-
-        return reply.send({ success: true, data: { sessionId, ...stats } });
+        return reply.sendSuccess({ sessionId, ...stats });
     });
 
     /**
@@ -349,7 +333,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'WhatsApp connection not found tightly mapped to this workspace.' });
+            return reply.sendError({ message: 'WhatsApp connection not found tightly mapped to this workspace.', code: 'NOT_FOUND' }, 404);
         }
 
         const updated = await prisma.whatsAppAccount.update({
@@ -357,7 +341,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             data: { isKnowledgeBot }
         });
 
-        return reply.send({ success: true, data: updated });
+        return reply.sendSuccess(updated);
     });
 
     /**
@@ -370,7 +354,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { name } = req.body as { name?: string };
 
         if (!name || name.trim().length < 1) {
-            return reply.status(400).send({ success: false, message: 'Account name is required.' });
+            return reply.sendError({ message: 'Account name is required.', code: 'BAD_REQUEST' }, 400);
         }
 
         const account = await prisma.whatsAppAccount.findFirst({
@@ -378,7 +362,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         if (!account) {
-            return reply.status(404).send({ success: false, message: 'Session not found.' });
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
 
         const updated = await prisma.whatsAppAccount.update({
@@ -386,7 +370,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             data: { name: name.trim() },
         });
 
-        return reply.send({ success: true, data: updated });
+        return reply.sendSuccess(updated);
     });
 
     // ── Legacy single-session compat endpoints (kept to avoid breaking existing flows) ──
@@ -396,13 +380,10 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { workspaceId } = req.user;
         const sessions = await waManager.getSessions(workspaceId);
         const first = sessions[0];
-        return reply.send({
-            success: true,
-            data: {
-                status: first?.status || 'DISCONNECTED',
-                qrCode: first?.qrCode || null,
-                user: null,
-            },
+        return reply.sendSuccess({
+            status: first?.status || 'DISCONNECTED',
+            qrCode: first?.qrCode || null,
+            user: null,
         });
     });
 
@@ -414,7 +395,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             data: { workspaceId, sessionId, name: 'Default Account', status: 'DISCONNECTED' },
         });
         waManager.connect(sessionId, workspaceId).catch(() => {/*ignore*/ });
-        return reply.status(202).send({ success: true, data: { message: 'Connection initialization started.' } });
+        return reply.sendSuccess({ message: 'Connection initialization started.' }, 202);
     });
 
     /** @deprecated Use POST /sessions/:id/disconnect */
@@ -422,6 +403,6 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { workspaceId } = req.user;
         const sessions = await waManager.getSessions(workspaceId);
         if (sessions[0]) await waManager.disconnect(sessions[0].sessionId);
-        return reply.send({ success: true, data: { message: 'Disconnect signal sent.' } });
+        return reply.sendSuccess({ message: 'Disconnect signal sent.' });
     });
 };
