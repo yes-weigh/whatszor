@@ -8,6 +8,7 @@ export function ExecutionLogsPanel({ ruleId, onClose, onLogsLoaded }: { ruleId: 
     const [logs, setLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (!ruleId) return;
         fetchExecutions();

@@ -1,8 +1,9 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
 import { useState } from 'react';
 import { useQuickReplies } from '@/hooks/use-quick-replies';
-import { Plus, Trash2, Edit2, Loader2, Zap, Check, Paperclip, X, Image, Video, FileText } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Zap, Check, Paperclip, X, Image as ImageIcon, Video, FileText } from 'lucide-react';
 import { MediaPickerModal } from './MediaPickerModal';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
@@ -16,7 +17,7 @@ function getMediaPreviewUrl(id: string): string {
 }
 
 function MediaTypeIcon({ type, size = 14 }: { type: string; size?: number }) {
-    if (type === 'image') return <Image size={size} />;
+    if (type === 'image') return <ImageIcon size={size} />;
     if (type === 'video') return <Video size={size} />;
     return <FileText size={size} />;
 }

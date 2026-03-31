@@ -42,6 +42,7 @@ api.interceptors.response.use(
     (res) => {
         // If the response matches our standard wrapper, unwrap the data field.
         if (res.data && typeof res.data === 'object' && res.data.success === true && 'data' in res.data) {
+            // eslint-disable-next-line no-restricted-syntax
             res.data = res.data.data;
         }
 

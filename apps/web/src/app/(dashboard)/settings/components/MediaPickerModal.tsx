@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { X, Search, Image, Video, FileText, Loader2, Check } from 'lucide-react';
+import { X, Search, Image as ImageIcon, Video, FileText, Loader2, Check } from 'lucide-react';
 
 interface MediaItem {
     id: string;
@@ -30,7 +30,7 @@ function getMediaUrl(id: string): string {
 }
 
 function MediaTypeIcon({ type }: { type: string }) {
-    if (type === 'image') return <Image size={16} />;
+    if (type === 'image') return <ImageIcon size={16} />;
     if (type === 'video') return <Video size={16} />;
     return <FileText size={16} />;
 }
@@ -116,7 +116,7 @@ export function MediaPickerModal({ onSelect, onClose, selectedId }: MediaPickerM
 
                     {!isPending && filtered.length === 0 && (
                         <div className="flex flex-col items-center justify-center h-40 text-center">
-                            <Image size={32} className="text-muted mb-2" />
+                            <ImageIcon size={32} className="text-muted mb-2" />
                             <p className="text-sm text-muted">No media found</p>
                         </div>
                     )}

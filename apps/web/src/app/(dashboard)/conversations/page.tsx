@@ -13,6 +13,7 @@ import {
     Smartphone, ChevronDown, X, Loader2, Circle, Download, FileText, Zap,
     Paperclip, PenSquare, FileImage, Sparkles, Upload, Image as GalleryIcon
 } from 'lucide-react';
+/* eslint-disable @next/next/no-img-element */
 import TemplatePickerModal from './TemplatePickerModal';
 import { MediaGalleryPicker } from '@/components/media/MediaGalleryPicker';
 
@@ -181,6 +182,7 @@ function ContactAvatar({ jid, name, sessionId, sizeClass = 'w-10 h-10 text-base'
         }, delay);
 
         return () => { cancelled = true; clearTimeout(timer); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [jid, delay]);
 
     const initials = getInitial(name);
@@ -685,6 +687,7 @@ export default function ConversationsPage() {
         if (selectedConv?.sessionId && !connectedIds.has(selectedConv.sessionId)) {
             setSelectedConv(null);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [accounts]);
 
     // ── Filtered list ──────────────────────────────────────

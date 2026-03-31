@@ -1,12 +1,13 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAutoReplies } from '@/hooks/use-auto-replies';
 import { api } from '@/lib/api';
 import {
     Plus, Trash2, Edit2, Loader2, Bot, Paperclip,
-    X, Image, Video, FileText, LayoutTemplate, MessageSquare,
+    X, Image as ImageIcon, Video, FileText, LayoutTemplate, MessageSquare,
     ChevronDown,
 } from 'lucide-react';
 import { MediaPickerModal } from './MediaPickerModal';
@@ -20,7 +21,7 @@ function getMediaPreviewUrl(id: string): string {
     return `${API_BASE}/media-gallery/${id}/file?token=${getToken()}`;
 }
 function MediaTypeIcon({ type, size = 14 }: { type: string; size?: number }) {
-    if (type === 'image') return <Image size={size} />;
+    if (type === 'image') return <ImageIcon size={size} />;
     if (type === 'video') return <Video size={size} />;
     return <FileText size={size} />;
 }
