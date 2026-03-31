@@ -115,6 +115,7 @@ jobs:
 
             # ── 5. Build & start services ────────────────────────────────────────
             docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
+            docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle || true
             if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
               echo "❌ docker compose up failed! Fetching logs from whatszor-api-1 and whatszor-worker-1..."
               docker compose -f docker-compose.prod.yml logs api worker || true

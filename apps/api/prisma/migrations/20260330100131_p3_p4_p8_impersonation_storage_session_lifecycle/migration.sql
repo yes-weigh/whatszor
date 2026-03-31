@@ -28,7 +28,15 @@ ALTER TABLE "messages" ADD COLUMN     "client_message_id" TEXT,
 ADD COLUMN     "deleted_at" TIMESTAMP(3),
 ADD COLUMN     "media_id" TEXT,
 ADD COLUMN     "sequence_number" SERIAL NOT NULL,
-ADD COLUMN     "workspace_id" TEXT NOT NULL;
+ADD COLUMN     "workspace_id" TEXT;
+
+UPDATE "messages" SET "workspace_id" = "conversations"."workspace_id"
+FROM "conversations"
+WHERE "messages"."conversation_id" = "conversations"."id" AND "messages"."workspace_id" IS NULL;
+
+DELETE FROM "messages" WHERE "workspace_id" IS NULL;
+
+ALTER TABLE "messages" ALTER COLUMN "workspace_id" SET NOT NULL;
 
 -- AlterTable
 ALTER TABLE "whatsapp_accounts" DROP COLUMN "is_knowledge_bot",
