@@ -13,7 +13,7 @@ import { createLogger } from './core/logger';
 import { alertWorkerCrash } from './core/alert';
 import { connectRedis, disconnectRedis } from './core/redis';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
-import { startWorkers, stopWorkers } from './queues/worker';
+import { startBackgroundWorkers, stopWorkers } from './queues/worker';
 
 const log = createLogger({ module: 'worker-bootstrap', action: 'startup' });
 
@@ -37,7 +37,7 @@ async function bootstrap() {
     // initializeWorkers() sets up the inbound-messages/history/contacts BullMQ workers
     // which call realtimeEmit() for live SSE updates. SSE connections only exist in
     // the API process, so those workers MUST run in the API container, not here.
-    startWorkers();
+    startBackgroundWorkers();
 
     log.info(`🚀 Whatsvue Worker Process started`);
 

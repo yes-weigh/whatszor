@@ -139,6 +139,7 @@ const BACKLOG_CRIT_THRESHOLD = 1000;
 
 /** Starts the heartbeat loop to signify worker liveness. */
 async function startHeartbeat() {
+    if (heartbeatTimer) return;
     const redis = getRedisClient();
     const HEARTBEAT_KEY = 'worker:heartbeat';
     const INTERVAL = 5000;
@@ -159,6 +160,7 @@ async function startHeartbeat() {
 
 /** Polls all queues every 60s, logs metrics, and fires alerts at thresholds. */
 async function startBacklogMonitor() {
+    if (backlogMonitorTimer) return;
     const INTERVAL = 60_000;
     const monitorLog = createLogger({ module: 'workers', action: 'backlog-monitor' });
 
@@ -190,24 +192,38 @@ async function startBacklogMonitor() {
     monitorLog.info({ interval: INTERVAL }, 'Queue backlog monitor started');
 }
 
-export function startWorkers(): void {
-    workers = [
+export function startApiNodeWorkers(): void {
+    workers.push(
         createWorker(QueueName.INBOUND_MESSAGES, processInboundMessage, 5),
         createWorker(QueueName.OUTBOUND_MESSAGES, processOutboundMessage, 5),
         createWorker(QueueName.HISTORY_SYNC, processHistorySync, 1),
         createWorker(QueueName.CONTACTS_SYNC, processContactsSync, 2),
+    );
+
+    startHeartbeat();
+    startBacklogMonitor();
+    log.info('API-bound WhatsApp workers started');
+}
+
+export function startBackgroundWorkers(): void {
+    workers.push(
         createWorker(QueueName.SYSTEM_EVENTS, processSystemEvent, 3),
         createWorker(QueueName.CAMPAIGN, processCampaignJob, 2),
         createWorker(QueueName.AUTOMATION, processAutomationJob, 5),
         createWorker(QueueName.AI, processAiJob, 3),
         createWorker(QueueName.KNOWLEDGE_OUTREACH, processKnowledgeOutreachJob, 2),
         createWorker(QueueName.KNOWLEDGE_INGESTION, processIncomingKnowledgeJob, 2),
-    ];
+    );
 
     startHeartbeat();
     startBacklogMonitor();
     startZombieSweeper();
+    log.info('Background workers started');
+}
 
+export function startWorkers(): void {
+    startApiNodeWorkers();
+    startBackgroundWorkers();
     log.info({ count: workers.length, queues: Object.values(QueueName) }, 'All workers started');
 }
 

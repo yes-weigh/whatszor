@@ -15,7 +15,7 @@ import { createLogger } from './core/logger';
 import { connectRedis, disconnectRedis } from './core/redis';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
 import { initQueues, closeQueues } from './queues/index';
-import { startWorkers, stopWorkers } from './queues/worker';
+import { startApiNodeWorkers, startBackgroundWorkers, stopWorkers } from './queues/worker';
 import { initializeWorkers } from './core/queue';
 import { createServer } from './core/server';
 import { waManager } from './modules/whatsapp/whatsapp.service';
@@ -46,14 +46,20 @@ async function bootstrap() {
     // nobody queues them and the worker container never receives any jobs.
     initializeWorkers();
 
-    // Also start BullMQ worker processors in this process if explicitly enabled.
+    // 4.5. Start API-bound BullMQ workers in this process — ALWAYS required in the API container.
+    // These workers (inbound, outbound, sync) require direct in-memory access to
+    // Baileys sockets, which ONLY live in the API container.
+    log.info('Starting API-bound workers...');
+    startApiNodeWorkers();
+
+    // Also start general background worker processors in this process if explicitly enabled.
     // In the standard production setup, WORKER_ENABLED=false here and the separate
-    // worker container runs the processors instead.
+    // worker container runs the general processors instead.
     if (env.WORKER_ENABLED) {
-        log.info('Workers are enabled on this instance (WORKER_ENABLED=true). Starting workers.');
-        startWorkers();
+        log.info('Workers are enabled on this instance (WORKER_ENABLED=true). Starting background workers.');
+        startBackgroundWorkers();
     } else {
-        log.info('Workers are disabled on this instance (WORKER_ENABLED=false). Worker container handles processing.');
+        log.info('Background workers are disabled on this instance (WORKER_ENABLED=false). Worker container handles processing.');
     }
 
     // 4.5. Restore global WhatsApp sessions — always, regardless of WORKER_ENABLED.
