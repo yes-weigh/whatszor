@@ -37,6 +37,21 @@
     },
     "patchedDependencies": {
       "baileys-antiban@1.0.0": "patches/baileys-antiban@1.0.0.patch"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@itsukichan/baileys",
+      "@prisma/client",
+      "@prisma/engines",
+      "@sentry-internal/node-cpu-profiler",
+      "@sentry/cli",
+      "@whiskeysockets/baileys",
+      "baileys",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma",
+      "protobufjs",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }
