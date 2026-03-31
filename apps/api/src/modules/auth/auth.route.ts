@@ -23,7 +23,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
      * Rate-limited to 10 req/min per IP to prevent brute-force attacks.
      */
     fastify.post('/login', {
-        config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req: any) => `login:${req.ip}` } },
+        config: { rateLimit: { max: 5, timeWindow: '1 minute', keyGenerator: (req: any) => `login:${req.ip}` } },
     }, async (req, reply) => {
         const body = LoginSchema.parse(req.body);
         const tokens = await loginUser(body);

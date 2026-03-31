@@ -8,11 +8,11 @@
 import { Job } from 'bullmq';
 import { z } from 'zod';
 import { prisma } from '../../prisma/client';
-import { logger } from '../logger';
+import { createLogger } from '../logger';
 import { logEvent } from '../event-logger';
 import { getQueue, QueueName } from '../../queues';
 
-const log = logger.child({ module: 'worker:system-events' });
+const log = createLogger({ module: 'worker:system-events' });
 
 const SystemEventSchema = z.object({
     eventId: z.string(),

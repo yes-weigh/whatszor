@@ -1,9 +1,9 @@
 import { Job } from 'bullmq';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { prisma } from '../../prisma/client';
 import { generateChatbotReply } from './ai.service';
 
-const log = logger.child({ module: 'ai-worker' });
+const log = createLogger({ module: 'ai-worker' });
 
 export async function processAiJob(job: Job) {
     const { workspaceId, conversationId } = job.data;
@@ -35,6 +35,7 @@ export async function processAiJob(job: Job) {
         const message = await prisma.message.create({
             data: {
                 conversationId,
+                workspaceId,
                 direction: 'OUTBOUND',
                 type: 'TEXT',
                 content: reply,

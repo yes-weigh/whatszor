@@ -47,7 +47,8 @@ export default function AdminDashboardPage() {
         try {
             setLoading(true);
             const { data } = await api.get('/licenses');
-            setKeys(data.data);
+            // Interceptor unwraps { success, data } — `data` here is the payload directly
+            setKeys(data);
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Failed to fetch licenses');
         } finally {
@@ -141,7 +142,7 @@ export default function AdminDashboardPage() {
                                 <th className="px-6 py-4 font-medium">Plan</th>
                                 <th className="px-6 py-4 font-medium">Duration</th>
                                 <th className="px-6 py-4 font-medium">Status</th>
-                                <th className="px-6 py-4 font-medium">Dealer/Workspace</th>
+                                <th className="px-6 py-4 font-medium">Organization</th>
                                 <th className="px-6 py-4 font-medium">Created On</th>
                             </tr>
                         </thead>

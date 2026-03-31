@@ -17,9 +17,19 @@ interface WASession {
     sessionId: string;
     name: string;
     phoneNumber: string | null;
-    status: 'DISCONNECTED' | 'CONNECTING' | 'NEEDS_SCAN' | 'CONNECTED';
+    // Backend may return QR_PENDING (DB enum) — normalised to NEEDS_SCAN in mapSession()
+    status: 'DISCONNECTED' | 'CONNECTING' | 'NEEDS_SCAN' | 'CONNECTED' | 'QR_PENDING';
     qrCode?: string;
     isKnowledgeBot: boolean;
+}
+
+/** Normalise raw API session shape → WASession */
+function mapSession(raw: any): WASession {
+    return {
+        ...raw,
+        // Backend returns QR_PENDING; frontend uses NEEDS_SCAN
+        status: raw.status === 'QR_PENDING' ? 'NEEDS_SCAN' : raw.status,
+    };
 }
 
 // ── QR Modal ───────────────────────────────────────────────────────────────
@@ -28,9 +38,10 @@ function QRModal({ session, onClose }: { session: WASession; onClose: () => void
     const qc = useQueryClient();
 
     // Poll this single session's status while modal is open
+    // NOTE: api.ts interceptor unwraps { success, data } → r.data IS the payload
     const { data } = useQuery<WASession>({
         queryKey: ['wa-accounts', session.sessionId],
-        queryFn: () => api.get(`/whatsapp/sessions/${session.sessionId}/status`).then(r => r.data?.data),
+        queryFn: () => api.get(`/whatsapp/sessions/${session.sessionId}/status`).then(r => mapSession(r.data)),
         refetchInterval: 2500,
     });
 
@@ -56,11 +67,15 @@ function QRModal({ session, onClose }: { session: WASession; onClose: () => void
                 </button>
                 <h3 className="font-bold text-lg text-primary">Connect <span className="text-blue-400">{live.name}</span></h3>
 
-                {/* CONNECTING */}
-                {live.status === 'CONNECTING' && (
+                {/* DISCONNECTED / CONNECTING — show while socket is booting */}
+                {(live.status === 'DISCONNECTED' || live.status === 'CONNECTING') && (
                     <div className="flex flex-col items-center gap-3 py-8">
                         <Loader2 size={40} className="animate-spin text-primary" />
-                        <p className="text-sm text-secondary text-center">Initialising connection with WhatsApp servers…</p>
+                        <p className="text-sm text-secondary text-center">
+                            {live.status === 'DISCONNECTED'
+                                ? 'Starting up connection…'
+                                : 'Initialising connection with WhatsApp servers…'}
+                        </p>
                     </div>
                 )}
 
@@ -92,16 +107,16 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void, onCreate
     const [name, setName] = useState('');
 
     const createMutation = useMutation({
-        mutationFn: (n: string) => api.post('/whatsapp/sessions', { name: n }).then(r => r.data?.data),
+        mutationFn: (n: string) => api.post('/whatsapp/sessions', { name: n }).then(r => mapSession(r.data)),
         onSuccess: async (account) => {
-            // Immediately start the connection
-            await api.post(`/whatsapp/sessions/${account.sessionId}/connect`);
+            // Immediately start the connection (fire and forget)
+            api.post(`/whatsapp/sessions/${account.sessionId}/connect`).catch(() => {});
             qc.invalidateQueries({ queryKey: ['wa-accounts'] });
             onCreated(account);
             onClose();
         },
         onError: (e: any) => {
-            alert(e.response?.data?.message || 'Failed to create account');
+            alert(e.response?.data?.error?.message || e.response?.data?.message || JSON.stringify(e.response?.data) || 'Failed to create account');
         },
     });
 
@@ -182,12 +197,13 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
         onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] })
     });
 
+    const normalStatus = session.status === 'QR_PENDING' ? 'NEEDS_SCAN' : session.status;
     const statusConfig = {
         CONNECTED: { color: 'text-green-600', bg: 'bg-green-50 border-green-200', icon: <Wifi size={14} />, label: 'Connected' },
         CONNECTING: { color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', icon: <Loader2 size={14} className="animate-spin" />, label: 'Connecting…' },
         NEEDS_SCAN: { color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', icon: <Smartphone size={14} />, label: 'Scan QR to link' },
         DISCONNECTED: { color: 'text-zinc-500', bg: 'bg-zinc-50 border-zinc-200', icon: <WifiOff size={14} />, label: 'Disconnected' },
-    }[session.status] ?? { color: 'text-zinc-500', bg: 'bg-zinc-50 border-zinc-200', icon: <WifiOff size={14} />, label: session.status };
+    }[normalStatus] ?? { color: 'text-zinc-500', bg: 'bg-zinc-50 border-zinc-200', icon: <WifiOff size={14} />, label: session.status };
 
     return (
         <div className="card flex items-center gap-4 flex-wrap">
@@ -379,7 +395,8 @@ export function WhatsAppTab() {
 
     const { data: sessions = [], isLoading } = useQuery<WASession[]>({
         queryKey: ['wa-accounts'],
-        queryFn: () => api.get('/whatsapp/sessions').then(r => r.data?.data ?? []),
+        // api.ts interceptor already unwraps → r.data IS the array
+        queryFn: () => api.get('/whatsapp/sessions').then(r => (Array.isArray(r.data) ? r.data : []).map(mapSession)),
         refetchInterval: 4000,
     });
 

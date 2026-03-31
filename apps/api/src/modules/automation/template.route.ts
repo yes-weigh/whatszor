@@ -8,14 +8,14 @@ export const templateRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
     fastify.get('/', async (req, reply) => {
         const { category } = req.query as { category?: string };
         const data = await templateService.listTemplates(category);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Get single template
     fastify.get('/:id', async (req, reply) => {
         const { id } = req.params as { id: string };
         const data = await templateService.getTemplate(id);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Install template — requires auth to know the workspace
@@ -23,6 +23,6 @@ export const templateRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
         const data = await templateService.installTemplate(workspaceId, id);
-        return reply.status(201).send({ success: true, data });
+        return reply.code(201).sendSuccess(data);
     });
 };

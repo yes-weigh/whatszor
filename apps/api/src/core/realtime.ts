@@ -1,92 +1,137 @@
 /**
- * realtime.ts — Server-Sent Events registry
- *
- * Provides a singleton SSE connection map keyed by workspaceId and an
- * `emit()` helper that writes events to all connected clients for a workspace.
+ * realtime.ts — Server-Sent Events registry with per-user filtering
  *
  * Architecture:
- *   - In-process Map — works for single-process deployments (the current setup).
- *   - If horizontal scaling is ever needed, swap the Map for a Redis pub/sub
- *     subscriber that fan-outs to local connections.
+ *   connections = Map<workspaceId, Map<userId, Set<FastifyReply>>>
  *
- * Usage:
- *   // Fastify SSE route
- *   registerClient(workspaceId, reply);
- *   req.socket.on('close', () => unregisterClient(workspaceId, reply));
+ * - emitToWorkspace(workspaceId, ...)  → broadcasts to ALL users in a workspace.
+ * - emitToUser(workspaceId, userId, ...) → sends ONLY to the target user (e.g. QR relay).
  *
- *   // From any worker / service
- *   emit(workspaceId, 'message.new', { conversationId, message });
+ * The nested Map ensures all filtering is done server-side
+ * without relying on the frontend to discard irrelevant events.
  */
 
 import type { FastifyReply } from 'fastify';
-import { logger } from './logger';
+import { createLogger } from './logger';
 
-const log = logger.child({ module: 'realtime' });
+const log = createLogger({ module: 'realtime' });
 
-// Map<workspaceId, Set<reply>> — all open SSE connections for each workspace
-const connections = new Map<string, Set<FastifyReply>>();
+// Map<workspaceId, Map<userId, Set<reply>>>
+const connections = new Map<string, Map<string, Set<FastifyReply>>>();
 
 /** Register a new SSE client connection. */
-export function registerClient(workspaceId: string, reply: FastifyReply): void {
+export function registerClient(workspaceId: string, userId: string, reply: FastifyReply): void {
     if (!connections.has(workspaceId)) {
-        connections.set(workspaceId, new Set());
+        connections.set(workspaceId, new Map());
     }
-    connections.get(workspaceId)!.add(reply);
-    log.debug({ workspaceId, total: connections.get(workspaceId)!.size }, 'SSE client registered');
+    const byUser = connections.get(workspaceId)!;
+    if (!byUser.has(userId)) {
+        byUser.set(userId, new Set());
+    }
+    byUser.get(userId)!.add(reply);
+    log.debug({ workspaceId, userId, total: byUser.get(userId)!.size }, 'SSE client registered');
 }
 
 /** Remove an SSE client connection (call on socket close). */
-export function unregisterClient(workspaceId: string, reply: FastifyReply): void {
-    const set = connections.get(workspaceId);
+export function unregisterClient(workspaceId: string, userId: string, reply: FastifyReply): void {
+    const byUser = connections.get(workspaceId);
+    if (!byUser) return;
+    const set = byUser.get(userId);
     if (!set) return;
     set.delete(reply);
-    if (set.size === 0) connections.delete(workspaceId);
-    log.debug({ workspaceId, remaining: set.size }, 'SSE client unregistered');
+    if (set.size === 0) byUser.delete(userId);
+    if (byUser.size === 0) connections.delete(workspaceId);
+    log.debug({ workspaceId, userId }, 'SSE client unregistered');
 }
 
-/** Emit an SSE event to all connected clients of a workspace. */
-export function emit(workspaceId: string, type: string, payload: Record<string, unknown>): void {
-    const clients = connections.get(workspaceId);
-    if (!clients || clients.size === 0) return;
+/**
+ * Broadcast an event to ALL connected users in a workspace.
+ * Use for events that are relevant workspace-wide (e.g. message.new, contact.updated).
+ */
+export function emitToWorkspace(workspaceId: string, type: string, payload: Record<string, unknown>): void {
+    const byUser = connections.get(workspaceId);
+    if (!byUser || byUser.size === 0) return;
 
     const frame = `data: ${JSON.stringify({ type, payload })}\n\n`;
+    for (const [userId, replies] of byUser) {
+        for (const reply of replies) {
+            try {
+                reply.raw.write(frame);
+            } catch (err) {
+                log.warn({ workspaceId, userId, err }, 'SSE write failed — removing stale client');
+                replies.delete(reply);
+            }
+        }
+    }
 
-    for (const reply of clients) {
+    log.debug({ workspaceId, type, users: byUser.size }, 'SSE workspace broadcast emitted');
+}
+
+/**
+ * Send an event to a SPECIFIC user within a workspace.
+ * Use for directed events like QR relay (only the session owner should receive the QR).
+ */
+export function emitToUser(
+    workspaceId: string,
+    userId: string,
+    type: string,
+    payload: Record<string, unknown>,
+): void {
+    const byUser = connections.get(workspaceId);
+    if (!byUser) return;
+    const replies = byUser.get(userId);
+    if (!replies || replies.size === 0) return;
+
+    const frame = `data: ${JSON.stringify({ type, payload })}\n\n`;
+    for (const reply of replies) {
         try {
             reply.raw.write(frame);
         } catch (err) {
-            // Client disconnected without triggering close — clean up
-            log.warn({ workspaceId, err }, 'SSE write failed — removing stale client');
-            clients.delete(reply);
+            log.warn({ workspaceId, userId, err }, 'SSE write to user failed — removing stale client');
+            replies.delete(reply);
         }
     }
 
-    log.debug({ workspaceId, type, clients: clients.size }, 'SSE event emitted');
+    log.debug({ workspaceId, userId, type }, 'SSE user-directed event emitted');
 }
 
-/** Send a heartbeat comment frame to all clients of a workspace (keeps proxies alive). */
+/**
+ * @deprecated Use emitToWorkspace for workspace-broadcast events.
+ * Kept for backwards compatibility with existing callers that use emit().
+ */
+export function emit(workspaceId: string, type: string, payload: Record<string, unknown>): void {
+    return emitToWorkspace(workspaceId, type, payload);
+}
+
+/** Send a heartbeat comment frame to all clients of a workspace. */
 export function heartbeat(workspaceId: string): void {
-    const clients = connections.get(workspaceId);
-    if (!clients || clients.size === 0) return;
-    for (const reply of clients) {
-        try {
-            reply.raw.write(':\n\n');
-        } catch {
-            clients.delete(reply);
+    const byUser = connections.get(workspaceId);
+    if (!byUser) return;
+    for (const [, replies] of byUser) {
+        for (const reply of replies) {
+            try {
+                reply.raw.write(':\n\n');
+            } catch {
+                replies.delete(reply);
+            }
         }
     }
 }
 
-/** Broadcast a heartbeat to ALL connected workspaces (called by global interval). */
+/** Broadcast a heartbeat to ALL connected workspaces. */
 export function broadcastHeartbeat(): void {
     for (const workspaceId of connections.keys()) {
         heartbeat(workspaceId);
     }
 }
 
-/** Return total number of active SSE connections (for observability). */
+/** Return total number of active SSE connections across all workspaces. */
 export function getConnectionCount(): number {
     let total = 0;
-    for (const set of connections.values()) total += set.size;
+    for (const byUser of connections.values()) {
+        for (const replies of byUser.values()) {
+            total += replies.size;
+        }
+    }
     return total;
 }

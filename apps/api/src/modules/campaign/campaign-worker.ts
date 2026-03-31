@@ -1,10 +1,10 @@
 import { Job } from 'bullmq';
 import { prisma } from '../../prisma/client';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 import { createOrGetConversation } from '../../modules/messaging/conversation.service';
 
-const log = logger.child({ module: 'campaign-worker' });
+const log = createLogger({ module: 'campaign-worker' });
 
 export async function processCampaignJob(job: Job) {
     const { workspaceId, campaignId } = job.data;
@@ -19,6 +19,30 @@ export async function processCampaignJob(job: Job) {
         log.error({ campaignId }, 'Campaign not found');
         return;
     }
+
+    // ── Workspace Suspension Guard ────────────────────────────────────────────
+    const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { status: true },
+    });
+    if (workspace?.status === 'SUSPENDED') {
+        log.warn({ workspaceId, campaignId }, 'Workspace SUSPENDED — aborting campaign execution');
+        await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { status: 'CANCELLED' },
+        });
+        return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Campaign Cancellation Guard ───────────────────────────────────────────
+    // Re-check before processing. The campaign may have been cancelled between
+    // job enqueue and this point.
+    if (campaign.status === 'CANCELLED') {
+        log.info({ campaignId }, 'Campaign already CANCELLED — skipping execution');
+        return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     let templateVersionId = campaign.templateVersionId;
 

@@ -7,25 +7,35 @@ import api from '@/lib/api';
 import { Bot, Loader2 } from 'lucide-react';
 
 export default function RegisterPage() {
-    const [form, setForm] = useState({ name: '', email: '', password: '', workspaceName: '' });
+    const [form, setForm] = useState({ name: '', email: '', password: '', workspaceName: '', workspaceSlug: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { setAuth } = useAuthStore();
     const router = useRouter();
 
-    const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
-        setForm(f => ({ ...f, [k]: e.target.value }));
+    const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value;
+        setForm(f => {
+            const next = { ...f, [k]: val };
+            if (k === 'workspaceName') {
+                next.workspaceSlug = val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            }
+            if (k === 'workspaceSlug') {
+                next.workspaceSlug = val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/g, '');
+            }
+            return next;
+        });
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
         try {
-            const slug = form.workspaceName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-            const payload = { ...form, workspaceSlug: slug };
+            const payload = { ...form, workspaceSlug: form.workspaceSlug.replace(/-+$/, '') };
             // Step 1: Register — returns tokens only (no user object)
             const { data } = await api.post('/auth/register', payload);
-            const { accessToken, refreshToken } = data.data;
+            const { accessToken, refreshToken } = data as any;
 
             // Step 2: Store the token so /auth/me can use it
             localStorage.setItem('accessToken', accessToken);
@@ -34,7 +44,7 @@ export default function RegisterPage() {
 
             // Step 3: Fetch the user profile so setAuth has a valid user object
             const meRes = await api.get('/auth/me');
-            const me = meRes.data?.data;
+            const me = meRes.data as any;
             if (!me) throw new Error('Could not retrieve user profile after registration');
 
             // Step 4: Persist auth state and redirect to license activation
@@ -62,13 +72,14 @@ export default function RegisterPage() {
                     <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-accent">
                         <Bot size={24} color="#fff" />
                     </div>
-                    <h1 className="text-2xl font-bold text-primary">Create workspace</h1>
-                    <p className="text-sm mt-1 text-muted">Set up your Whatsvue account in seconds</p>
+                    <h1 className="text-2xl font-bold text-primary">Create Organization</h1>
+                    <p className="text-sm mt-1 text-muted">Set up your brand-new account in seconds</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="card flex flex-col gap-4">
                     {[
-                        { key: 'workspaceName', label: 'Workspace Name', placeholder: 'Acme Corp', type: 'text' },
+                        { key: 'workspaceName', label: 'Organization Name', placeholder: 'Acme Corp', type: 'text' },
+                        { key: 'workspaceSlug', label: 'Organization ID (Unique)', placeholder: 'acme-corp', type: 'text' },
                         { key: 'name', label: 'Your Name', placeholder: 'Rahul Mehta', type: 'text' },
                         { key: 'email', label: 'Email', placeholder: 'you@company.com', type: 'email' },
                         { key: 'password', label: 'Password', placeholder: '••••••••', type: 'password' },
@@ -85,7 +96,7 @@ export default function RegisterPage() {
                     )}
 
                     <button type="submit" className="btn btn-primary w-full mt-1" disabled={loading}>
-                        {loading ? <Loader2 size={16} className="animate-spin" /> : 'Create Workspace'}
+                        {loading ? <Loader2 size={16} className="animate-spin" /> : 'Create Organization'}
                     </button>
 
                     <p className="text-center text-xs text-muted">

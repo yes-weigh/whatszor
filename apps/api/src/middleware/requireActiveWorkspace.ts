@@ -101,3 +101,13 @@ export async function requireActiveWorkspace(
         }
     }
 }
+
+/**
+ * Purge a workspace's cached status entry.
+ * Call this after any admin action that changes workspace.status
+ * so the access-control middleware picks up the new value immediately.
+ */
+export function invalidateWorkspaceCache(workspaceId: string): void {
+    workspaceCache.delete(workspaceId);
+    inflight.delete(workspaceId);
+}

@@ -30,7 +30,8 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
      */
     fastify.patch(
         '/me',
-        { preHandler: requireRole('workspace:manage') },
+        // workspace:manage is OWNER-only — ADMIN cannot mutate workspace-level settings
+        { preHandler: requireRole('OWNER') },
         async (req, reply) => {
             const body = UpdateWorkspaceSchema.parse(req.body);
             const workspace = await updateWorkspace(req.user.workspaceId, body);
@@ -81,11 +82,18 @@ export const workspaceRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
      */
     fastify.patch(
         '/me/members/:memberId',
-        { preHandler: requireRole('members:manage') },
+        // OWNER-only: only an OWNER can change roles (including promoting to OWNER)
+        { preHandler: requireRole('OWNER') },
         async (req, reply) => {
             const { memberId } = req.params as { memberId: string };
             const { role } = req.body as { role: import('@prisma/client').UserRole };
-            const updated = await updateMemberRole(req.user.workspaceId, memberId, role);
+            // Pass requestor role so service can block ADMIN→OWNER escalation
+            const updated = await updateMemberRole(
+                req.user.workspaceId,
+                memberId,
+                role,
+                req.user.role as import('@prisma/client').UserRole,
+            );
             return reply.sendSuccess(updated);
         },
     );

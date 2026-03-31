@@ -73,7 +73,7 @@ export default function TemplateGalleryPage() {
 
     const { data: templates = [], isLoading } = useQuery({
         queryKey: ['automationTemplates'],
-        queryFn: () => api.get('/automations/templates').then(r => r.data?.data ?? []),
+        queryFn: () => api.get('/automations/templates').then(r => r.data ?? []),
     });
 
     const filtered = templates.filter((t: any) => {
@@ -86,7 +86,7 @@ export default function TemplateGalleryPage() {
         setInstallingId(template.id);
         try {
             const res = await api.post(`/automations/templates/${template.id}/install`);
-            const ruleId = res.data?.data?.rule?.id;
+            const ruleId = res.data?.rule?.id;
             if (ruleId) {
                 router.push(`/automations/create?ruleId=${ruleId}`);
             }

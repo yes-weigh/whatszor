@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { generateLicenseKeys, getLicenseKeys, redeemLicenseKey } from './license.service';
 import { authenticateAdmin } from '../../middleware/authenticateAdmin';
 import { authenticate } from '../../middleware/authenticate';
+import { requireRole } from '../../middleware/require-role';
+import { invalidateWorkspaceCache } from '../../middleware/requireActiveWorkspace';
 
 const GenerateKeySchema = z.object({
     planTier: z.enum(['FREE', 'STARTER', 'PRO', 'AGENCY']),
@@ -35,15 +37,17 @@ export const licenseRoutes: FastifyPluginAsync = async (fastify: FastifyInstance
 
     /**
      * POST /api/v1/licenses/redeem
-     * Dealer endpoint to redeem a license key
+     * Workspace OWNER redeems a license key (billing authority is OWNER-only).
      */
-    fastify.post('/redeem', { preHandler: authenticate }, async (req, reply) => {
+    fastify.post('/redeem', { preHandler: [authenticate, requireRole('OWNER')] }, async (req, reply) => {
         const schema = z.object({ key: z.string().min(1) });
         const { key } = schema.parse(req.body);
         const { workspaceId } = req.user;
 
         try {
             const result = await redeemLicenseKey(workspaceId, key);
+            // Purge cache so next API call sees ACTIVE status immediately
+            invalidateWorkspaceCache(workspaceId);
             return reply.status(200).send({ success: true, data: result });
         } catch (error: any) {
             return reply.status(400).send({ success: false, message: error.message });

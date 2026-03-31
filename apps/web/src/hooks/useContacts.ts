@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import apiClient from '@/lib/api-client';
 import api from '@/lib/api';
 import { useState } from 'react';
 import { toast } from 'react-hot-toast';
@@ -20,12 +21,11 @@ export function useContacts() {
     const queryClient = useQueryClient();
 
     // Fetch contacts
+    // The interceptor unwraps { success, data } -> payload directly.
+    // /crm/contacts returns an array, so r.data is Contact[] after unwrap.
     const { data: contacts = [], isLoading, refetch } = useQuery<Contact[]>({
         queryKey: ['contacts', search],
-        queryFn: async () => {
-            const { data } = await api.get(`/crm/contacts?search=${search}`);
-            return data?.data ?? [];
-        },
+        queryFn: () => apiClient.get<Contact[]>(`/crm/contacts?search=${search}`),
     });
 
     // Create contact

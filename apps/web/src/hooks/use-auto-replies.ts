@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import apiClient from '@/lib/api-client';
 
 export interface AutoReplyMedia {
     id: string;
@@ -49,32 +49,23 @@ export function useAutoReplies() {
 
     const queryInfo = useQuery({
         queryKey: ['auto-replies'],
-        queryFn: async () => {
-            const res = await api.get('/quick-replies/auto');
-            return res.data.data as AutoReply[];
-        },
+        queryFn: () => apiClient.get<AutoReply[]>('/quick-replies/auto'),
     });
 
     const createMutation = useMutation({
-        mutationFn: async (data: CreateAutoReplyInput) => {
-            const res = await api.post('/quick-replies/auto', data);
-            return res.data.data;
-        },
+        mutationFn: (data: CreateAutoReplyInput) =>
+            apiClient.post<AutoReply>('/quick-replies/auto', data),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auto-replies'] }),
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ id, ...data }: UpdateAutoReplyInput) => {
-            const res = await api.patch(`/quick-replies/auto/${id}`, data);
-            return res.data.data;
-        },
+        mutationFn: ({ id, ...data }: UpdateAutoReplyInput) =>
+            apiClient.patch<AutoReply>(`/quick-replies/auto/${id}`, data),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auto-replies'] }),
     });
 
     const deleteMutation = useMutation({
-        mutationFn: async (id: string) => {
-            await api.delete(`/quick-replies/auto/${id}`);
-        },
+        mutationFn: (id: string) => apiClient.delete(`/quick-replies/auto/${id}`),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auto-replies'] }),
     });
 

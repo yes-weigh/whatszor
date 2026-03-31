@@ -36,7 +36,9 @@ export default function NewCampaignPage() {
         queryKey: ['templates'],
         queryFn: () =>
             api.get('/templates').then(r => {
-                const list: any[] = r.data?.templates ?? r.data?.data ?? [];
+                // Backend sends { templates: T[] } via sendSuccess({ templates })
+                // After interceptor unwrap, r.data = { templates: T[] }
+                const list: any[] = r.data.templates;
                 // Normalize: flatten the latest version's messageText into a top-level body field
                 return list.map((t: any) => ({
                     ...t,
@@ -47,18 +49,20 @@ export default function NewCampaignPage() {
 
     const { data: contacts = [] } = useQuery({
         queryKey: ['contacts', contactSearch],
-        queryFn: () => api.get(`/crm/contacts?search=${contactSearch}&limit=100`).then(r => r.data?.data ?? []),
+        // /crm/contacts returns Contact[] directly; after interceptor unwrap r.data is the array
+        queryFn: () => api.get(`/crm/contacts?search=${contactSearch}&limit=100`).then(r => r.data),
     });
 
     const { data: accounts = [] } = useQuery({
         queryKey: ['whatsappAccounts'],
-        queryFn: () => api.get('/whatsapp/sessions').then(r => r.data?.data ?? []),
+        // /whatsapp/sessions returns an array directly after interceptor unwrap
+        queryFn: () => api.get('/whatsapp/sessions').then(r => r.data),
     });
 
     const createMutation = useMutation({
         mutationFn: (payload: any) => api.post('/campaigns', payload),
         onSuccess: (res) => {
-            const id = res.data?.data?.id;
+            const id = res.data?.id;
             if (schedule === 'now' && id) {
                 api.post(`/campaigns/${id}/start`).catch(console.error);
             }

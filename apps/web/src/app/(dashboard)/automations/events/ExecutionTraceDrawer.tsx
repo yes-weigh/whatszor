@@ -23,7 +23,7 @@ export function ExecutionTraceDrawer({ event, onClose, onReplay }: TraceDrawerPr
         setLoading(true);
         try {
             const { data } = await api.get(`/automations/${ruleId}/executions/${executionId}/logs`);
-            setLogs(data.data.logs || []);
+            setLogs(data.logs || []);
         } catch (err) {
             console.error(err);
         } finally {

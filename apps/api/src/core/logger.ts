@@ -28,6 +28,31 @@ export const logger = pino(
             role: env.CONTAINER_ROLE,
         },
         timestamp: pino.stdTimeFunctions.isoTime,
+        redact: {
+            paths: [
+                // HTTP headers
+                'req.headers.authorization',
+                'req.headers.cookie',
+                // Top-level scalar fields
+                'password',
+                'token',
+                'accessToken',
+                'refreshToken',
+                'secret',
+                'apiKey',
+                // Nested wildcards — covers service payloads, job data, etc.
+                '*.password',
+                '*.token',
+                '*.accessToken',
+                '*.refreshToken',
+                '*.secret',
+                '*.apiKey',
+                '*.JWT_SECRET',
+                '*.AWS_SECRET_ACCESS_KEY',
+                '*.AWS_ACCESS_KEY_ID',
+            ],
+            censor: '[REDACTED]',
+        },
     },
     transport ? pino.transport(transport) : undefined,
 );
@@ -44,6 +69,9 @@ export interface LoggerContext {
  * Creates a structured child logger with enforced contextual fields.
  * Automatically resolves `traceId` and `workspaceId` from AsyncLocalStorage
  * if not explicitly provided, ensuring every log line is traceable.
+ *
+ * ⚠️  ALWAYS use `createLogger()` — never call `logger.child()` directly.
+ *     Direct `.child()` calls bypass traceId + workspaceId injection.
  *
  * Usage:
  *   const log = createLogger({ module: 'messaging', action: 'send' });

@@ -11,31 +11,31 @@ export const recordRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
     fastify.post('/', { preHandler: requireRole('contacts:create') }, async (req, reply) => {
         const input = CreateRecordSchema.parse(req.body);
         const record = await recordService.createRecord(req.user.workspaceId, input);
-        return reply.status(201).send({ success: true, data: record });
+        return reply.code(201).sendSuccess(record);
     });
 
     fastify.get('/', async (req, reply) => {
         const query = z.object({ pipelineId: z.string().optional() }).parse(req.query);
         const records = await recordService.listRecords(req.user.workspaceId, query.pipelineId);
-        return reply.send({ success: true, data: records });
+        return reply.sendSuccess(records);
     });
 
     fastify.get('/:id', async (req, reply) => {
         const { id } = req.params as { id: string };
         const record = await recordService.getRecord(req.user.workspaceId, id);
-        return reply.send({ success: true, data: record });
+        return reply.sendSuccess(record);
     });
 
     fastify.patch('/:id', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const input = UpdateRecordSchema.parse(req.body);
         const record = await recordService.updateRecord(req.user.workspaceId, id, input);
-        return reply.send({ success: true, data: record });
+        return reply.sendSuccess(record);
     });
 
     fastify.delete('/:id', { preHandler: requireRole('contacts:delete') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         await recordService.deleteRecord(req.user.workspaceId, id);
-        return reply.send({ success: true, data: { message: 'Record deleted' } });
+        return reply.sendSuccess({ message: 'Record deleted' });
     });
 };

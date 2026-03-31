@@ -93,6 +93,13 @@ export async function redeemLicenseKey(workspaceId: string, keyString: string) {
             }
         });
 
-        return { workspace: updatedWorkspace, key: redeemedKey };
+        return { 
+            workspace: {
+                ...updatedWorkspace,
+                storageUsedBytes: Number(updatedWorkspace.storageUsedBytes),
+                storageLimitBytes: Number(updatedWorkspace.storageLimitBytes)
+            }, 
+            key: redeemedKey 
+        };
     });
 }

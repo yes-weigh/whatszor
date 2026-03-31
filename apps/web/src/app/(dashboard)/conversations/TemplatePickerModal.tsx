@@ -39,7 +39,9 @@ export default function TemplatePickerModal({
         queryKey: ['templates'],
         queryFn: () =>
             api.get('/templates').then(r => {
-                const list: any[] = r.data?.templates ?? r.data?.data ?? [];
+                // Backend returns { templates: T[] } via sendSuccess({ templates })
+                // After interceptor unwrap, r.data = { templates: T[] }
+                const list: any[] = r.data.templates;
                 return list.map((t: any) => {
                     const latestVersion = t.versions?.[0];
                     return {

@@ -1,10 +1,11 @@
 import { Job } from 'bullmq';
 import { prisma } from '../../prisma/client';
+import { logEvent } from '../../core/event-logger';
 import { getRedisClient } from '../../core/redis';
 import { waManager } from '../whatsapp/whatsapp.service';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 
-const log = logger.child({ module: 'knowledge-worker' });
+const log = createLogger({ module: 'knowledge-worker' });
 
 export async function processKnowledgeOutreachJob(job: Job) {
     const { workspaceId, phone } = job.data as { workspaceId: string, phone: string };
@@ -13,10 +14,22 @@ export async function processKnowledgeOutreachJob(job: Job) {
         return;
     }
 
+    // ── Workspace suspension guard ────────────────────────────────────────────
+    const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { status: true },
+    });
+    if (!workspace || workspace.status === 'SUSPENDED') {
+        log.warn({ workspaceId, jobId: job.id }, 'Skipping knowledge outreach — workspace suspended or missing');
+        return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const targetNumber = phone.replace(/[^0-9]/g, '');
     const redis = getRedisClient();
     const today = new Date().toISOString().split('T')[0];
     const rateLimitKey = `bot:ratelimit:outbound:${targetNumber}:${today}`;
+
 
     // 1. Check Rate Limit instantly
     let currentSent = parseInt((await redis.get(rateLimitKey)) || '0', 10);
@@ -86,6 +99,11 @@ export async function processKnowledgeOutreachJob(job: Job) {
                 // Active session context TTL: 1 hour
                 await redis.set(`bot:session:${targetNumber}`, p.id, 'EX', 60 * 60);
                 log.info({ msgId, productId: p.id, phone: targetNumber }, 'Stored bot routing context in Redis');
+                await logEvent(workspaceId, 'knowledge_question_asked', 'knowledge_worker', {
+                    productId: p.id,
+                    phone: targetNumber,
+                    messageId: msgId
+                }).catch(() => {});
             }
 
             // Mark product Outreach completion

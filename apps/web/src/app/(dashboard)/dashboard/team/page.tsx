@@ -21,7 +21,7 @@ export default function TeamAccessPage() {
 
     const { data: numbers = [], isLoading } = useQuery<AllowedNumber[]>({
         queryKey: ['allowed-numbers'],
-        queryFn: () => api.get('/products/allowed-numbers').then(r => r.data.data)
+        queryFn: () => api.get('/products/allowed-numbers').then(r => r.data)
     });
 
     const createMutation = useMutation({

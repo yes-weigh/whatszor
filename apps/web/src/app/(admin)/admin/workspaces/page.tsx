@@ -43,9 +43,8 @@ export default function AdminWorkspacesPage() {
         try {
             setIsLoading(true);
             const res = await api.get('/admin/workspaces');
-            if (res.data?.success) {
-                setWorkspaces(res.data.data);
-            }
+            // Interceptor unwraps { success, data } → res.data is the array directly
+            setWorkspaces(res.data);
         } catch (error) {
             console.error('Failed to fetch workspaces:', error);
         } finally {
@@ -57,18 +56,16 @@ export default function AdminWorkspacesPage() {
         const suspend = currentStatus === 'ACTIVE' || currentStatus === 'TRIAL';
         const actionStr = suspend ? 'suspend' : 'activate';
         
-        if (!process.browser && typeof window !== 'undefined') return;
-        if (!window.confirm(`Are you sure you want to ${actionStr} this workspace?`)) return;
+        if (!window.confirm(`Are you sure you want to ${actionStr} this organization?`)) return;
 
         try {
             setActionLoading(id);
-            const res = await api.post(`/admin/workspaces/${id}/suspend`, { suspend });
-            if (res.data?.success) {
-                await fetchWorkspaces();
-            }
+            // api interceptor already unwraps — just await the call; it throws on error
+            await api.post(`/admin/workspaces/${id}/suspend`, { suspend });
+            await fetchWorkspaces();
         } catch (error) {
             console.error('Failed to toggle status:', error);
-            alert(`Failed to ${actionStr} workspace.`);
+            alert(`Failed to ${actionStr} organization.`);
         } finally {
             setActionLoading(null);
         }
@@ -116,7 +113,7 @@ export default function AdminWorkspacesPage() {
                         <table className="w-full text-left text-sm whitespace-nowrap">
                             <thead className="bg-gray-950/50 text-gray-400 border-b border-gray-800 text-xs uppercase tracking-wider">
                                 <tr>
-                                    <th className="px-6 py-4 font-medium">Dealer Workspace</th>
+                                    <th className="px-6 py-4 font-medium">Dealer Organization</th>
                                     <th className="px-6 py-4 font-medium">Owner</th>
                                     <th className="px-6 py-4 font-medium">Status & Tier</th>
                                     <th className="px-6 py-4 font-medium">Limits</th>
@@ -128,7 +125,7 @@ export default function AdminWorkspacesPage() {
                                 {workspaces.length === 0 ? (
                                     <tr>
                                         <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                                            No workspaces found.
+                                            No organizations found.
                                         </td>
                                     </tr>
                                 ) : (
@@ -138,7 +135,7 @@ export default function AdminWorkspacesPage() {
                                             <tr key={ws.id} className="hover:bg-gray-800/20 transition-colors">
                                                 <td className="px-6 py-4">
                                                     <div className="font-medium text-gray-200">{ws.name}</div>
-                                                    <div className="text-xs text-gray-500 mt-0.5">Slug: {ws.slug}</div>
+                                                    <div className="text-xs text-gray-500 mt-0.5">Org ID: {ws.slug}</div>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     {owner ? (

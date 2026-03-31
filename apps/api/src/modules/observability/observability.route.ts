@@ -32,10 +32,7 @@ export const observabilityRoutes: FastifyPluginAsync = async (fastify: FastifyIn
             prisma.eventLog.count({ where })
         ]);
 
-        return reply.send({
-            success: true,
-            data: { events, total }
-        });
+        return reply.sendSuccess({ events, total });
     });
 
     // Get Platform Metrics
@@ -56,8 +53,7 @@ export const observabilityRoutes: FastifyPluginAsync = async (fastify: FastifyIn
             where: { workspaceId, status: 'FAILED', createdAt: { gte: thirtyDaysAgo } }
         });
 
-        // 3. Node Execution Metrics (Total Nodes Executed vs Failed)
-        // Find execution IDs for this workspace first since NodeExecutionLog doesn't have workspaceId
+        // 3. Node Execution Metrics
         const recentExecutions = await prisma.automationExecution.findMany({
             where: { workspaceId, createdAt: { gte: thirtyDaysAgo } },
             select: { id: true }
@@ -82,17 +78,14 @@ export const observabilityRoutes: FastifyPluginAsync = async (fastify: FastifyIn
             where: { workspaceId, isActive: true }
         });
 
-        return reply.send({
-            success: true,
-            data: {
-                totalExecutions,
-                failedExecutions,
-                totalNodesExecuted: totalNodes,
-                failedNodes,
-                activeRules,
-                executionSuccessRate: totalExecutions > 0 ? ((totalExecutions - failedExecutions) / totalExecutions) * 100 : 100,
-                nodeSuccessRate: totalNodes > 0 ? ((totalNodes - failedNodes) / totalNodes) * 100 : 100
-            }
+        return reply.sendSuccess({
+            totalExecutions,
+            failedExecutions,
+            totalNodesExecuted: totalNodes,
+            failedNodes,
+            activeRules,
+            executionSuccessRate: totalExecutions > 0 ? ((totalExecutions - failedExecutions) / totalExecutions) * 100 : 100,
+            nodeSuccessRate: totalNodes > 0 ? ((totalNodes - failedNodes) / totalNodes) * 100 : 100
         });
     });
 };

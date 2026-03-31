@@ -98,11 +98,26 @@ export async function importProducts(workspaceId: string, records: any[]) {
 
 // Manual Outreach trigger mapped from API Call
 export async function triggerOutreach(workspaceId: string) {
+    // Resolve the first active AllowedNumber as the outreach recipient.
+    // The knowledge bot sends to people who are authorised to provide product info.
+    const allowedNumber = await prisma.allowedNumber.findFirst({
+        where: { workspaceId, isActive: true },
+        orderBy: { createdAt: 'asc' },
+    });
+
+    if (!allowedNumber) {
+        throw {
+            statusCode: 422,
+            code: 'NO_ALLOWED_NUMBER',
+            message: 'No active allowed number configured. Add one in Settings → Knowledge Bot before triggering outreach.',
+        };
+    }
+
     const queue = getQueue(QueueName.KNOWLEDGE_OUTREACH);
-    await queue.add('collect_product_info', { workspaceId }, {
+    await queue.add('collect_product_info', { workspaceId, phone: allowedNumber.phoneNumber }, {
         jobId: `outreach_${workspaceId}_${Date.now()}`
     });
-    return { queued: true };
+    return { queued: true, phone: allowedNumber.phoneNumber };
 }
 
 // ── PHASE 6: Admin Review UI & API Endpoints ──────────────────────────────

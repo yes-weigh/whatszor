@@ -1,8 +1,8 @@
 // Import from the local generated Prisma output via standard resolution.
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../core/logger';
+import { createLogger } from '../core/logger';
 
-const log = logger.child({ module: 'prisma' });
+const log = createLogger({ module: 'prisma' });
 
 const globalForPrisma = globalThis as unknown as {
     prisma: PrismaClient | undefined;
@@ -49,11 +49,20 @@ if (process.env.NODE_ENV !== 'production') {
 export type { PrismaClient };
 
 export async function connectDatabase(): Promise<void> {
-    await prisma.$connect();
-    log.info('Database connected');
+    try {
+        await prisma.$connect();
+        log.info('Database connected successfully');
+    } catch (err) {
+        log.error({ err }, 'Failed to connect to database');
+        throw err;
+    }
 }
 
 export async function disconnectDatabase(): Promise<void> {
-    await prisma.$disconnect();
-    log.info('Database disconnected');
+    try {
+        await prisma.$disconnect();
+        log.info('Database disconnected gracefully');
+    } catch (err) {
+        log.error({ err }, 'Error during database disconnect');
+    }
 }

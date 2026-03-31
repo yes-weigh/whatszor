@@ -11,9 +11,9 @@
 import { promises as fs } from 'fs';
 import { join, resolve } from 'path';
 import { env } from '../env';
-import { logger } from './logger';
+import { createLogger } from './logger';
 
-const log = logger.child({ module: 'media-storage' });
+const log = createLogger({ module: 'media-storage' });
 
 /** Maps common MIME types to file extensions. */
 const MIME_TO_EXT: Record<string, string> = {

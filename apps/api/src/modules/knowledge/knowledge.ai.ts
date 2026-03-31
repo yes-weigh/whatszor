@@ -1,11 +1,11 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { env } from '../../env';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { promises as fs } from 'fs';
 import { KnowledgeDataType } from '@prisma/client';
 
-const log = logger.child({ module: 'knowledge.ai' });
+const log = createLogger({ module: 'knowledge.ai' });
 const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 const MODELS = ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
 

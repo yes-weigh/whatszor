@@ -7,9 +7,10 @@
  */
 import { Job } from 'bullmq';
 import { prisma } from '../../prisma/client';
-import { logger } from '../logger';
+import { Prisma, MessageDirection, MessageType, MessageStatus } from '@prisma/client';
+import { createLogger } from '../logger';
 
-const log = logger.child({ module: 'worker:history-sync' });
+const log = createLogger({ module: 'worker:history-sync' });
 
 const isGroup = (jid: string) =>
     jid.endsWith('@g.us') || jid.endsWith('@newsletter') || jid.endsWith('@broadcast') || jid === 'status@broadcast';
@@ -74,13 +75,14 @@ export async function processHistorySync(job: Job): Promise<void> {
 
     // ── 4. Build + bulk insert messages ──────────────────────────────────────
     type MsgRecord = {
+        workspaceId: string;
         conversationId: string;
         remoteId: string;
-        direction: 'INBOUND' | 'OUTBOUND';
-        type: string;
+        direction: MessageDirection;
+        type: MessageType;
         content: string | null;
-        mediaData: any;
-        status: string;
+        mediaData: Prisma.InputJsonValue;
+        status: MessageStatus;
         createdAt: Date;
         updatedAt: Date;
     };
@@ -93,7 +95,7 @@ export async function processHistorySync(job: Job): Promise<void> {
         if (!rawJid || isGroup(rawJid)) continue;
         const jid = resolveJid(rawJid);
 
-        const pushName = (msg as any).pushName;
+        const pushName = (msg as { pushName?: string }).pushName;
         if (pushName && !contactNameMap[jid]) contactNameMap[jid] = pushName;
 
         const conv = convMap.get(jid);
@@ -108,7 +110,7 @@ export async function processHistorySync(job: Job): Promise<void> {
             || msg.message?.listResponseMessage?.singleSelectReply?.selectedRowId
             || null;
 
-        let type = 'TEXT';
+        let type: MessageType = 'TEXT';
         let content = textContent;
         let mediaData: any = null;
 
@@ -122,12 +124,13 @@ export async function processHistorySync(job: Job): Promise<void> {
         if (!content && !mediaData) continue;
 
         msgRecords.push({
+            workspaceId,
             conversationId: conv.id,
             remoteId: msg.key.id || '',
             direction: msg.key.fromMe ? 'OUTBOUND' : 'INBOUND',
             type,
             content,
-            mediaData,
+            mediaData: mediaData as Prisma.InputJsonValue,
             status: msg.key.fromMe ? 'SENT' : 'RECEIVED',
             createdAt: msgTimestamp,
             updatedAt: msgTimestamp,
@@ -142,21 +145,26 @@ export async function processHistorySync(job: Job): Promise<void> {
     }
 
     // Apply contact names (after messages loop so pushNames are captured)
-    for (const [jid, name] of Object.entries(contactNameMap)) {
-        const conv = convMap.get(jid);
-        if (conv) {
-            await (prisma.conversation as any).update({
-                where: { id: conv.id },
-                data: { waContactName: name },
-            });
-        }
+    const CHUNK_SIZE = 50;
+    const contactEntries = Object.entries(contactNameMap);
+    for (let i = 0; i < contactEntries.length; i += CHUNK_SIZE) {
+        const chunk = contactEntries.slice(i, i + CHUNK_SIZE);
+        await Promise.all(chunk.map(async ([jid, name]) => {
+            const conv = convMap.get(jid);
+            if (conv) {
+                await prisma.conversation.update({
+                    where: { id: conv.id },
+                    data: { waContactName: name },
+                });
+            }
+        }));
     }
 
     if (msgRecords.length > 0) {
         const MSG_BATCH_SIZE = 500;
         for (let i = 0; i < msgRecords.length; i += MSG_BATCH_SIZE) {
             await prisma.message.createMany({
-                data: msgRecords.slice(i, i + MSG_BATCH_SIZE) as any,
+                data: msgRecords.slice(i, i + MSG_BATCH_SIZE),
                 skipDuplicates: true,
             });
         }
@@ -167,7 +175,10 @@ export async function processHistorySync(job: Job): Promise<void> {
         if (!chat.id || isGroup(chat.id)) continue;
         const conv = convMap.get(chat.id);
         if (!conv || !chat.conversationTimestamp) continue;
-        const chatTs = new Date(Number(chat.conversationTimestamp) * 1000);
+        const tsNum = Number(chat.conversationTimestamp);
+        if (!tsNum || !isFinite(tsNum)) continue; // skip invalid/zero timestamps
+        const chatTs = new Date(tsNum * 1000);
+        if (isNaN(chatTs.getTime())) continue;    // belt-and-suspenders guard
         const lm = latestMsgPerConv.get(conv.id);
         if (lm && lm.at >= chatTs) continue;
         if (conv.lastMessage !== null && conv.lastMessageAt && conv.lastMessageAt >= chatTs) continue;
@@ -183,7 +194,7 @@ export async function processHistorySync(job: Job): Promise<void> {
     const BATCH = 50;
     for (let i = 0; i < convUpdates.length; i += BATCH) {
         await Promise.all(convUpdates.slice(i, i + BATCH).map(([convId, { at, content, type }]) =>
-            (prisma.conversation as any).update({
+            prisma.conversation.update({
                 where: { id: convId },
                 data: { lastMessageAt: at, lastMessage: content ? content.substring(0, 50) : (TYPE_EMOJI[type] ?? null) },
             })

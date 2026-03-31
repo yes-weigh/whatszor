@@ -22,7 +22,7 @@ function CreatePageInner() {
 
         api.get(`/automations/${ruleId}`)
             .then(res => {
-                const rule = res.data?.data;
+                const rule = res.data;
                 if (rule) {
                     const flowDef = rule.flowDefinition as any;
                     setInitialName(rule.name);

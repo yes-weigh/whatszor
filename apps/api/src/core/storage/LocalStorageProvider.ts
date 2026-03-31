@@ -4,9 +4,9 @@ import { FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
 import { IStorageProvider, UploadedFileMeta } from './IStorageProvider';
 import { env } from '../../env';
-import { logger } from '../logger';
+import { createLogger } from '../logger';
 
-const log = logger.child({ module: 'local-storage-provider' });
+const log = createLogger({ module: 'local-storage-provider' });
 
 /**
  * Local filesytem storage provider for development and simple deployments.

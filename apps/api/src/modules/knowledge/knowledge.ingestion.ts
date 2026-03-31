@@ -1,13 +1,14 @@
 import { Job } from 'bullmq';
 import { prisma } from '../../prisma/client';
+import { logEvent } from '../../core/event-logger';
 import { KnowledgeDataType, KnowledgeSourceStatus, Prisma } from '@prisma/client';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { getRedisClient } from '../../core/redis';
 import { downloadMediaMessage } from '@itsukichan/baileys';
 import { saveMedia } from '../../core/media-storage';
 import { extractProductData, calculateHybridConfidence } from './knowledge.ai';
 
-const log = logger.child({ module: 'knowledge-ingestion' });
+const log = createLogger({ module: 'knowledge-ingestion' });
 
 /**
  * processIncomingKnowledgeJob
@@ -160,6 +161,11 @@ export async function processIncomingKnowledgeJob(job: Job) {
                     content: `Hi! I received your message but I'm not sure which product product this belongs to. Could you please reply directly to one of my earlier product questions?`,
                 });
             }).catch(err => log.error({ err }, 'Failed enqueueing orphan fallback'));
+            
+            await logEvent(workspaceId, 'knowledge_response_orphaned', 'knowledge_ingestion', {
+                messageId,
+                senderPhone
+            }).catch(() => {});
         }
 
         // ── 4. Database Write (Pre-AI initial state) ────────────────────────
@@ -175,6 +181,13 @@ export async function processIncomingKnowledgeJob(job: Job) {
         });
 
         log.info({ sourceId: sourceData.id, resolvedProductId, status }, 'Successfully mapped & persisted the incoming content payload');
+        
+        await logEvent(workspaceId, 'knowledge_response_received', 'knowledge_ingestion', {
+            sourceId: sourceData.id,
+            productId: resolvedProductId,
+            messageId,
+            matchTier
+        }).catch(() => {});
 
         // ── 5. AI Extraction Pipeline & Merge Engine ────────────────────────
         await executeAIAndMerge(sourceData, matchTier, workspaceId, sessionId, messageId, msgKey?.remoteJid);
@@ -208,6 +221,11 @@ async function executeAIAndMerge(sourceData: any, matchTier: number, workspaceId
                     content: `I'm sorry, I couldn't extract product information from that format. Could you please provide it again with clearer labels (like *Description:* ... *Specs:* ...) or upload clearer photos?`,
                 });
             }).catch(err => log.error({ err }, 'Failed enqueueing failed validation fallback'));
+            
+            await logEvent(workspaceId, 'knowledge_update_failed', 'knowledge_ingestion', {
+                sourceId: sourceData.id,
+                messageId
+            }).catch(() => {});
         }
         return;
     }
@@ -287,6 +305,14 @@ async function executeAIAndMerge(sourceData: any, matchTier: number, workspaceId
                     }
                 });
                 log.info({ productId: sourceData.productId, hasConflictAny }, 'Auto-Merge Engine successfully applied payload to core product data');
+                
+                if (workspaceId) {
+                    await logEvent(workspaceId, 'knowledge_update_applied', 'knowledge_ingestion', {
+                        sourceId: sourceData.id,
+                        productId: sourceData.productId,
+                        hasConflictAny
+                    }).catch(() => {});
+                }
             }
         }
     }

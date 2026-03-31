@@ -17,7 +17,7 @@ export function GeneralSettingsTab() {
 
     const { data: workspace, isLoading } = useQuery({
         queryKey: ['workspace-settings'],
-        queryFn: () => api.get('/workspaces/me').then(r => r.data?.data ?? r.data),
+        queryFn: () => api.get('/workspaces/me').then(r => r.data),
     });
 
     const [name, setName] = useState('');
@@ -75,7 +75,7 @@ export function GeneralSettingsTab() {
                 <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-semibold text-secondary uppercase tracking-wider flex items-center gap-1.5">
                         <Globe size={12} />
-                        Workspace Name
+                        Organization Name
                     </label>
                     <input
                         className="input"
@@ -115,7 +115,7 @@ export function GeneralSettingsTab() {
                 {workspace?.slug && (
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-semibold text-secondary uppercase tracking-wider">
-                            Workspace Slug
+                            Organization ID
                         </label>
                         <div className="input bg-elevated text-muted cursor-not-allowed select-all font-mono text-sm">
                             {workspace.slug}

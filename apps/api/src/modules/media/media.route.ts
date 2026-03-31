@@ -10,18 +10,21 @@ import { createReadStream } from 'fs';
 import { authenticate } from '../../middleware/authenticate';
 import { prisma } from '../../prisma/client';
 import { getMediaPath, saveMedia } from '../../core/media-storage';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { downloadMediaMessage } from '@itsukichan/baileys';
 import { waManager } from '../whatsapp/whatsapp.service';
 
-const log = logger.child({ module: 'media-route' });
+const log = createLogger({ module: 'media-route' });
 
 export async function mediaRoutes(fastify: FastifyInstance) {
 
     // ── GET /:messageId — stream saved file ───────────────────────────────
     fastify.get<{ Params: { messageId: string } }>(
         '/:messageId',
-        { preHandler: [authenticate] },
+        { 
+            preHandler: [authenticate],
+            config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+        },
         async (request, reply) => {
             const { messageId } = request.params;
             const { workspaceId } = request.user;
@@ -76,7 +79,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     // the binary blob — so the client can display it immediately.
     fastify.post<{ Params: { messageId: string } }>(
         '/:messageId/download',
-        { preHandler: [authenticate] },
+        { 
+            preHandler: [authenticate],
+            config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+        },
         async (request, reply) => {
             const { messageId } = request.params;
             const { workspaceId } = request.user;

@@ -36,7 +36,9 @@ export default function CampaignsPage() {
 
     const { data: campaignsData } = useQuery({
         queryKey: ['campaigns'],
-        queryFn: () => api.get('/campaigns').then(r => r.data?.data?.campaigns ?? []),
+        // Backend returns { campaigns: Campaign[], total: number } via sendSuccess({ campaigns, total })
+        // After interceptor unwrap, r.data is { campaigns, total }.
+        queryFn: () => api.get('/campaigns').then(r => r.data),
     });
 
     const startMutation = useMutation({
@@ -54,7 +56,7 @@ export default function CampaignsPage() {
         onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
     });
 
-    const campaigns: any[] = campaignsData ?? [];
+    const campaigns: any[] = campaignsData?.campaigns ?? [];
 
     if (!mounted) return null;
 

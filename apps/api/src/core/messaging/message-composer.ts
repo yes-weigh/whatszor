@@ -1,10 +1,10 @@
-import { logger } from '../logger';
+import { createLogger } from '../logger';
 import { prisma } from '../../prisma/client';
 import { renderTemplateVersion, RenderContext } from '../../modules/template/template-renderer';
 import { randomUUID } from 'crypto';
 import { outboundMessagesQueue } from '../queue';
 
-const log = logger.child({ module: 'message-composer' });
+const log = createLogger({ module: 'message-composer' });
 
 export interface ComposeMessageRequest {
     workspaceId: string;
@@ -72,6 +72,7 @@ export async function composeAndQueueMessage(request: ComposeMessageRequest) {
     const message = await prisma.message.create({
         data: {
             conversationId,
+            workspaceId,
             remoteId: `outbound-${randomUUID()}`, // Temporary local ID until ack
             direction: 'OUTBOUND',
             type: finalType as any,

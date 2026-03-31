@@ -13,6 +13,8 @@ export function createRedisClient(): Redis {
         maxRetriesPerRequest: null,   // Required for BullMQ
         enableReadyCheck: true,
         lazyConnect: true,
+        connectTimeout: 10000,      // 10s timeout to survive network partition
+        enableOfflineQueue: true,   // Buffer requests if Redis is briefly down
         // Retry with exponential backoff up to 30s — survives transient ECONNRESET.
         retryStrategy: (times: number) => {
             const delay = Math.min(times * 200, 30_000);
@@ -70,8 +72,21 @@ export async function connectRedis(): Promise<void> {
 
 export async function disconnectRedis(): Promise<void> {
     if (redisClient) {
-        await redisClient.quit();
-        redisClient = null;
-        log.info('Redis disconnected');
+        try {
+            // Attempt to quit gracefully (wait for pending commands)
+            const quitPromise = redisClient.quit();
+            // Fallback: force disconnect if quit() takes more than 5 seconds
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Redis quit timeout')), 5000)
+            );
+
+            await Promise.race([quitPromise, timeoutPromise]);
+            log.info('Redis disconnected gracefully');
+        } catch (err) {
+            log.warn({ err }, 'Redis forced disconnect after timeout');
+            await redisClient.disconnect();
+        } finally {
+            redisClient = null;
+        }
     }
 }

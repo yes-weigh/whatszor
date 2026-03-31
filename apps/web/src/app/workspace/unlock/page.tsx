@@ -25,7 +25,7 @@ function UnlockForm() {
         try {
             setIsLoading(true);
             const res = await api.post('/licenses/redeem', { key: licenseKey.trim() });
-            if (res.data?.success) {
+            if (res.data) {
                 setSuccess(true);
                 setTimeout(() => {
                     window.location.href = '/dashboard';
@@ -47,9 +47,9 @@ function UnlockForm() {
                     <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
                         <KeyRound size={28} className="text-red-500" />
                     </div>
-                    <h1 className="text-2xl font-bold text-white mb-2">Workspace Locked</h1>
+                    <h1 className="text-2xl font-bold text-white mb-2">Organization Locked</h1>
                     <p className="text-gray-400 text-sm">
-                        Your workspace requires an active license key to proceed. Please enter a valid key below to unlock all features.
+                        Your organization requires an active license key to proceed. Please enter a valid key below to unlock all features.
                     </p>
                 </div>
 
@@ -58,7 +58,7 @@ function UnlockForm() {
                         <CheckCircle2 size={48} className="text-emerald-500 mb-4" />
                         <h2 className="text-lg font-semibold text-white mb-2">License Activated</h2>
                         <p className="text-emerald-400 text-sm">
-                            Your workspace has been successfully unlocked. Redirecting you to the dashboard...
+                            Your organization has been successfully unlocked. Redirecting you to the dashboard...
                         </p>
                     </div>
                 ) : (
@@ -91,7 +91,7 @@ function UnlockForm() {
                             disabled={isLoading || !licenseKey.trim()}
                             className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
                         >
-                            {isLoading ? 'Verifying...' : 'Unlock Workspace'}
+                            {isLoading ? 'Verifying...' : 'Unlock Organization'}
                             {!isLoading && <ArrowRight size={18} />}
                         </button>
                     </form>

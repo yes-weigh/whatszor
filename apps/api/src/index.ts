@@ -11,7 +11,7 @@
  * 7. Register graceful shutdown hooks
  */
 import { env } from './env';
-import { logger } from './core/logger';
+import { createLogger } from './core/logger';
 import { connectRedis, disconnectRedis } from './core/redis';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
 import { initQueues, closeQueues } from './queues/index';
@@ -20,7 +20,7 @@ import { initializeWorkers } from './core/queue';
 import { createServer } from './core/server';
 import { waManager } from './modules/whatsapp/whatsapp.service';
 
-const log = logger.child({ module: 'bootstrap' });
+const log = createLogger({ module: 'bootstrap' });
 
 async function bootstrap() {
     log.info(`Starting Whatsvue API [${env.NODE_ENV}] [Role: ${env.CONTAINER_ROLE}]`);
@@ -71,29 +71,57 @@ async function bootstrap() {
     log.info(`   Readiness→ GET http://localhost:${env.PORT}/health/ready`);
 
     // 7. Graceful shutdown
+    let isShuttingDown = false;
     const shutdown = async (signal: string) => {
-        log.warn(`Received ${signal} — starting graceful shutdown`);
+        if (isShuttingDown) return;
+        isShuttingDown = true;
+
+        log.warn({ signal }, 'Received termination signal — starting graceful shutdown');
+
+        // Force exit after 25s if cleanup hangs
+        const forceExitTimeout = setTimeout(() => {
+            log.fatal({ signal, timeout: '25s' }, 'Graceful shutdown timed out — forcing exit');
+            process.exit(1);
+        }, 25_000);
 
         try {
-            // Stop accepting new requests
-            await server.close();
-
-            // Drain BullMQ workers if running in this process
+            // 1. Drain BullMQ workers if running in this process
+            // We do this BEFORE closing the server to ensure no new heavy background 
+            // jobs are picked up while we're waiting for the webserver to drain.
             if (env.WORKER_ENABLED) {
+                log.info('Stopping workers...');
                 await stopWorkers();
+                log.info('Workers stopped');
             }
-            // Always close WhatsApp sockets (API always owns them)
+
+            // 2. Stop accepting new HTTP requests
+            log.info('Closing HTTP server...');
+            await server.close();
+            log.info('HTTP server closed');
+
+            // 3. Close WhatsApp sockets (detaches Baileys and persists state)
+            log.info('Closing WhatsApp sessions...');
             await waManager.closeAll();
+            log.info('WhatsApp sessions closed');
+
+            // 4. Close BullMQ queue handles
+            log.info('Closing queues...');
             await closeQueues();
+            log.info('Queues closed');
 
-            // Disconnect data stores
-            await disconnectDatabase();
-            await disconnectRedis();
+            // 5. Hardened disconnection of data stores
+            log.info('Disconnecting database and redis...');
+            await Promise.allSettled([
+                disconnectDatabase(),
+                disconnectRedis()
+            ]);
+            log.info('Data stores disconnected');
 
+            clearTimeout(forceExitTimeout);
             log.info('Graceful shutdown complete');
             process.exit(0);
         } catch (err) {
-            log.error({ err }, 'Error during shutdown');
+            log.error({ err, signal }, 'Error during graceful shutdown');
             process.exit(1);
         }
     };
@@ -114,6 +142,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-    logger.fatal({ err }, 'Failed to start server');
+    log.fatal({ err }, 'Failed to start server');
     process.exit(1);
 });

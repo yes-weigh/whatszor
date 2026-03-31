@@ -20,14 +20,16 @@ export default function LoginPage() {
         e.preventDefault();
         setLoading(true);
         try {
-            const { data } = await api.post('/auth/login', { workspaceSlug, email, password });
-            const { accessToken, refreshToken } = data.data as { accessToken: string; refreshToken: string };
+            const cleanSlug = workspaceSlug.replace(/-+$/, '');
+            const { data } = await api.post('/auth/login', { workspaceSlug: cleanSlug, email, password });
+            const { accessToken, refreshToken } = data as { accessToken: string; refreshToken: string };
 
             // Decode JWT payload (base64url) — signed but not encrypted, safe to read client-side.
             const [, payloadB64] = accessToken.split('.');
-            const decoded = JSON.parse(
-                atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'))
-            );
+            const base64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+            const padLength = (4 - (base64.length % 4)) % 4;
+            const padded = base64 + '='.repeat(padLength);
+            const decoded = JSON.parse(atob(padded));
 
             // Immediately hydrate the store with role so permission checks work at once.
             setAuth(
@@ -45,7 +47,7 @@ export default function LoginPage() {
             // Fire-and-forget: enrich user name from /auth/me (uses the token we just set).
             api.get('/auth/me')
                 .then(res => {
-                    const me = res.data?.data;
+                    const me = res.data as any;
                     if (me) {
                         setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken, refreshToken);
                     }
@@ -74,19 +76,19 @@ export default function LoginPage() {
                         <Bot size={24} color="#fff" />
                     </div>
                     <h1 className="text-2xl font-bold text-primary">Welcome back</h1>
-                    <p className="text-sm mt-1 text-muted">Sign in to your Whatsvue workspace</p>
+                    <p className="text-sm mt-1 text-muted">Sign in to your Whatsvue organization</p>
                 </div>
 
                 {/* Card */}
                 <form onSubmit={handleSubmit} className="card flex flex-col gap-4">
                     <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-secondary">Workspace URL Slug</label>
+                        <label className="text-xs font-medium text-secondary">Organization ID</label>
                         <input
                             type="text"
                             className="input"
-                            placeholder="acme-corp"
+                            placeholder="my-organization-id"
                             value={workspaceSlug}
-                            onChange={e => setWorkspaceSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''))}
+                            onChange={e => setWorkspaceSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/g, ''))}
                             required
                         />
                     </div>
@@ -130,7 +132,7 @@ export default function LoginPage() {
 
                     <p className="text-center text-xs text-muted">
                         Don&apos;t have an account?{' '}
-                        <a href="/register" className="text-accent">Create workspace</a>
+                        <a href="/register" className="text-accent">Create organization</a>
                     </p>
                 </form>
             </div>

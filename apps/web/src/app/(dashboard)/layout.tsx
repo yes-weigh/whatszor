@@ -17,7 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             import('@/lib/api').then(({ default: api }) => {
                 api.get('/auth/me')
                    .then(res => {
-                       const me = res.data?.data;
+                       const me = res.data as any;
                        if (me) {
                            setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, localStorage.getItem('accessToken')!, localStorage.getItem('refreshToken')!);
                            // Gate: only ACTIVE workspaces can access dashboard
@@ -32,7 +32,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             // Check workspace gating for already-hydrated sessions
             import('@/lib/api').then(({ default: api }) => {
                 api.get('/auth/me').then(res => {
-                    const me = res.data?.data;
+                    const me = res.data as any;
                     if (me && me.workspaceStatus && me.workspaceStatus !== 'ACTIVE') {
                         router.push('/workspace/unlock');
                     }

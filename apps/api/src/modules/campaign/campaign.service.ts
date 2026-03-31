@@ -80,7 +80,13 @@ export async function cancelCampaign(workspaceId: string, campaignId: string) {
     return updated;
 }
 
-export async function updateCampaign(workspaceId: string, campaignId: string, input: UpdateCampaignInput) {
+export async function updateCampaign(
+    workspaceId: string,
+    campaignId: string,
+    input: UpdateCampaignInput,
+    actorUserId: string,
+    actorRole: string,
+) {
     // Verify existence
     await getCampaign(workspaceId, campaignId);
 
@@ -90,8 +96,34 @@ export async function updateCampaign(workspaceId: string, campaignId: string, in
     if (input.templateId !== undefined) data.templateId = input.templateId || null;
     if ((input as any).templateVersionId !== undefined) data.templateVersionId = (input as any).templateVersionId || null;
     if (input.templateLanguage !== undefined) data.templateLanguage = input.templateLanguage || null;
-    if ((input as any).whatsappAccountId !== undefined) data.whatsappAccountId = (input as any).whatsappAccountId || null;
     if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+
+    // ── Campaign session ownership validation ───────────────────────────────────────
+    if ((input as any).whatsappAccountId !== undefined) {
+        const newAccountId = (input as any).whatsappAccountId || null;
+        if (newAccountId) {
+            // Account must belong to this workspace (prevents cross-workspace leakage)
+            const account = await prisma.whatsAppAccount.findFirst({
+                where: { id: newAccountId, workspaceId, deletedAt: null },
+                select: { userId: true },
+            });
+            if (!account) {
+                throw Object.assign(
+                    new Error('WhatsApp account not found or does not belong to this workspace'),
+                    { code: ErrorCodes.NOT_FOUND, statusCode: 404 },
+                );
+            }
+            // MEMBER: can only assign sessions they personally own
+            if (actorRole === 'MEMBER' && account.userId !== actorUserId) {
+                throw Object.assign(
+                    new Error('Access denied: you can only assign sessions you own to campaigns'),
+                    { code: ErrorCodes.FORBIDDEN, statusCode: 403 },
+                );
+            }
+        }
+        data.whatsappAccountId = newAccountId;
+    }
+    // ────────────────────────────────────────────────────────────────────────────
 
     const updated = await prisma.campaign.update({
         where: { id: campaignId },

@@ -27,8 +27,9 @@ export default function AudiencesPage() {
 
     const { data: audiencesData, refetch } = useQuery({
         queryKey: ['audiences', search],
-        // Adding rudimentary search mapping if backend supports it; else just fetches paginated list
-        queryFn: () => api.get(`/crm/audiences`).then(r => r.data?.data?.items ?? []),
+        // Backend returns { items: Audience[], total: number } via sendSuccess({ items, total })
+        // After interceptor unwrap, r.data = { items, total }
+        queryFn: () => api.get(`/crm/audiences`).then(r => r.data.items),
         enabled: isMounted,
     });
 

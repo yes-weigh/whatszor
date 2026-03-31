@@ -17,11 +17,13 @@ export function registerResponseDecorators(server: FastifyInstance) {
         return this.status(statusCode).send(response);
     });
 
-    server.decorateReply('sendError', function(this: FastifyReply, error: ApiError, statusCode = 500) {
+    server.decorateReply('sendError', function(this: FastifyReply, error: ApiError, statusCode?: number) {
         const response: ApiResponse = {
             success: false,
             error
         };
-        return this.status(statusCode).send(response);
+        // Use provided status or the reply's current status if it's already an error, else 500
+        const finalStatus = statusCode || (this.statusCode >= 400 ? this.statusCode : 500);
+        return this.status(finalStatus).send(response);
     });
 }

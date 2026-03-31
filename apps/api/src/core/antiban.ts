@@ -7,10 +7,10 @@
  */
 import type { AntiBanConfig } from 'baileys-antiban';
 import type { WarmUpState } from 'baileys-antiban';
-import { logger } from './logger';
+import { createLogger } from './logger';
 import { getRedisClient } from './redis';
 
-const log = logger.child({ module: 'antiban' });
+const log = createLogger({ module: 'antiban' });
 
 // Wrapped sockets are stored here so we can call .antiban methods and getStats()
 type MinimalWrappedSocket = {

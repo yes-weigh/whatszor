@@ -17,6 +17,7 @@ import { healthRoutes } from '../modules/health/health.route';
 import { authRoutes } from '../modules/auth/auth.route';
 import { workspaceRoutes } from '../modules/workspace/workspace.route';
 import { contactRoutes } from '../modules/crm/contact.route';
+import { audienceRoutes } from '../modules/crm/audience.route';
 import { organizationRoutes } from '../modules/crm/organization.route';
 import { pipelineRoutes } from '../modules/crm/pipeline.route';
 import { stageRoutes } from '../modules/crm/stage.route';
@@ -194,6 +195,7 @@ export async function createServer(): Promise<FastifyInstance> {
             await api.register(
                 async (crm) => {
                     await crm.register(contactRoutes, { prefix: '/contacts' });
+                    await crm.register(audienceRoutes, { prefix: '/audiences' });
                     await crm.register(organizationRoutes, { prefix: '/organizations' });
                     await crm.register(pipelineRoutes, { prefix: '/pipelines' });
                     await crm.register(stageRoutes, { prefix: '/stages' });

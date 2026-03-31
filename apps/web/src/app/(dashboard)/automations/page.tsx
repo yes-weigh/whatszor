@@ -21,7 +21,7 @@ export default function AutomationsPage() {
 
     const { data: rulesData } = useQuery({
         queryKey: ['automations'],
-        queryFn: () => api.get('/automations').then(r => r.data?.data ?? []),
+        queryFn: () => api.get('/automations').then(r => r.data ?? []),
     });
 
     const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
@@ -40,7 +40,7 @@ export default function AutomationsPage() {
 
     const { data: metricsData } = useQuery({
         queryKey: ['observability_metrics'],
-        queryFn: () => api.get('/observability/metrics').then(r => r.data?.data),
+        queryFn: () => api.get('/observability/metrics').then(r => r.data),
     });
 
     const rules: any[] = rulesData ?? [];

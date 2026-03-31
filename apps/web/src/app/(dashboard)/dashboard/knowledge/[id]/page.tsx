@@ -24,7 +24,7 @@ export default function ProductReviewPage({ params }: { params: { id: string } }
 
     const { data: sourcesResp, isLoading: loadS } = useQuery({
         queryKey: ['sources', productId],
-        queryFn: () => api.get(`/products/${productId}/sources`).then(r => r.data?.data)
+        queryFn: () => api.get(`/products/${productId}/sources`).then(r => r.data)
     });
 
     useEffect(() => {

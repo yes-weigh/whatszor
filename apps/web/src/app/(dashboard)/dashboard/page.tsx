@@ -43,13 +43,19 @@ export default function DashboardPage() {
 
     const { data: stats } = useQuery({
         queryKey: ['dashboard-stats'],
-        queryFn: () => api.get('/dashboard/stats').then(r => r.data?.data),
+        queryFn: () => api.get('/dashboard/stats').then(r => r.data),
         retry: false,
     });
 
     const { data: chartData } = useQuery({
         queryKey: ['dashboard-chart'],
-        queryFn: () => api.get('/dashboard/chart').then(r => r.data?.data),
+        queryFn: () => api.get('/dashboard/chart').then(r => r.data),
+        retry: false,
+    });
+
+    const { data: activityData, isLoading: activityLoading } = useQuery({
+        queryKey: ['dashboard-activity'],
+        queryFn: () => api.get('/dashboard/activity').then(r => r.data),
         retry: false,
     });
 
@@ -111,19 +117,21 @@ export default function DashboardPage() {
                     <div className="card xl:col-span-2">
                         <h2 className="font-semibold text-sm mb-4 text-secondary">Recent Activity</h2>
                         <div className="flex flex-col gap-3">
-                            {[
-                                { msg: 'New contact added: Arjun Sharma', time: '2m ago', dot: 'bg-accent' },
-                                { msg: 'Campaign "Diwali Offer" completed — 120 sent', time: '1h ago', dot: 'bg-success' },
-                                { msg: 'Automation "New Lead Welcome" fired for Priya', time: '3h ago', dot: 'bg-[#a78bfa]' },
-                            ].map((item, i) => (
-                                <div key={i} className="flex items-start gap-3">
-                                    <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${item.dot}`} />
-                                    <div className="flex-1">
-                                        <p className="text-sm text-primary">{item.msg}</p>
-                                        <p className="text-xs mt-0.5 text-muted">{item.time}</p>
+                            {activityLoading ? (
+                                <div className="text-sm text-muted">Loading activity...</div>
+                            ) : activityData?.length ? (
+                                activityData.map((item: any, i: number) => (
+                                    <div key={i} className="flex items-start gap-3 animate-in fade-in duration-500 delay-100">
+                                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${item.dot}`} />
+                                        <div className="flex-1">
+                                            <p className="text-sm text-primary">{item.msg}</p>
+                                            <p className="text-xs mt-0.5 text-muted">{item.time}</p>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))
+                            ) : (
+                                <div className="text-sm text-muted">No recent activity.</div>
+                            )}
                         </div>
                     </div>
 

@@ -15,6 +15,7 @@
  */
 import { Job } from 'bullmq';
 import { prisma } from '../../prisma/client';
+import { Prisma, MessageType } from '@prisma/client';
 import { createLogger } from '../logger';
 import { waManager } from '../../modules/whatsapp/whatsapp.service';
 import { createOrGetConversation } from '../../modules/messaging/conversation.service';
@@ -28,11 +29,13 @@ import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } f
 // Top-level import eliminates the require() hack — no circular dep because
 // quick-reply.service only imports prisma, it never imports any queue.
 import { findMatchingAutoReply } from '../../modules/quick-replies/quick-reply.service';
+import { BatchProcessingError } from '../errors';
 
 const log = createLogger({ module: 'worker:inbound-messages' });
 
 export async function processInboundMessage(job: Job): Promise<void> {
     const { workspaceId, sessionId, messages } = job.data;
+    const errors: Error[] = [];
 
     for (const msg of messages) {
         try {
@@ -75,10 +78,10 @@ export async function processInboundMessage(job: Job): Promise<void> {
             if (!msg.key.fromMe) {
                 const account = await prisma.whatsAppAccount.findUnique({
                     where: { sessionId },
-                    select: { isKnowledgeBot: true },
+                    select: { botMode: true },
                 });
 
-                if (account?.isKnowledgeBot) {
+                if (account?.botMode === 'INTERNAL') {
                     let senderPhone = providerId.split('@')[0];
                     if (providerId.endsWith('@lid')) {
                         if (msg.key.participant && !msg.key.participant.endsWith('@lid')) {
@@ -161,12 +164,23 @@ export async function processInboundMessage(job: Job): Promise<void> {
             if (!conversation.contactId && !msg.key.fromMe) {
                 try {
                     const phoneStr = providerId.replace('@s.whatsapp.net', '').replace('@c.us', '');
-                    let contact = await prisma.contact.findFirst({ where: { workspaceId, phone: phoneStr } });
-                    if (!contact) {
-                        contact = await prisma.contact.create({
-                            data: { workspaceId, firstName: pushName || phoneStr, phone: phoneStr },
+                    let contact;
+                    try {
+                        contact = await prisma.contact.upsert({
+                            where: { workspaceId_phone: { workspaceId, phone: phoneStr } },
+                            update: {},
+                            create: { workspaceId, firstName: pushName || phoneStr, phone: phoneStr },
                         });
-                        log.info({ contactId: contact.id, phone: phoneStr }, 'Auto-created CRM contact');
+                    } catch (upsertErr: unknown) {
+                        // Concurrent worker won — retrieve their row
+                        const prismaErr = upsertErr as { code?: string };
+                        if (prismaErr.code === 'P2002') {
+                            contact = await prisma.contact.findFirstOrThrow({
+                                where: { workspaceId, phone: phoneStr },
+                            });
+                        } else {
+                            throw upsertErr;
+                        }
                     }
                     await prisma.conversation.update({
                         where: { id: conversation.id },
@@ -177,6 +191,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
                     log.warn({ err: contactErr, providerId }, 'Failed to auto-create CRM contact');
                 }
             }
+
             // ──────────────────────────────────────────────────────────────────
 
             // ── @lid contact phone healing ─────────────────────────────────────
@@ -184,12 +199,12 @@ export async function processInboundMessage(job: Job): Promise<void> {
                 try {
                     const realPhoneStr = providerId.replace('@s.whatsapp.net', '').replace('@c.us', '');
                     const rawLidPhone = rawJid.replace('@lid', '');
-                    const stuckContact = await (prisma.contact as any).findFirst({
+                    const stuckContact = await prisma.contact.findFirst({
                         where: { id: conversation.contactId, phone: { in: [rawJid, rawLidPhone] } },
                         select: { id: true },
                     });
                     if (stuckContact) {
-                        await (prisma.contact as any).update({
+                        await prisma.contact.update({
                             where: { id: stuckContact.id },
                             data: { phone: realPhoneStr, firstName: pushName || undefined },
                         });
@@ -203,7 +218,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
 
             // Refresh waContactName
             if (pushName && !msg.key.fromMe) {
-                await (prisma.conversation.update as any)({
+                await prisma.conversation.update({
                     where: { id: conversation.id },
                     data: { waContactName: pushName },
                 });
@@ -261,11 +276,12 @@ export async function processInboundMessage(job: Job): Promise<void> {
                 const createdMsg = await prisma.message.create({
                     data: {
                         conversationId: conversation.id,
+                        workspaceId,
                         remoteId: msg.key.id,
                         direction: msg.key.fromMe ? 'OUTBOUND' : 'INBOUND',
-                        type: type as any,
+                        type: type as MessageType,
                         content: finalContent,
-                        mediaData: mediaData as any,
+                        mediaData: mediaData as Prisma.InputJsonValue,
                         status: msg.key.fromMe ? 'SENT' : 'RECEIVED',
                     },
                 });
@@ -304,7 +320,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
                                 mimeType: saved.mimeType,
                                 fileSize: saved.fileSize,
                                 ...(fileName ? { fileName } : {}),
-                            } as any,
+                            } as Prisma.InputJsonValue,
                         },
                     });
                     log.info({ messageId: createdMsg.id, localPath: saved.localPath }, 'Inbound media saved');
@@ -319,7 +335,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
                 data: {
                     lastMessageAt: new Date(),
                     lastMessage: finalContent ? finalContent.substring(0, 50) : 'Media attachment',
-                    unreadCount: msg.key.fromMe ? conversation.unreadCount : conversation.unreadCount + 1,
+                    ...(msg.key.fromMe ? {} : { unreadCount: { increment: 1 } }),
                 },
             });
 
@@ -351,17 +367,18 @@ export async function processInboundMessage(job: Job): Promise<void> {
                                         label: b.label,
                                         payload: b.payload,
                                     })),
-                                    headerMediaUrl: latestVersion.media?.url ?? undefined,
+                                    headerMediaId: latestVersion.media?.id ?? undefined,
                                     headerMediaType: latestVersion.media?.type?.toUpperCase() ?? undefined,
                                 };
 
                                 const tplMsg = await prisma.message.create({
                                     data: {
                                         conversationId: conversation.id,
+                                        workspaceId,
                                         direction: 'OUTBOUND',
                                         type: 'TEMPLATE',
                                         content: latestVersion.messageText,
-                                        mediaData: { templatePayload } as any,
+                                        mediaData: { templatePayload } as Prisma.InputJsonValue,
                                         status: 'QUEUED',
                                     },
                                 });
@@ -380,23 +397,24 @@ export async function processInboundMessage(job: Job): Promise<void> {
                             }
                         } else {
                             // ── Standard mode: media then text ───────────────
-                            if (autoReply.media?.url) {
+                            if (autoReply.media?.id) {
                                 const mediaType = autoReply.media.type === 'image' ? 'IMAGE'
                                     : autoReply.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
                                 const mediaMsg = await prisma.message.create({
                                     data: {
                                         conversationId: conversation.id,
+                                        workspaceId,
                                         direction: 'OUTBOUND',
-                                        type: mediaType,
+                                        type: mediaType as MessageType,
                                         content: null,
-                                        mediaData: { url: autoReply.media.url, fileName: autoReply.media.name } as any,
+                                        mediaData: { mediaId: autoReply.media.id, fileName: autoReply.media.name } as Prisma.InputJsonValue,
                                         status: 'QUEUED',
                                     },
                                 });
                                 await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-media-${mediaMsg.id}`, {
                                     workspaceId, sessionId, messageId: mediaMsg.id, toJid: providerId,
                                     type: mediaType, content: null,
-                                    mediaData: { url: autoReply.media.url, fileName: autoReply.media.name },
+                                    mediaData: { mediaId: autoReply.media.id, fileName: autoReply.media.name },
                                 });
                             }
 
@@ -404,6 +422,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
                                 const textMsg = await prisma.message.create({
                                     data: {
                                         conversationId: conversation.id,
+                                        workspaceId,
                                         direction: 'OUTBOUND',
                                         type: 'TEXT',
                                         content: autoReply.content,
@@ -460,18 +479,17 @@ export async function processInboundMessage(job: Job): Promise<void> {
             // ── Mark as COMPLETED in Redis ────────────────────────
             await completeIdempotency(idempotencyKey);
 
-        } catch (err) {
+        } catch (err: any) {
             // ── Release Lock on Failure to Allow Retry ─────────────
             const idempotencyKey = `wa:in:${workspaceId}:${msg?.key?.id}`;
             await releaseIdempotencyLock(idempotencyKey);
 
             log.error({ err, messageId: msg?.key?.id }, 'Error processing inbound message');
-            // Re-throw so BullMQ retry logic triggers for jobs that are retryable.
-            // Individual message errors inside a batch should NOT fail the whole job.
-            // We swallow per-message errors and only re-throw if it's the @lid defer case.
-            if ((err as Error).message?.includes('Unresolved @lid')) {
-                throw err;
-            }
+            errors.push(err);
         }
+    }
+
+    if (errors.length > 0) {
+        throw new BatchProcessingError('Inbound message sync failed for one or more messages', errors);
     }
 }

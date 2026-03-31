@@ -33,31 +33,71 @@ async function resolveMediaPath(mediaId: string): Promise<string> {
 }
 
 export async function processOutboundMessage(job: Job): Promise<void> {
-    const { workspaceId, messageId, toJid, type, content, mediaData, sessionId } = job.data;
-    
-    // ── Atomic Idempotency Check ──────────────────────────────────────
+    const { workspaceId, messageId, toJid, type, content, mediaData, sessionId, traceId } = job.data;
+
+    // ── Mandatory Payload Validation ──────────────────────────────────
+    if (!workspaceId || !messageId || !toJid || !type) {
+        // Poisoned job — discard immediately, no retry
+        log.error({ jobId: job.id, traceId }, 'Outbound job missing required fields — discarding');
+        throw Object.assign(new Error('Invalid job payload: missing workspaceId/messageId/toJid/type'), {
+            discard: true,
+        });
+    }
+    // ──────────────────────────────────────────────────────────────────
+
+    // ── Atomic Idempotency Check ──────────────────────────────────────────
     const idempotencyKey = `wa:out:${workspaceId}:${messageId}`;
     const state = await acquireIdempotencyLock(idempotencyKey);
     if (state === 'COMPLETED') {
-        log.info({ messageId }, 'Outbound message already sent (COMPLETED), skipping');
+        log.info({ messageId, traceId }, 'Outbound message already sent (COMPLETED), skipping');
         return;
     }
     if (state === 'PROCESSING') {
-        log.warn({ messageId }, 'Outbound message currently being sent by another worker, skipping');
+        log.warn({ messageId, traceId }, 'Outbound message currently being sent by another worker, skipping');
         return;
     }
     // ──────────────────────────────────────────────────────────────────
 
-    log.info({ messageId, toJid, sessionId }, 'Processing outbound message');
+    // ── Workspace Suspension Guard ────────────────────────────────────
+    // Jobs queued before a suspension must not send. Delay + retry so
+    // they will eventually send when the workspace is reactivated.
+    const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { status: true },
+    });
+    if (workspace?.status === 'SUSPENDED') {
+        await releaseIdempotencyLock(idempotencyKey);
+        log.warn({ workspaceId, messageId }, 'Workspace SUSPENDED — releasing lock and skipping send');
+        // Do NOT mark message FAILED — it will retry when workspace is reactivated.
+        // Returning without throwing keeps the job in BullMQ for delayed retry.
+        return;
+    }
+    // ──────────────────────────────────────────────────────────────────
+
+    log.info({ messageId, toJid, sessionId, traceId }, 'Processing outbound message');
 
     try {
-        let activeSessionId = sessionId;
+        // Resolve session — enforce deletedAt: null and CONNECTED status
+        let activeSessionId = sessionId as string | undefined;
         if (!activeSessionId) {
             const defaultAccount = await prisma.whatsAppAccount.findFirst({
-                where: { workspaceId, status: 'CONNECTED' },
+                where: { workspaceId, status: 'CONNECTED', deletedAt: null },
+                select: { sessionId: true },
             });
             if (defaultAccount) activeSessionId = defaultAccount.sessionId;
         }
+
+        // ── Session Pre-Flight: Validate BEFORE touching the wire ─────────
+        if (activeSessionId) {
+            const accountCheck = await prisma.whatsAppAccount.findFirst({
+                where: { sessionId: activeSessionId, workspaceId, deletedAt: null },
+                select: { status: true },
+            });
+            if (!accountCheck || accountCheck.status !== 'CONNECTED') {
+                throw new Error(`Session ${activeSessionId} is not CONNECTED — aborting send`);
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────
 
         const socket = activeSessionId ? waManager.getSafeSocket(activeSessionId) : undefined;
         if (!socket) {
@@ -150,19 +190,13 @@ export async function processOutboundMessage(job: Job): Promise<void> {
         });
 
         if (job.data.campaignId) {
-            await (prisma.campaignMember as any).updateMany({
+            await prisma.campaignMember.updateMany({
                 where: { messageId },
                 data: { status: 'SENT' },
             });
-            const campaign = await prisma.campaign.findUnique({ where: { id: job.data.campaignId } });
-            if (campaign) {
-                const stats = (campaign.stats as Record<string, number>) || {};
-                stats.sent = (stats.sent || 0) + 1;
-                await prisma.campaign.update({ where: { id: campaign.id }, data: { stats: stats as any } });
-            }
         }
 
-        await logEvent(workspaceId, 'message_sent', 'automation_engine', { messageId, toJid });
+        await logEvent(workspaceId, 'message_sent', 'outbound_worker', { messageId, toJid }, traceId);
 
         const convRecord = await prisma.message.findUnique({
             where: { id: messageId },
@@ -192,16 +226,10 @@ export async function processOutboundMessage(job: Job): Promise<void> {
         await prisma.message.update({ where: { id: messageId }, data: { status: 'FAILED' } });
 
         if (job.data.campaignId) {
-            await (prisma.campaignMember as any).updateMany({
+            await prisma.campaignMember.updateMany({
                 where: { messageId },
                 data: { status: 'FAILED', errorReason: err.message || 'Send failed' },
             });
-            const campaign = await prisma.campaign.findUnique({ where: { id: job.data.campaignId } });
-            if (campaign) {
-                const stats = (campaign.stats as Record<string, number>) || {};
-                stats.failed = (stats.failed || 0) + 1;
-                await prisma.campaign.update({ where: { id: campaign.id }, data: { stats: stats as any } });
-            }
         }
 
         throw err; // Triggers BullMQ retry

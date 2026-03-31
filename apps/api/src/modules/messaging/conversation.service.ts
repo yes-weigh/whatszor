@@ -47,54 +47,50 @@ export function normalizeJid(jid: string): string {
 export async function createOrGetConversation(workspaceId: string, input: CreateConversationInput) {
     // Normalize JID to prevent duplicates from @c.us vs @s.whatsapp.net or device suffixes
     const providerId = normalizeJid(input.providerId);
-    const sessionId = input.sessionId || null;
+    const sessionId = input.sessionId ?? null;
 
-    let conversation = await prisma.conversation.findFirst({
-        where: {
-            workspaceId,
-            provider: input.provider,
-            providerId,
-            sessionId,
-        },
-    });
-
-    if (!conversation) {
-        try {
-            conversation = await prisma.conversation.create({
-                data: {
+    // Prisma upsert using the compound unique index:
+    //   @@unique([workspaceId, provider, providerId, sessionId])
+    // NOTE: PostgreSQL does NOT treat NULL = NULL in unique indexes, so two concurrent
+    // inserts with sessionId=null can both pass the WHERE clause. We catch P2002 and
+    // fall back to findFirstOrThrow — this is the narrowest correct pattern.
+    try {
+        return await prisma.conversation.upsert({
+            where: {
+                workspaceId_provider_providerId_sessionId: {
                     workspaceId,
                     provider: input.provider,
                     providerId,
-                    sessionId,
-                    contactId: input.contactId ?? null,
+                    sessionId: sessionId ?? '',
                 },
-            });
-        } catch (e: any) {
-            if (e.code === 'P2002') {
-                conversation = await prisma.conversation.findFirstOrThrow({
-                    where: {
-                        workspaceId,
-                        provider: input.provider,
-                        providerId,
-                        sessionId,
-                    }
-                });
-            } else {
-                throw e;
-            }
-        }
-    } else if (input.contactId && !conversation.contactId) {
-        conversation = await prisma.conversation.update({
-            where: { id: conversation.id },
-            data: { contactId: input.contactId },
+            },
+            update: {
+                // Back-fill contactId if it becomes known after creation
+                ...(input.contactId ? { contactId: input.contactId } : {}),
+            },
+            create: {
+                workspaceId,
+                provider: input.provider,
+                providerId,
+                sessionId,
+                contactId: input.contactId ?? null,
+            },
         });
+    } catch (e: unknown) {
+        const prismaErr = e as { code?: string };
+        if (prismaErr.code === 'P2002') {
+            // Concurrent insert won the race — retrieve the winner's row
+            return prisma.conversation.findFirstOrThrow({
+                where: { workspaceId, provider: input.provider, providerId, sessionId, deletedAt: null },
+            });
+        }
+        throw e;
     }
-
-    return conversation;
 }
 
+
 export async function listConversations(workspaceId: string, sessionId?: string) {
-    const where: Record<string, unknown> = { workspaceId };
+    const where: Record<string, unknown> = { workspaceId, deletedAt: null };
     if (sessionId) {
         // Show conversations belonging to exactly this session
         where.sessionId = sessionId;
@@ -167,8 +163,8 @@ export async function listConversations(workspaceId: string, sessionId?: string)
 }
 
 export async function getConversation(workspaceId: string, conversationId: string) {
-    const conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId, workspaceId },
+    const conversation = await prisma.conversation.findFirst({
+        where: { id: conversationId, workspaceId, deletedAt: null },
         include: {
             contact: { select: { id: true, firstName: true, lastName: true, phone: true } },
         },
@@ -196,105 +192,173 @@ export async function updateConversation(
 
 // ── Messages ───────────────────────────────────────────────
 
-export async function getMessages(workspaceId: string, conversationId: string) {
+const MESSAGES_PAGE_SIZE = 40;
+
+export async function getMessages(
+    workspaceId: string,
+    conversationId: string,
+    cursor?: string  // ID of the oldest visible message — fetch messages older than this
+) {
+    // Validate conversation belongs to workspace (soft-delete enforced)
     await getConversation(workspaceId, conversationId);
 
+    const take = MESSAGES_PAGE_SIZE + 1; // +1 to detect if there are even older messages
+    // Fetch newest messages first (DESC). With a cursor, fetch messages older than it.
+    const items = await prisma.message.findMany({
+        where: { conversationId, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+
+    const hasMore = items.length > MESSAGES_PAGE_SIZE;
+    if (hasMore) items.pop(); // remove the sentinel
+
+    // Reverse so the page is in chronological order (oldest at index 0)
+    items.reverse();
+
     return {
-        items: await prisma.message.findMany({
-            where: { conversationId },
-            orderBy: { createdAt: 'asc' },
-        })
+        items,
+        // Cursor for the next "load older" call = the oldest item's ID (now at index 0)
+        nextCursor: hasMore ? items[0]?.id ?? null : null,
     };
+}
+
+/**
+ * System-level helper: look up the first CONNECTED session for a workspace.
+ * Does NOT check userId ownership — safe only in server-side paths that already
+ * have the workspaceId validated.
+ */
+async function resolveDefaultSessionId(workspaceId: string): Promise<string | null> {
+    const account = await prisma.whatsAppAccount.findFirst({
+        where: { workspaceId, status: 'CONNECTED', deletedAt: null },
+        select: { sessionId: true },
+    });
+    return account?.sessionId ?? null;
 }
 
 export async function sendMessage(
     workspaceId: string,
     userId: string,
+    userRole: string,      // ← Required for MEMBER session ownership enforcement
     conversationId: string,
     input: SendMessageInput
 ) {
     const conversation = await getConversation(workspaceId, conversationId);
 
-    // Resolve which WhatsApp account to use
-    let sessionId = input.sessionId as string | null ?? null;
-    if (!sessionId) {
-        const fallback = await prisma.whatsAppAccount.findFirst({
-            where: { workspaceId, status: 'CONNECTED' },
-            select: { sessionId: true }
+    // Resolve which WhatsApp session to use.
+    // Priority: explicit override from input > conversation's linked session > any CONNECTED workspace session.
+    // LEGACY FALLBACK: if none found, sessionId falls back to workspaceId — this will produce a clear
+    // error in the worker ("session not found") and should NEVER fire in a properly configured workspace.
+    const sessionId = (input.sessionId as string | undefined)
+        ?? conversation.sessionId
+        ?? await resolveDefaultSessionId(workspaceId)
+        ?? workspaceId; // @deprecated fallback — only for backwards compat with pre-session-tracking data
+
+    // ── MEMBER session ownership guard ──────────────────────────────────────────
+    // MEMBERs may only send messages through WhatsApp sessions they personally own.
+    // OWNER and ADMIN have full workspace-level session access.
+    if (userRole === 'MEMBER' && sessionId !== workspaceId) {
+        const session = await prisma.whatsAppAccount.findFirst({
+            where: { sessionId, workspaceId, deletedAt: null },
+            select: { userId: true },
         });
-        sessionId = fallback?.sessionId ?? workspaceId;
+        if (!session) {
+            const err = Object.assign(new Error('Session not found'), { code: 'NOT_FOUND', statusCode: 404 });
+            throw err;
+        }
+        if (session.userId !== userId) {
+            const err = Object.assign(
+                new Error('Access denied: you can only send messages through sessions you own'),
+                { code: 'FORBIDDEN', statusCode: 403 },
+            );
+            throw err;
+        }
     }
+    // ────────────────────────────────────────────────────────────────────────────
 
     if (input.type === 'TEMPLATE' && input.templateVersionId) {
-        // Use the centralized composer that correctly formats Baileys payloads
-        const message = await composeAndQueueMessage({
-            workspaceId,
-            senderUserId: userId,
-            conversationId: conversation.id,
-            provider: 'WHATSAPP',
-            providerId: conversation.providerId,
-            sessionId: sessionId,
-            type: 'TEMPLATE',
-            templateVersionId: input.templateVersionId,
-            templateVariables: input.templateVariables,
-        });
+        // Compose + enqueue template inside a transaction
+        const message = await prisma.$transaction(async () => {
+            const msg = await composeAndQueueMessage({
+                workspaceId,
+                senderUserId: userId,
+                conversationId: conversation.id,
+                provider: 'WHATSAPP',
+                providerId: conversation.providerId,
+                sessionId,
+                type: 'TEMPLATE',
+                templateVersionId: input.templateVersionId,
+                templateVariables: input.templateVariables,
+            });
 
-        await prisma.conversation.update({
-            where: { id: conversationId },
-            data: {
-                lastMessageAt: new Date(),
-                lastMessage: 'Template message',
-            },
-        });
+            await prisma.conversation.update({
+                where: { id: conversationId },
+                data: { lastMessageAt: new Date(), lastMessage: 'Template message' },
+            });
 
+            return msg;
+        });
         return message;
     }
 
-    // Traditional content messages
+    // Traditional content messages — wrap creation + enqueue atomically
     const mediaData: any = input.mediaData ? { ...(input.mediaData as any) } : {};
     if (input.fileName) mediaData.fileName = input.fileName;
     // CRITICAL: We NO LONGER resolve mediaId to a URL here.
     // The worker resolves it directly via storageKey for security and performance.
 
-    const message = await prisma.message.create({
-        data: {
-            conversationId,
-            direction: 'OUTBOUND',
-            type: input.type,
-            content: input.content ?? null,
-            mediaData: mediaData, 
-            mediaId: input.mediaId || null,
-            status: 'QUEUED',
-            senderUserId: userId,
-        },
-    });
-
-    const jobId = `out:${workspaceId}:${conversationId}:${message.id}`;
-    await getQueue(QueueName.OUTBOUND_MESSAGES).add(jobId, {
-        workspaceId,
-        sessionId,
-        messageId: message.id,
-        toJid: conversation.providerId,
-        type: message.type,
-        content: message.content,
-        mediaData: message.mediaData,
-        // Worker will use this mediaId to resolve the real file path
-        mediaId: message.mediaId
-    }, { jobId });
-
-    // Update conversation summary
     let contentPreview = 'Media message';
     if (input.type === 'TEXT' && input.content) {
         contentPreview = input.content.substring(0, 80);
     }
 
-    await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-            lastMessageAt: new Date(),
-            lastMessage: contentPreview,
-        },
+    const message = await prisma.$transaction(async (tx) => {
+        const msg = await tx.message.create({
+            data: {
+                conversationId,
+                workspaceId,
+                direction: 'OUTBOUND',
+                type: input.type,
+                content: input.content ?? null,
+                mediaData,
+                mediaId: input.mediaId || null,
+                status: 'QUEUED',
+                senderUserId: userId,
+            },
+        });
+
+        // Update conversation summary atomically with message creation
+        await tx.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: new Date(), lastMessage: contentPreview },
+        });
+
+        return msg;
     });
+
+    // Enqueue AFTER transaction commits — guarded: if enqueue fails, mark FAILED immediately
+    // instead of leaving the message as QUEUED forever (zombie message).
+    const jobId = `out|${workspaceId}|${conversationId}|${message.id}`;
+    try {
+        await getQueue(QueueName.OUTBOUND_MESSAGES).add(jobId, {
+            workspaceId,
+            sessionId,
+            messageId: message.id,
+            toJid: conversation.providerId,
+            type: message.type,
+            content: message.content,
+            mediaData: message.mediaData,
+            mediaId: message.mediaId,
+        }, { jobId });
+    } catch (queueErr) {
+        // Queue is down — immediately fail the message so UI shows the real state.
+        await prisma.message.update({
+            where: { id: message.id },
+            data: { status: 'FAILED' },
+        }).catch(() => {}); // best-effort — DB may also be down
+        throw queueErr;
+    }
 
     return message;
 }
@@ -304,12 +368,13 @@ export async function approveMessage(
     messageId: string,
     sessionId?: string
 ) {
-    const message = await prisma.message.findUnique({
-        where: { id: messageId },
-        include: { conversation: true }
+    // Fetch and workspace-scope in a single query (no separate findUnique then check)
+    const message = await prisma.message.findFirst({
+        where: { id: messageId, workspaceId, deletedAt: null },
+        include: { conversation: { select: { providerId: true, id: true } } },
     });
 
-    if (!message || message.conversation.workspaceId !== workspaceId) {
+    if (!message) {
         throw createError('Message not found', ErrorCodes.NOT_FOUND, 404);
     }
 
@@ -317,24 +382,18 @@ export async function approveMessage(
         throw createError('Message is not in suggested state', ErrorCodes.BAD_REQUEST, 400);
     }
 
-    // Resolve which WhatsApp account to use
-    let activeSessionId = sessionId;
-    if (!activeSessionId) {
-        const fallback = await prisma.whatsAppAccount.findFirst({
-            where: { workspaceId, status: 'CONNECTED' },
-            select: { sessionId: true }
-        });
-        activeSessionId = fallback?.sessionId ?? workspaceId;
-    }
+    // Resolve session
+    const activeSessionId = sessionId ?? await resolveDefaultSessionId(workspaceId) ?? workspaceId;
 
-    // Update status to QUEUED
-    const updated = await prisma.message.update({
-        where: { id: messageId },
-        data: { status: 'QUEUED' }
+    // Atomically transition status and prepare for dispatch
+    const updated = await prisma.$transaction(async (tx) => {
+        return tx.message.update({
+            where: { id: messageId },
+            data: { status: 'QUEUED' },
+        });
     });
 
-    // Add to outbound queue
-    const jobId = `out:${workspaceId}:${message.conversationId}:${message.id}`;
+    const jobId = `out|${workspaceId}|${message.conversationId}|${message.id}`;
     await getQueue(QueueName.OUTBOUND_MESSAGES).add(jobId, {
         workspaceId,
         sessionId: activeSessionId,
@@ -342,7 +401,7 @@ export async function approveMessage(
         toJid: message.conversation.providerId,
         type: message.type,
         content: message.content,
-        mediaData: message.mediaData
+        mediaData: message.mediaData,
     }, { jobId });
 
     return updated;
@@ -360,4 +419,3 @@ export async function generateSuggestedReply(workspaceId: string, conversationId
 
     return { success: true, message: 'AI suggestion queued' };
 }
-

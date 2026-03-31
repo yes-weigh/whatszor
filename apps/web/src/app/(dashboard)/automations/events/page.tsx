@@ -48,7 +48,7 @@ export default function EventsTimelinePage() {
             if (eventTypeFilter) params.append('eventType', eventTypeFilter);
             
             const res = await api.get(`/observability/events?${params.toString()}`);
-            return res.data?.data; // { events: [], total: number }
+            return res.data; // { events: [], total: number }
         },
     });
 

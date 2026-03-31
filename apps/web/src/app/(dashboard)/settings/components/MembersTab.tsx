@@ -15,9 +15,9 @@ const rolesConfig = [
         icon: Crown,
         color: 'text-purple-600',
         bgColor: 'bg-purple-100',
-        description: 'Highest level of access. Complete control over the workspace, billing, and all features.',
+        description: 'Highest level of access. Complete control over the organization, billing, and all features.',
         capabilities: [
-            { name: 'Delete Workspace & Manage Billing', allowed: true },
+            { name: 'Delete Organization & Manage Billing', allowed: true },
             { name: 'Transfer Ownership', allowed: true },
             { name: 'Create & Delete Audiences Globally', allowed: true },
             { name: 'Manage Webhooks & Integrations', allowed: true },
@@ -33,7 +33,7 @@ const rolesConfig = [
             { name: 'Connect WhatsApp Sessions', allowed: true },
             { name: 'Manage Team Members (Roles)', allowed: true },
             { name: 'Create Global Automations', allowed: true },
-            { name: 'Delete Workspace & Manage Billing', allowed: false },
+            { name: 'Delete Organization & Manage Billing', allowed: false },
         ]
     },
     {
@@ -84,7 +84,7 @@ export function MembersTab() {
 
     const { data: members = [], isLoading } = useQuery({
         queryKey: ['workspace-members'],
-        queryFn: () => api.get('/workspaces/me/members').then(r => r.data?.data ?? []),
+        queryFn: () => api.get('/workspaces/me/members').then(r => r.data ?? []),
     });
 
     const inviteMutation = useMutation({
@@ -256,7 +256,7 @@ export function MembersTab() {
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">Roles & Privileges Matrix</h2>
                                 <p className="text-gray-500 text-sm mt-1">
-                                    Understand the capability boundaries assigned to each role within your workspace.
+                                    Understand the capability boundaries assigned to each role within your organization.
                                 </p>
                             </div>
                             <button

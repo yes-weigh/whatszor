@@ -2,14 +2,15 @@ import makeWASocket, { DisconnectReason, Browsers } from '@itsukichan/baileys';
 import { Boom } from '@hapi/boom';
 import { wrapSocket } from 'baileys-antiban';
 import { usePrismaAuthState, deleteSessionAuthData } from './auth.adapter';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { alertSessionDrop } from '../../core/alert';
 import { EventEmitter } from 'events';
 import { prisma } from '../../prisma/client';
 import { ANTIBAN_CONFIG, loadWarmUpState, registerWrappedSocket, persistWarmUpState, removeAntiBan } from '../../core/antiban';
 import { notificationService } from '../../core/notification.service';
+import { WhatsAppAccountRepository } from '../../core/database/repositories/WhatsAppAccountRepository';
 
-const log = logger.child({ module: 'whatsapp-manager' });
+const log = createLogger({ module: 'whatsapp-manager' });
 
 /**
  * Singleton manager for multiple Baileys sockets.
@@ -32,11 +33,10 @@ class WhatsAppManager extends EventEmitter {
 
     /**
      * Boot all sessions for a workspace that are in the database.
+     * Uses repository to enforce deletedAt: null — soft-deleted accounts are NEVER reconnected.
      */
     async restoreWorkspaceSessions(workspaceId: string): Promise<void> {
-        const accounts = await prisma.whatsAppAccount.findMany({
-            where: { workspaceId },
-        });
+        const accounts = await WhatsAppAccountRepository.getWorkspaceSessionsForBoot(workspaceId);
         for (const account of accounts) {
             if (!this.sockets.has(account.sessionId)) {
                 log.info({ sessionId: account.sessionId, name: account.name }, 'Restoring session...');
@@ -46,13 +46,11 @@ class WhatsAppManager extends EventEmitter {
     }
 
     /**
-     * Boot ALL sessions globally that were previously created.
-     * Starts all accounts except those explicitly DISCONNECTED.
+     * Boot ALL active sessions globally on server startup.
+     * Uses repository to enforce deletedAt: null — soft-deleted accounts are NEVER reconnected.
      */
     async restoreAllSessions(): Promise<void> {
-        const accounts = await prisma.whatsAppAccount.findMany({
-            where: { status: { not: 'DISCONNECTED' } },
-        });
+        const accounts = await WhatsAppAccountRepository.getActiveSessionsForBoot();
         for (const account of accounts) {
             if (!this.sockets.has(account.sessionId)) {
                 log.info({ sessionId: account.sessionId, name: account.name }, 'Restoring global session...');
@@ -195,6 +193,7 @@ class WhatsAppManager extends EventEmitter {
                     data: {
                         status: 'CONNECTED',
                         phoneNumber: phoneNumber ? `+${phoneNumber}` : null,
+                        reauthRequiredAt: null, // Clear reauth flag — session is live again
                         ...(name ? {} : {}), // name is set by user during creation
                     },
                 });
@@ -390,7 +389,7 @@ class WhatsAppManager extends EventEmitter {
     /**
      * Returns all accounts for a workspace with live socket status merged in.
      */
-    async getSessions(workspaceId: string): Promise<Array<{
+    async getSessions(ctx: import('../../core/database/types').UserContext): Promise<Array<{
         id: string;
         sessionId: string;
         name: string;
@@ -399,17 +398,14 @@ class WhatsAppManager extends EventEmitter {
         qrCode?: string;
         isKnowledgeBot: boolean;
     }>> {
-        const accounts = await prisma.whatsAppAccount.findMany({
-            where: { workspaceId },
-            orderBy: { createdAt: 'asc' },
-        });
+        const accounts = await import('../../core/database/repositories/WhatsAppAccountRepository').then(m => m.WhatsAppAccountRepository.list(ctx));
 
         return accounts.map(account => {
             const isSocketAlive = this.sockets.has(account.sessionId);
             const qrCode = this.qrCodes.get(account.sessionId);
 
             let liveStatus = account.status;
-            if (isSocketAlive && qrCode) liveStatus = 'NEEDS_SCAN';
+            if (isSocketAlive && qrCode) liveStatus = 'QR_PENDING';
             else if (isSocketAlive && account.status === 'CONNECTED') liveStatus = 'CONNECTED';
             else if (isSocketAlive) liveStatus = 'CONNECTING';
 
@@ -420,7 +416,7 @@ class WhatsAppManager extends EventEmitter {
                 phoneNumber: account.phoneNumber,
                 status: liveStatus,
                 qrCode: qrCode || undefined,
-                isKnowledgeBot: account.isKnowledgeBot,
+                isKnowledgeBot: !!account.botMode,
             };
         });
     }

@@ -1,7 +1,7 @@
 import { prisma } from '../../prisma/client';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 
-const log = logger.child({ module: 'template.service' });
+const log = createLogger({ module: 'template.service' });
 
 export async function listTemplates(category?: string) {
     return prisma.automationTemplate.findMany({

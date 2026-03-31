@@ -23,7 +23,7 @@ export default function ContactDetailPage() {
     const { data: contact, isLoading } = useQuery({
         queryKey: ['contact', id],
         queryFn: () => api.get(`/crm/contacts/${id}`).then(r => {
-            const c = r.data?.data;
+            const c = r.data;
             setForm({ firstName: c?.firstName ?? '', lastName: c?.lastName ?? '', phone: c?.phone ?? '', email: c?.email ?? '' });
             return c;
         }),

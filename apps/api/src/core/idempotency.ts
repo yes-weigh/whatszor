@@ -9,17 +9,17 @@ export type IdempotencyState = 'PROCESSING' | 'COMPLETED' | 'FAILED';
  * Atomic idempotency check and lock using Redis SET key value NX EX.
  * 
  * Flow:
- * 1. SET key 'PROCESSING' NX EX ttl -> returns OK if first time
+ * 1. SET key 'PROCESSING' NX EX processingTtl -> returns OK if first time
  * 2. If already exists, return current state
  * 
  * @param key Unique key (e.g., wa:in:msg-123)
- * @param ttlSeconds How long the lock remains (default 24h)
+ * @param processingTtlSeconds Lock duration for processing state (default 5m for crash recovery)
  */
-export async function acquireIdempotencyLock(key: string, ttlSeconds = 86400): Promise<IdempotencyState | null> {
+export async function acquireIdempotencyLock(key: string, processingTtlSeconds = 300): Promise<IdempotencyState | null> {
     const redis = getRedisClient();
     
     // Attempt to set 'PROCESSING' only if it doesn't exist
-    const result = await redis.set(key, 'PROCESSING', 'EX', ttlSeconds, 'NX');
+    const result = await redis.set(key, 'PROCESSING', 'EX', processingTtlSeconds, 'NX');
     
     if (result === 'OK') {
         log.debug({ key }, 'Idempotency lock acquired (PROCESSING)');

@@ -1,7 +1,7 @@
 import { env } from '../env';
-import { logger } from './logger';
+import { createLogger } from './logger';
 
-const log = logger.child({ module: 'notification-service' });
+const log = createLogger({ module: 'notification-service' });
 
 export type AlertPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
@@ -24,7 +24,7 @@ class NotificationService {
 
         // 1. Mandatory Structured Log
         const logMethod = priority === 'CRITICAL' || priority === 'HIGH' ? 'fatal' : 'error';
-        logger[logMethod]({
+        log[logMethod]({
             alert: true,
             event,
             priority,

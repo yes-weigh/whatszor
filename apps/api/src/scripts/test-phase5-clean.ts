@@ -1,11 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { extractProductData, ExtractionResult, calculateHybridConfidence } from '../modules/knowledge/knowledge.ai';
 import { KnowledgeDataType, KnowledgeSourceStatus, ProductStatus } from '@prisma/client';
-import { logger } from '../core/logger';
+import { createLogger } from '../core/logger';
 import { env } from '../env';
 
 const prisma = new PrismaClient();
-const log = logger.child({ module: 'test-phase5' });
+const log = createLogger({ module: 'test-phase5' });
 
 // We simulate what knowledge.ingestion.ts does natively inline to capture "Before" and "After" easily
 async function runAutoMergeSimulation(

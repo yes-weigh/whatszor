@@ -1,12 +1,17 @@
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { prisma } from '../../prisma/client';
 import {
     signAccessToken,
     signRefreshToken,
+    signImpersonationToken,
+    parseExpiry,
     accessTokenTtlSeconds,
 } from '../../core/jwt';
+import { logEvent } from '../../core/event-logger';
 import type { AdminLoginInput, AuthTokens } from '@whatszor/shared';
 import { ErrorCodes } from '@whatszor/shared';
+import { env } from '../../env';
 
 export async function loginAdmin(input: AdminLoginInput): Promise<AuthTokens> {
     const { email, password } = input;
@@ -31,7 +36,7 @@ export async function loginAdmin(input: AdminLoginInput): Promise<AuthTokens> {
 // ── Admin Workspace Management ───────────────────────────────
 
 export async function getWorkspaces() {
-    return prisma.workspace.findMany({
+    const workspaces = await prisma.workspace.findMany({
         orderBy: { createdAt: 'desc' },
         include: {
             members: {
@@ -43,13 +48,113 @@ export async function getWorkspaces() {
             }
         }
     });
+
+    return workspaces.map(ws => ({
+        ...ws,
+        storageUsedBytes: Number(ws.storageUsedBytes),
+        storageLimitBytes: Number(ws.storageLimitBytes)
+    }));
 }
 
-export async function toggleWorkspaceStatus(id: string, suspended: boolean) {
+export async function toggleWorkspaceStatus(id: string, suspended: boolean, adminId: string) {
     const status = suspended ? 'SUSPENDED' : 'ACTIVE';
-    return prisma.workspace.update({
+    const workspace = await prisma.workspace.update({
         where: { id },
         data: { status }
+    });
+
+    // Audit log — non-blocking
+    const eventType = suspended ? 'workspace_suspended' : 'workspace_activated';
+    await logEvent(id, eventType, 'admin_panel', { adminId, status }).catch(() => {});
+
+    return workspace;
+}
+
+// ── Impersonation ─────────────────────────────────────────────
+// Super-admin single-use entry into a workspace as its OWNER.
+// Issues a short-lived, cryptographically distinct JWT.
+// Every entry is recorded in ImpersonationLog for compliance.
+
+export interface ImpersonateResult {
+    token: string;       // Short-lived impersonation JWT
+    expiresAt: Date;     // When the token expires
+    logId: string;       // ImpersonationLog.id for reference
+}
+
+export async function impersonateWorkspace(
+    adminId: string,
+    workspaceId: string,
+    ipAddress?: string,
+    userAgent?: string,
+): Promise<ImpersonateResult> {
+    // 1. Verify workspace exists and is not suspended
+    const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { status: true },
+    });
+    if (!workspace) {
+        throw Object.assign(new Error('Workspace not found'), {
+            code: ErrorCodes.NOT_FOUND,
+            statusCode: 404,
+        });
+    
+
+    }
+    if (workspace.status === 'SUSPENDED') {
+        throw Object.assign(
+            new Error('Cannot impersonate a suspended workspace — activate it first'),
+            { code: ErrorCodes.FORBIDDEN, statusCode: 403 },
+        );
+    }
+
+    // 2. Generate a one-off JTI for DB-backed revocation
+    const jti = randomBytes(32).toString('hex');
+    const expiresAt = parseExpiry(env.IMPERSONATION_TTL);
+
+    // 3. Write audit log BEFORE issuing the token
+    const log = await prisma.impersonationLog.create({
+        data: {
+            globalUserId: adminId,
+            workspaceId,
+            tokenJti: jti,
+            expiresAt,
+            ipAddress: ipAddress ?? null,
+            userAgent: userAgent ?? null,
+        },
+    });
+
+    // 4. Issue the impersonation token
+    const token = await signImpersonationToken({
+        sub: adminId,
+        workspaceId,
+        role: 'OWNER',
+        jti,
+        impersonatedBy: adminId,
+    });
+
+    // 5. Audit event log (async, non-blocking)
+    await logEvent(workspaceId, 'admin_impersonation', 'admin_panel', {
+        adminId,
+        logId: log.id,
+        ipAddress,
+    }).catch(() => {});
+
+    return { token, expiresAt, logId: log.id };
+}
+
+export async function revokeImpersonation(jti: string, _adminId: string): Promise<void> {
+    const log = await prisma.impersonationLog.findUnique({ where: { tokenJti: jti } });
+    if (!log) {
+        throw Object.assign(new Error('Impersonation log not found'), {
+            code: ErrorCodes.NOT_FOUND,
+            statusCode: 404,
+        });
+    }
+    if (log.revokedAt) return; // Already revoked — idempotent
+
+    await prisma.impersonationLog.update({
+        where: { tokenJti: jti },
+        data: { revokedAt: new Date() },
     });
 }
 // ── Internal helpers ───────────────────────────────────────

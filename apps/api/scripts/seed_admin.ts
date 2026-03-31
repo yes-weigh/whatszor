@@ -9,10 +9,10 @@ const prisma = new PrismaClient();
 async function main() {
     const hash = await bcrypt.hash('admin@1234', 12);
     const admin = await prisma.globalUser.upsert({
-        where: { email: 'admin@whatsvue.com' },
+        where: { email: 'admin@whatszor.com' },
         update: {},
         create: {
-            email: 'admin@whatsvue.com',
+            email: 'admin@whatszor.com',
             name: 'Super Admin',
             password: hash,
             role: 'SUPER_ADMIN'

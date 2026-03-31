@@ -15,7 +15,7 @@
 import { Job } from 'bullmq';
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from '../../prisma/client';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 import { logEvent } from '../../core/event-logger';
 import { getQueue, QueueName } from '../../queues';
 import { parseVariables, evaluateConditions } from '../../core/automation-helpers';
@@ -23,7 +23,7 @@ import { createOrGetConversation } from '../messaging/conversation.service';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 import { env } from '../../env';
 
-const log = logger.child({ module: 'worker:automation' });
+const log = createLogger({ module: 'worker:automation' });
 
 export async function processAutomationJob(job: Job): Promise<void> {
     const { executionId, ruleId, contactId, stepIndex } = job.data;
@@ -142,6 +142,7 @@ export async function processAutomationJob(job: Job): Promise<void> {
                     const msg = await prisma.message.create({
                         data: {
                             conversationId: targetConversation.id,
+                            workspaceId: execution.rule.workspaceId,
                             direction: 'OUTBOUND',
                             type: currentAction.templateId ? 'TEMPLATE' : 'TEXT',
                             content: parseVariables(currentAction.messageContent || execution.rule.name, context),
@@ -281,6 +282,7 @@ export async function processAutomationJob(job: Job): Promise<void> {
                         const msg = await prisma.message.create({
                             data: {
                                 conversationId: aiConversation.id,
+                                workspaceId: execution.rule.workspaceId,
                                 direction: 'OUTBOUND',
                                 type: 'TEXT',
                                 content: replyText,

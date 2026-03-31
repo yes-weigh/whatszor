@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import apiClient from '@/lib/api-client';
 
 export interface QuickReplyMedia {
     id: string;
@@ -23,36 +23,27 @@ export function useQuickReplies() {
 
     const queryInfo = useQuery({
         queryKey: ['quick-replies'],
-        queryFn: async () => {
-            const res = await api.get('/quick-replies');
-            return res.data.data as QuickReply[];
-        },
+        queryFn: () => apiClient.get<QuickReply[]>('/quick-replies'),
     });
 
     const createMutation = useMutation({
-        mutationFn: async (data: { shortcut: string; content: string; mediaId?: string | null }) => {
-            const res = await api.post('/quick-replies', data);
-            return res.data.data;
-        },
+        mutationFn: (data: { shortcut: string; content: string; mediaId?: string | null }) =>
+            apiClient.post<QuickReply>('/quick-replies', data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['quick-replies'] });
         },
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ id, ...data }: { id: string; shortcut?: string; content?: string; mediaId?: string | null }) => {
-            const res = await api.patch(`/quick-replies/${id}`, data);
-            return res.data.data;
-        },
+        mutationFn: ({ id, ...data }: { id: string; shortcut?: string; content?: string; mediaId?: string | null }) =>
+            apiClient.patch<QuickReply>(`/quick-replies/${id}`, data),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['quick-replies'] });
         },
     });
 
     const deleteMutation = useMutation({
-        mutationFn: async (id: string) => {
-            await api.delete(`/quick-replies/${id}`);
-        },
+        mutationFn: (id: string) => apiClient.delete(`/quick-replies/${id}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['quick-replies'] });
         },

@@ -1,6 +1,14 @@
 {
     "extends": "next/core-web-vitals",
     "rules": {
-        "react/forbid-dom-props": "off"
+        "react/forbid-dom-props": "off",
+
+        "no-restricted-syntax": [
+            "error",
+            {
+                "selector": "MemberExpression[object.property.name='data'][property.name='data']",
+                "message": "[API Contract] Accessing .data.data is a double-unwrap bug. The Axios interceptor in lib/api.ts already unwraps { success, data } -> payload. Access .data directly. The ONLY valid exception is the token refresh in lib/api.ts which uses raw axios and is explicitly documented."
+            }
+        ]
     }
 }

@@ -4,7 +4,11 @@
  * GET /api/v1/realtime/events
  *
  * Authenticated, workspace-scoped. Opens a long-lived SSE connection.
- * Events are pushed from queue workers via `emit()` in core/realtime.ts.
+ * Events are pushed from queue workers via emit() / emitToUser() in core/realtime.ts.
+ *
+ * Per-user filtering is enforced server-side:
+ *   - emitToWorkspace() → all users in the workspace receive the event.
+ *   - emitToUser()      → only the target user receives the event (e.g. QR relay).
  *
  * SSE event format:
  *   data: {"type":"message.new","payload":{...}}\n\n
@@ -16,9 +20,9 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../middleware/authenticate';
 import { registerClient, unregisterClient } from '../../core/realtime';
-import { logger } from '../../core/logger';
+import { createLogger } from '../../core/logger';
 
-const log = logger.child({ module: 'realtime-route' });
+const log = createLogger({ module: 'realtime-route' });
 
 export async function realtimeRoutes(fastify: FastifyInstance) {
     fastify.get(
@@ -56,8 +60,8 @@ export async function realtimeRoutes(fastify: FastifyInstance) {
             // knows the stream is live and can start listening.
             reply.raw.write(`data: ${JSON.stringify({ type: 'connected', payload: { workspaceId } })}\n\n`);
 
-            // ── Register client ────────────────────────────────────────────
-            registerClient(workspaceId, reply);
+            // ── Register client (per-user slot) ────────────────────────────
+            registerClient(workspaceId, userId, reply);
 
             // ── Heartbeat — every 25s to keep proxies / load balancers alive ──
             const heartbeatInterval = setInterval(() => {
@@ -71,7 +75,7 @@ export async function realtimeRoutes(fastify: FastifyInstance) {
             // ── Cleanup on disconnect ──────────────────────────────────────
             request.raw.on('close', () => {
                 clearInterval(heartbeatInterval);
-                unregisterClient(workspaceId, reply);
+                unregisterClient(workspaceId, userId, reply);
                 log.info({ workspaceId, userId }, 'SSE client disconnected');
             });
 

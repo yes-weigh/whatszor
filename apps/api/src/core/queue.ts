@@ -16,13 +16,14 @@
  *
  * All workers are started from queues/worker.ts startWorkers().
  */
-import { logger } from './logger';
+import { createLogger } from './logger';
 import { prisma } from '../prisma/client';
 import { waManager } from '../modules/whatsapp/whatsapp.service';
 import { emit as realtimeEmit } from './realtime';
 import { getQueue, QueueName } from '../queues';
+import crypto from 'node:crypto';
 
-const log = logger.child({ module: 'queue-bridge' });
+const log = createLogger({ module: 'queue-bridge' });
 
 /**
  * Registers Baileys event listeners and routes each event into
@@ -33,22 +34,28 @@ export function initializeWorkers(): void {
 
     // ── Inbound messages ──────────────────────────────────────────────────────
     waManager.on('messages', async (data) => {
-        try {
-            const { workspaceId, sessionId, messages } = data;
-            for (const msg of messages) {
+        const { workspaceId, sessionId, messages } = data;
+        for (const msg of messages) {
+            try {
                 const messageId = msg.key.id;
                 const remoteJid = msg.key.remoteJid;
                 if (!messageId || !remoteJid) continue;
 
-                const jobId = `wa:${workspaceId}:${remoteJid}:${messageId}`;
+                const jobId = `wa|${workspaceId}|${remoteJid}|${messageId}`;
                 await getQueue(QueueName.INBOUND_MESSAGES).add(
                     jobId,
-                    { workspaceId, sessionId, messages: [msg] }, // Process one by one for strict idempotency
+                    { workspaceId, sessionId, messages: [msg], traceId: crypto.randomUUID() }, // Process one by one for strict idempotency
                     { jobId }
                 );
+            } catch (err: any) {
+                // BullMQ throws when a job with the same jobId already exists in an active state.
+                // This is expected under at-least-once delivery — log as debug, not error.
+                if (err?.message?.includes('already exists')) {
+                    log.debug({ messageId: msg.key?.id }, 'Job already exists in queue — skipping duplicate');
+                } else {
+                    log.error({ err, messageId: msg.key?.id, workspaceId, sessionId }, 'Failed to enqueue inbound message');
+                }
             }
-        } catch (error) {
-            log.error({ error, data }, 'Failed to enqueue inbound messages');
         }
     });
 
@@ -57,7 +64,7 @@ export function initializeWorkers(): void {
         try {
             await getQueue(QueueName.HISTORY_SYNC).add(
                 `history-${data.workspaceId}-${Date.now()}`,
-                data,
+                { ...data, traceId: crypto.randomUUID() },
                 { removeOnComplete: true, removeOnFail: 50 },
             );
         } catch (error) {
@@ -70,7 +77,7 @@ export function initializeWorkers(): void {
         try {
             await getQueue(QueueName.CONTACTS_SYNC).add(
                 `contacts-${data.workspaceId}-${Date.now()}`,
-                data,
+                { ...data, traceId: crypto.randomUUID() },
                 { removeOnComplete: true, delay: 90_000 },
             );
         } catch (error) {

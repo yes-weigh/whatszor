@@ -12,19 +12,19 @@ export const stageRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) 
     fastify.post('/', { preHandler: requireRole('contacts:create') }, async (req, reply) => {
         const input = CreateStageSchema.parse(req.body);
         const stage = await stageService.createStage(req.user.workspaceId, input);
-        return reply.status(201).send({ success: true, data: stage });
+        return reply.code(201).sendSuccess(stage);
     });
 
     fastify.patch('/:id', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const input = UpdateStageSchema.parse(req.body);
         const stage = await stageService.updateStage(req.user.workspaceId, id, input);
-        return reply.send({ success: true, data: stage });
+        return reply.sendSuccess(stage);
     });
 
     fastify.delete('/:id', { preHandler: requireRole('contacts:delete') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         await stageService.deleteStage(req.user.workspaceId, id);
-        return reply.send({ success: true, data: { message: 'Stage deleted' } });
+        return reply.sendSuccess({ message: 'Stage deleted' });
     });
 };

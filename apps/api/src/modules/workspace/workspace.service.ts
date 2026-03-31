@@ -2,6 +2,10 @@ import { prisma } from '../../prisma/client';
 import bcrypt from 'bcryptjs';
 import type { UpdateWorkspaceInput, InviteMemberInput } from '@whatszor/shared';
 import { ErrorCodes } from '@whatszor/shared';
+import { logEvent } from '../../core/event-logger';
+import { blockMemberToken } from '../../core/token-blocklist';
+import { env } from '../../env';
+
 
 // ── Workspace ──────────────────────────────────────────────
 
@@ -109,7 +113,20 @@ export async function inviteMember(workspaceId: string, input: InviteMemberInput
     return { id: member.id, role: member.role, joinedAt: member.joinedAt, user: member.user };
 }
 
-export async function updateMemberRole(workspaceId: string, memberId: string, newRole: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER') {
+export async function updateMemberRole(
+    workspaceId: string,
+    memberId: string,
+    newRole: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER',
+    requestorRole?: 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER',
+) {
+    // ADMIN cannot promote anyone to OWNER — only OWNER can do that
+    if (requestorRole === 'ADMIN' && newRole === 'OWNER') {
+        const err = new Error('ADMINs cannot promote members to OWNER role') as Error & { code: string; statusCode: number };
+        err.code = ErrorCodes.FORBIDDEN;
+        err.statusCode = 403;
+        throw err;
+    }
+
     const member = await prisma.workspaceMember.findFirst({
         where: { id: memberId, workspaceId },
     });
@@ -133,11 +150,19 @@ export async function updateMemberRole(workspaceId: string, memberId: string, ne
         }
     }
 
+    const oldRole = member.role;
     const updated = await prisma.workspaceMember.update({
         where: { id: memberId },
         data: { role: newRole },
         include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } }
     });
+
+    // Audit: log role changes for compliance
+    await logEvent(workspaceId, 'member_role_changed', 'workspace_admin', {
+        memberId,
+        oldRole,
+        newRole,
+    }).catch(() => {}); // Non-blocking — audit failure must not block the operation
     
     return { id: updated.id, role: updated.role, joinedAt: updated.joinedAt, user: updated.user };
 }
@@ -174,4 +199,19 @@ export async function removeMember(workspaceId: string, memberId: string, reques
     }
 
     await prisma.workspaceMember.delete({ where: { id: memberId } });
+
+    // ── Blocklist their in-flight token for this workspace ─────────────────────
+    // Parse JWT_EXPIRES_IN string (e.g. '15m', '1h', '1d') to a seconds value.
+    // The access token lifetime sets the upper bound for the blocklist TTL.
+    const jwtExpiresStr = env.JWT_EXPIRES_IN;
+    let blockTtlSeconds = 900; // default 15 minutes
+    if (jwtExpiresStr.endsWith('d'))  blockTtlSeconds = parseInt(jwtExpiresStr) * 86400;
+    else if (jwtExpiresStr.endsWith('h'))  blockTtlSeconds = parseInt(jwtExpiresStr) * 3600;
+    else if (jwtExpiresStr.endsWith('m'))  blockTtlSeconds = parseInt(jwtExpiresStr) * 60;
+    else if (jwtExpiresStr.endsWith('s'))  blockTtlSeconds = parseInt(jwtExpiresStr);
+
+    // userId on WorkspaceMember is the workspace User.id — matches request.user.sub for non-impersonation tokens
+    await blockMemberToken(workspaceId, member.userId, blockTtlSeconds)
+        .catch(() => {}); // non-blocking — blocklist failure must not prevent removal
+    // ──────────────────────────────────────────────────────────────────────────
 }

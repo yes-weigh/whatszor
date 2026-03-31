@@ -34,7 +34,7 @@ export function AIFlowGenerator({ onClose, onFlowGenerated }: AIFlowGeneratorPro
 
         try {
             const res = await api.post('/ai/generate-flow', { description: description.trim() });
-            const { name, nodes, edges } = res.data?.data || {};
+            const { name, nodes, edges } = res.data || {};
 
             if (!nodes || nodes.length === 0) {
                 setError('AI could not generate a valid flow. Try rephrasing your description.');

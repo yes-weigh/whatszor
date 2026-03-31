@@ -47,6 +47,21 @@ enum KeyStatus {
   REVOKED
 }
 
+enum SessionStatus {
+  CONNECTING
+  QR_PENDING
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  RATE_LIMITED
+}
+
+enum BotMode {
+  INTERNAL
+  EXTERNAL
+  HYBRID
+}
+
 // ============================================================
 // GLOBAL ADMIN AND LICENSES
 // ============================================================
@@ -82,21 +97,53 @@ model LicenseKey {
 }
 
 // ============================================================
+// IMPERSONATION AUDIT LOG
+// Records every super-admin impersonation event for compliance.
+// Tokens are short-lived (30m default via IMPERSONATION_TTL env)
+// and revocable via the revokedAt field.
+// ============================================================
+
+model ImpersonationLog {
+  id           String    @id @default(cuid())
+  globalUserId String    @map("global_user_id")   // GlobalUser who performed the action
+  workspaceId  String    @map("workspace_id")      // Target workspace
+  targetRole   String    @default("OWNER")         // Impersonated role (always OWNER)
+  tokenJti     String    @unique @map("token_jti") // JWT jti — used for revocation checks
+  issuedAt     DateTime  @default(now()) @map("issued_at")
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")         // Set to instantly invalidate token
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+
+  @@index([globalUserId])
+  @@index([workspaceId])
+  @@index([tokenJti])
+  @@map("impersonation_logs")
+}
+
+// ============================================================
 // WORKSPACE (Tenant)
 // Every entity in the system MUST include workspace_id.
 // ============================================================
 
 model Workspace {
-  id        String          @id @default(cuid())
-  name      String
-  slug      String          @unique
-  status    WorkspaceStatus @default(TRIAL)
-  plan      String          @default("free")
-  planTier  PlanTier        @default(FREE) @map("plan_tier")
-  expiresAt DateTime?       @map("expires_at")
-  settings  Json            @default("{}")
-  createdAt DateTime        @default(now()) @map("created_at")
-  updatedAt DateTime        @updatedAt @map("updated_at")
+  id               String          @id @default(cuid())
+  name             String
+  slug             String          @unique
+  status           WorkspaceStatus @default(TRIAL)
+  plan             String          @default("free")
+  planTier         PlanTier        @default(FREE) @map("plan_tier")
+  expiresAt        DateTime?       @map("expires_at")
+  settings         Json            @default("{}")
+  // ── Storage Governance (P4) ───────────────────────────────────────────────────────
+  // Bytes used by all uploaded media files in this workspace.
+  // Incremented on upload, decremented (with negative guard) on deletion.
+  storageUsedBytes BigInt          @default(0) @map("storage_used_bytes")
+  // 0 = use plan-tier default from StorageLimits config (src/core/config/storage.ts)
+  storageLimitBytes BigInt         @default(0) @map("storage_limit_bytes")
+  // ───────────────────────────────────────────────────────────────────────
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
 
   // Relations
   licenses         LicenseKey[]
@@ -106,6 +153,7 @@ model Workspace {
   pipelines        Pipeline[]
   records          Record[]
   conversations    Conversation[]
+  messages         Message[]
   whatsAppSessions WhatsAppSession[]
   whatsAppAccounts WhatsAppAccount[]
   campaigns        Campaign[]
@@ -136,8 +184,9 @@ model User {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  memberships   WorkspaceMember[]
-  refreshTokens RefreshToken[]
+  memberships      WorkspaceMember[]
+  refreshTokens    RefreshToken[]
+  whatsAppAccounts WhatsAppAccount[]
 
   @@map("users")
 }
@@ -336,19 +385,22 @@ model Conversation {
 
   // Which WhatsApp session (account) owns this conversation
   sessionId String? @map("session_id")
+  whatsAppAccount WhatsAppAccount? @relation(fields: [sessionId], references: [sessionId])
 
-  // WhatsApp contact name as synced from the device address book
+  assignedToUserId String? @map("assigned_to_user_id")
+  assignedTeamId   String? @map("assigned_team_id")
+
   waContactName String? @map("wa_contact_name")
 
   status ConversationStatus @default(ACTIVE)
 
-  // Aggregated metadata for fast UI rendering
   lastMessageAt DateTime @default(now()) @map("last_message_at")
   lastMessage   String?  @map("last_message")
   unreadCount   Int      @default(0) @map("unread_count")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   // Relationships
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -360,6 +412,8 @@ model Conversation {
   @@unique([workspaceId, provider, providerId, sessionId])
   @@index([workspaceId, lastMessageAt])
   @@index([workspaceId, sessionId])
+  @@index([workspaceId, assignedToUserId])
+  @@index([workspaceId, assignedTeamId])
   @@map("conversations")
 }
 
@@ -379,10 +433,13 @@ model AllowedNumber {
 
 model Message {
   id             String @id @default(cuid())
+  workspaceId    String @map("workspace_id")
   conversationId String @map("conversation_id")
 
   // The remote message ID generated by WhatsApp/Provider for delivery tracking
-  remoteId String? @map("remote_id")
+  remoteId        String? @map("remote_id")
+  clientMessageId String? @map("client_message_id")
+  sequenceNumber  Int     @default(autoincrement()) @map("sequence_number")
 
   direction MessageDirection
   type      MessageType      @default(TEXT)
@@ -395,10 +452,12 @@ model Message {
 
   status MessageStatus @default(PENDING)
 
+  deletedAt DateTime? @map("deleted_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relationships
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   // Track if this message was sent from the Media Gallery
@@ -409,6 +468,7 @@ model Message {
 
   campaignMembers CampaignMember[]
 
+  @@unique([clientMessageId, workspaceId])
   @@unique([conversationId, remoteId])
   @@index([conversationId, createdAt])
   @@map("messages")
@@ -491,18 +551,32 @@ model WhatsAppSession {
 
 // Registry of named WhatsApp accounts connected to a workspace
 model WhatsAppAccount {
-  id          String   @id @default(cuid())
-  workspaceId String   @map("workspace_id")
-  sessionId   String   @unique @map("session_id") // Stable ID used by Baileys auth & socket manager
-  name        String // Human label e.g. "Sales Team North"
-  phoneNumber String?  @map("phone_number") // Populated after successful connection
-  status      String   @default("DISCONNECTED") // DISCONNECTED | CONNECTING | CONNECTED
-  isKnowledgeBot Boolean @default(false) @map("is_knowledge_bot") // True if used exclusively for Product Knowledge Engine
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String        @id @default(cuid())
+  workspaceId  String        @map("workspace_id")
+  sessionId    String        @unique @map("session_id") // Stable ID used by Baileys auth & socket manager
+  name         String        // Human label e.g. "Sales Team North"
+  label        String?
+  phoneNumber  String?       @map("phone_number") // Populated after successful connection
+  status       SessionStatus @default(CONNECTING)
+  botMode      BotMode?      @map("bot_mode")
+  userId       String?       @map("user_id")
+  lastActiveAt DateTime?     @map("last_active_at")
+  deletedAt    DateTime?     @map("deleted_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  // ── Session Lifecycle (P8) ──────────────────────────────────────────────────
+  // Ordered list of previous userId owners (audit trail for session transfers).
+  previousOwnerIds  String[]  @default([]) @map("previous_owner_ids")
+  // Set when a session drops unexpectedly — used by admin QR relay flow (P5).
+  reauthRequiredAt  DateTime? @map("reauth_required_at")
+  // ──────────────────────────────────────────────────────────────────────────
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  conversations Conversation[]
+
+  @@index([workspaceId, userId, status])
   @@index([workspaceId])
   @@map("whatsapp_accounts")
 }
@@ -717,14 +791,18 @@ model AutomationTemplate {
 
 model EventLog {
   id              String   @id @default(cuid())
+  traceId         String?  @map("trace_id")
   workspaceId     String   @map("workspace_id")
+  actorUserId     String?  @map("actor_user_id")
   eventType       String   @map("event_type") // e.g., 'message_received', 'node_failed'
   sourceModule    String   @map("source_module") // e.g., 'webhook', 'automation_engine'
+  targetId        String?  @map("target_id")
   payloadMetadata Json     @default("{}") @map("payload_metadata")
   createdAt       DateTime @default(now()) @map("created_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([traceId])
   @@index([workspaceId, createdAt])
   @@index([workspaceId, eventType])
   @@map("event_logs")

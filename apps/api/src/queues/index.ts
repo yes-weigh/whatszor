@@ -1,9 +1,9 @@
 import { Queue, QueueOptions } from 'bullmq';
 import { env } from '../env';
-import { logger } from '../core/logger';
+import { createLogger } from '../core/logger';
 import { getTraceId } from '../core/context';
 
-const log = logger.child({ module: 'queues' });
+const log = createLogger({ module: 'queues' });
 
 /**
  * UNIFIED queue registry for the Whatszor platform.
@@ -21,6 +21,50 @@ export enum QueueName {
     KNOWLEDGE_INGESTION = 'knowledge_ingestion',
 }
 
+// ── Per-queue job option tuning ─────────────────────────────────────────────
+// Outbound messages must be reliable but should surface failures quickly.
+// AI / ingestion can be slow; give generous backoff.
+const QUEUE_JOB_OPTIONS: Partial<Record<QueueName, QueueOptions['defaultJobOptions']>> = {
+    [QueueName.OUTBOUND_MESSAGES]: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 1_000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 1_000 }, // keep failures long for audit
+    },
+    [QueueName.INBOUND_MESSAGES]: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 500 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 1_000 },
+    },
+    [QueueName.CAMPAIGN]: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: { count: 100 },
+        removeOnFail: { count: 500 },
+    },
+    [QueueName.AI]: {
+        attempts: 2,
+        backoff: { type: 'fixed', delay: 10_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+    },
+    [QueueName.KNOWLEDGE_INGESTION]: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 15_000 },
+        removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+    },
+};
+
+const DEFAULT_JOB_OPTIONS: QueueOptions['defaultJobOptions'] = {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2_000 },
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 500 },
+};
+// ───────────────────────────────────────────────────────────────────────────
+
 function buildConnectionOptions() {
     const redisUrl = new URL(env.REDIS_URL);
     return {
@@ -32,15 +76,10 @@ function buildConnectionOptions() {
     };
 }
 
-function getQueueOptions(): QueueOptions {
+function getQueueOptions(name: QueueName): QueueOptions {
     return {
         connection: buildConnectionOptions(),
-        defaultJobOptions: {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 2000 },
-            removeOnComplete: { count: 100 },
-            removeOnFail: { count: 500 },
-        },
+        defaultJobOptions: QUEUE_JOB_OPTIONS[name] ?? DEFAULT_JOB_OPTIONS,
     };
 }
 
@@ -48,12 +87,15 @@ const queues: Map<QueueName, Queue> = new Map();
 
 export function getQueue(name: QueueName): Queue {
     if (!queues.has(name)) {
-        const q = new Queue(name, getQueueOptions());
+        const q = new Queue(name, getQueueOptions(name));
         const originalAdd = q.add.bind(q);
-        
-        // Proxy add to enforce traceId
+
+        // Proxy add to enforce traceId propagation across all queues
         q.add = (async (jobName: string, data: any, opts?: any) => {
-            const traceId = data.traceId || getTraceId();
+            const traceId = data?.traceId || getTraceId();
+            if (!traceId) {
+                log.warn({ queue: name, jobName }, 'Job enqueued without traceId — source tracing will be incomplete');
+            }
             return originalAdd(jobName, { ...data, traceId }, opts);
         }) as any;
 

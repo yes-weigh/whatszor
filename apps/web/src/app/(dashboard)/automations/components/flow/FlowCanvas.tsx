@@ -82,7 +82,7 @@ function FlowCanvasInner({ initialNodes: propsNodes, initialEdges: propsEdges, i
     useEffect(() => {
         let cancelled = false;
         api.get('/whatsapp/sessions')
-            .then(r => { if (!cancelled) setWaSessions(r.data?.data || []); })
+            .then(r => { if (!cancelled) setWaSessions(r.data || []); })
             .catch(() => {}); // Silently fail — shown as empty list in UI
         return () => { cancelled = true; };
     }, []);
@@ -94,7 +94,7 @@ function FlowCanvasInner({ initialNodes: propsNodes, initialEdges: propsEdges, i
         const loadReplayTrace = async () => {
             try {
                 const { data } = await api.get(`/automations/${initialRuleId}/executions/${replayExecutionId}/logs`);
-                const logs = data.data.logs || [];
+                const logs = data?.logs || [];
                 
                 // Map the logs to their corresponding nodes to inject status
                 setNodes(currentNodes => currentNodes.map(node => {
@@ -291,7 +291,7 @@ function FlowCanvasInner({ initialNodes: propsNodes, initialEdges: propsEdges, i
                 await api.patch(`/automations/${savedRuleId}`, payload);
             } else {
                 const res = await api.post('/automations', payload);
-                setSavedRuleId(res.data?.data?.id);
+                setSavedRuleId(res.data?.id);
             }
             router.push('/automations');
             router.refresh();
@@ -323,7 +323,7 @@ function FlowCanvasInner({ initialNodes: propsNodes, initialEdges: propsEdges, i
                 await api.patch(`/automations/${targetRuleId}`, payload);
             } else {
                 const res = await api.post('/automations', payload);
-                targetRuleId = res.data?.data?.id;
+                targetRuleId = res.data?.id;
                 setSavedRuleId(targetRuleId);
             }
         } catch (err: any) {

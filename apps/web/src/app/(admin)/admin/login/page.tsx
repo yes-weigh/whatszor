@@ -20,7 +20,8 @@ export default function AdminLoginPage() {
         setLoading(true);
         try {
             const { data } = await api.post('/admin/auth/login', { email, password });
-            const { accessToken, refreshToken } = data.data as { accessToken: string; refreshToken: string };
+            // Interceptor unwraps { success, data } — `data` here IS the payload {accessToken, refreshToken, expiresIn}
+            const { accessToken, refreshToken } = data as { accessToken: string; refreshToken: string };
 
             const [, payloadB64] = accessToken.split('.');
             const decoded = JSON.parse(

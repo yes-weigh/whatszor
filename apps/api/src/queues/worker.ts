@@ -1,10 +1,11 @@
-import { Worker } from 'bullmq';
+import { Worker, UnrecoverableError } from 'bullmq';
 import { env } from '../env';
 import { createLogger } from '../core/logger';
 import { QueueName, getAllQueues } from './index';
 import { requestContext } from '../core/context';
 import { getRedisClient } from '../core/redis';
 import { alertQueueBacklog } from '../core/alert';
+import { FatalError } from '../core/errors';
 
 // ── Worker processors ─────────────────────────────────────────────────────────
 import { processInboundMessage } from '../core/workers/inbound-message.worker';
@@ -17,6 +18,7 @@ import { processCampaignJob } from '../modules/campaign/campaign-worker';
 import { processAiJob } from '../modules/ai/ai-worker';
 import { processKnowledgeOutreachJob } from '../modules/knowledge/knowledge.worker';
 import { processIncomingKnowledgeJob } from '../modules/knowledge/knowledge.ingestion';
+import { startZombieSweeper, stopZombieSweeper } from '../core/zombie-sweeper';
 
 const log = createLogger({ module: 'workers', action: 'lifecycle' });
 
@@ -62,15 +64,24 @@ function wrapProcessor(queueName: QueueName, processor: any) {
             } catch (err: any) {
                 const duration = Date.now() - startTime;
                 const isRetrying = job.attemptsMade + 1 < (job.opts?.attempts || 1);
+
+                if (err instanceof FatalError) {
+                    jobLog.fatal(
+                        { jobId: job.id, queueName, duration, err: err.message },
+                        'FatalError detected — aborting retries and routing to DLQ immediately'
+                    );
+                    throw new UnrecoverableError(err.message); // BullMQ native abort
+                }
+
                 if (isRetrying) {
                     jobLog.warn(
                         { jobId: job.id, queueName, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts, duration, err: err.message },
-                        'Job failed — will retry'
+                        'Job failed — will retry (Recoverable or Unknown Exception)'
                     );
                 } else {
                     jobLog.error(
                         { jobId: job.id, queueName, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts, duration, err: err.message },
-                        'Job processor threw exception'
+                        'Job processor threw terminal exception after all standard retries'
                     );
                 }
                 throw err;
@@ -88,16 +99,27 @@ function createWorker(queueName: QueueName, processor: any, concurrency: number)
     worker.on('failed', (job, err) => {
         if (!job) return;
         const isTerminal = job.attemptsMade >= (job.opts.attempts || 1);
-        const terminalLog = createLogger({
-            module: `worker:${queueName}`,
-            action: 'terminal-failure',
-            traceId: job.data?.traceId,
-            workspaceId: job.data?.workspaceId,
-        });
-
+        
         if (isTerminal) {
+            const terminalLog = createLogger({
+                module: `worker:${queueName}`,
+                action: 'terminal-failure',
+                traceId: job.data?.traceId,
+                workspaceId: job.data?.workspaceId,
+            });
+
             terminalLog.fatal(
-                { jobId: job.id, queueName, attemptsMade: job.attemptsMade, err: err.message },
+                { 
+                    event: 'job.failed.final',
+                    jobId: job.id, 
+                    queueName, 
+                    attempts: job.attemptsMade, 
+                    traceId: job.data?.traceId,
+                    err: err.message,
+                    stack: err.stack,
+                    // Log a summary, not the full payload to avoid PII
+                    payloadSummary: Object.keys(job.data || {}),
+                },
                 'Job exhausted all retries — entering DLQ state'
             );
         }
@@ -184,6 +206,7 @@ export function startWorkers(): void {
 
     startHeartbeat();
     startBacklogMonitor();
+    startZombieSweeper();
 
     log.info({ count: workers.length, queues: Object.values(QueueName) }, 'All workers started');
 }
@@ -191,6 +214,7 @@ export function startWorkers(): void {
 export async function stopWorkers(): Promise<void> {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     if (backlogMonitorTimer) clearInterval(backlogMonitorTimer);
+    stopZombieSweeper();
     await Promise.all(workers.map(w => w.close()));
     log.info('All workers stopped');
 }

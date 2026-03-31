@@ -8,7 +8,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'members:read', 'members:manage',
     'conversations:read', 'conversations:reply',
     'media:manage', 'templates:manage',
-    'workspace:view', 'workspace:manage', 'billing:manage' 
+    'workspace:view', 'workspace:manage', 'workspace:settings:read', 'billing:manage',
   ],
   ADMIN: [
     'contacts:create', 'contacts:read', 'contacts:update', 'contacts:delete',
@@ -17,7 +17,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'members:read', 'members:manage',
     'conversations:read', 'conversations:reply',
     'media:manage', 'templates:manage',
-    'workspace:view'
+    'workspace:view', 'workspace:settings:read',
+    // NOTE: workspace:manage and billing:manage are OWNER-only
   ],
   MEMBER: [
     'contacts:create', 'contacts:read', 'contacts:update',
@@ -26,7 +27,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'members:read',
     'conversations:read', 'conversations:reply',
     'media:manage', 'templates:manage',
-    'workspace:view'
+    'workspace:view',
   ],
   VIEWER: [
     'contacts:read',
@@ -34,8 +35,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'automation:read',
     'members:read',
     'conversations:read',
-    'workspace:view'
-  ]
+    'workspace:view',
+  ],
 };
 
 // Precompute Sets for constant-time lookups

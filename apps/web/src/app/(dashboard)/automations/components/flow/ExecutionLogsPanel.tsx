@@ -17,7 +17,7 @@ export function ExecutionLogsPanel({ ruleId, onClose, onLogsLoaded }: { ruleId: 
         setLoading(true);
         try {
             const { data } = await api.get(`/automations/${ruleId}/executions`);
-            setExecutions(data.data.executions || []);
+            setExecutions(data.executions || []);
         } catch (err) {
             console.error(err);
         } finally {
@@ -30,7 +30,7 @@ export function ExecutionLogsPanel({ ruleId, onClose, onLogsLoaded }: { ruleId: 
         setLoading(true);
         try {
             const { data } = await api.get(`/automations/${ruleId}/executions/${executionId}/logs`);
-            const loadedLogs = data.data.logs || [];
+            const loadedLogs = data.logs || [];
             setLogs(loadedLogs);
             if (onLogsLoaded) onLogsLoaded(loadedLogs);
         } catch (err) {

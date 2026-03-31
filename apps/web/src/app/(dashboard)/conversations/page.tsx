@@ -1,7 +1,7 @@
 'use client';
 
 import api from '@/lib/api';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -172,7 +172,7 @@ function ContactAvatar({ jid, name, sessionId, sizeClass = 'w-10 h-10 text-base'
                 const params: any = { jid };
                 if (sessionId) params.sessionId = sessionId;
                 const r = await api.get('/conversations/profile-picture', { params });
-                const url = r.data?.data ?? null;
+                const url = r.data ?? null;
                 profilePicCache.set(jid, url);
                 if (!cancelled) setImgUrl(url);
             } catch {
@@ -439,13 +439,13 @@ export default function ConversationsPage() {
 
     const { data: accounts = [] } = useQuery<WaAccount[]>({
         queryKey: ['wa-accounts'],
-        queryFn: () => api.get('/whatsapp/sessions').then(r => r.data?.data ?? []),
+        queryFn: () => api.get('/whatsapp/sessions').then(r => r.data ?? []),
         refetchInterval: 10000,
     });
 
     const { data: crmContacts = [] } = useQuery<Contact[]>({
         queryKey: ['contacts-picker', newChatSearch],
-        queryFn: () => api.get(`/crm/contacts?search=${newChatSearch}&limit=50`).then(r => r.data?.data ?? []),
+        queryFn: () => api.get(`/crm/contacts?search=${newChatSearch}&limit=50`).then(r => r.data ?? []),
         enabled: showNewChat,
     });
 
@@ -460,7 +460,7 @@ export default function ConversationsPage() {
             });
         },
         onSuccess: (res) => {
-            const conv = res.data?.data;
+            const conv = res.data;
             setShowNewChat(false);
             setNewChatSearch('');
             qc.invalidateQueries({ queryKey: ['conversations'] });
@@ -474,7 +474,7 @@ export default function ConversationsPage() {
         queryKey: ['conversations', activeSessionId],
         queryFn: () => {
             const qs = activeSessionId ? `?sessionId=${activeSessionId}` : '';
-            return api.get(`/conversations${qs}`).then(r => r.data?.data ?? { items: [] });
+            return api.get(`/conversations${qs}`).then(r => r.data ?? { items: [] });
         },
         // SSE handles live updates — keep a generous fallback interval for resilience
         refetchInterval: 60_000,
@@ -482,17 +482,34 @@ export default function ConversationsPage() {
 
     const convs: Conversation[] = convsResult?.items ?? [];
 
-    const { data: msgsResult, isLoading: msgsLoading } = useQuery<{ items: Message[] }>({
+    const {
+        data: msgsData,
+        isLoading: msgsLoading,
+        isFetchingNextPage,
+        hasNextPage,
+        fetchNextPage,
+    } = useInfiniteQuery<{ items: Message[]; nextCursor: string | null }>({
         queryKey: ['messages', selectedConv?.id],
-        queryFn: () => selectedConv
-            ? api.get(`/conversations/${selectedConv.id}/messages`).then(r => r.data?.data ?? { items: [] })
-            : { items: [] },
+        queryFn: ({ pageParam }) =>
+            selectedConv
+                ? api.get(`/conversations/${selectedConv.id}/messages`, {
+                      params: pageParam ? { cursor: pageParam as string } : {},
+                  }).then(r => r.data ?? { items: [], nextCursor: null })
+                : Promise.resolve({ items: [], nextCursor: null }),
+        initialPageParam: null as string | null,
+        // nextCursor is the oldest message ID on screen — use it to load older messages
+        getNextPageParam: (firstPage) => firstPage.nextCursor ?? undefined,
         enabled: !!selectedConv,
-        // SSE handles live updates — no interval polling needed
+        refetchOnMount: 'always',
         refetchOnWindowFocus: true,
+        refetchInterval: 4_000,   // 4s fallback in case SSE misses a message
     });
 
-    const msgs: Message[] = msgsResult?.items ?? [];
+    // pages[0] = newest batch, pages[1] = next-older batch, ...
+    // Reverse page order so oldest batch comes first, then flatten for top→bottom display
+    const msgs: Message[] = msgsData
+        ? [...msgsData.pages].reverse().flatMap(p => p.items)
+        : [];
 
     const { quickReplies, isPending: qrLoading } = useQuickReplies();
 
@@ -620,10 +637,41 @@ export default function ConversationsPage() {
     }
 
     // ── Auto-scroll ───────────────────────────────────────
+    // Track the previous state so we can distinguish between:
+    //  • Conversation switch    → always scroll to bottom
+    //  • New message arrived    → scroll to bottom (tail grows)
+    //  • "Load older" clicked   → DON'T scroll (head grows, preserve position)
+    const prevConvIdRef = useRef<string | null>(null);
+    const prevMsgCountRef = useRef(0);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [msgs.length]);
+        const convChanged = prevConvIdRef.current !== (selectedConv?.id ?? null);
+        const msgCountGrew = msgs.length > prevMsgCountRef.current;
+
+        prevConvIdRef.current = selectedConv?.id ?? null;
+        prevMsgCountRef.current = msgs.length;
+
+        if (!msgCountGrew) return; // no new messages — nothing to do
+
+        if (convChanged) {
+            // Switched conversations: jump to bottom immediately
+            messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+            return;
+        }
+
+        // New message in current conversation: only auto-scroll if user is already
+        // near the bottom (within 200 px), so we don't hijack manual scroll-up.
+        const container = scrollContainerRef.current;
+        if (container) {
+            const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+            if (distanceFromBottom < 200) {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
+        } else {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [msgs.length, selectedConv?.id]);
 
     // ── Auto-reset when session disconnects ───────────────
     // If the user was viewing a specific session that just went offline, fall back to "All"
@@ -804,7 +852,7 @@ export default function ConversationsPage() {
                         fd.append('file', file);
                         fd.append('category', file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document');
                         const uploadRes = await api.post('/media-gallery/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-                        const mediaId = uploadRes.data?.data?.id;
+                        const mediaId = uploadRes.data?.id;
                         if (mediaId) {
                             await api.post(`/conversations/${selectedConv.id}/messages`, {
                                 type: file.type.startsWith('image/') ? 'IMAGE' : file.type.startsWith('video/') ? 'VIDEO' : 'DOCUMENT',
@@ -985,7 +1033,23 @@ export default function ConversationsPage() {
                         </div>
 
                         {/* Messages */}
-                        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-3">
+                        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-3">
+                            {/* ── Load older messages button ────────────────── */}
+                            {!msgsLoading && hasNextPage && (
+                                <div className="flex justify-center py-1">
+                                    <button
+                                        onClick={() => fetchNextPage()}
+                                        disabled={isFetchingNextPage}
+                                        className="flex items-center gap-2 text-xs text-muted hover:text-primary border border-theme bg-elevated hover:bg-hover px-4 py-1.5 rounded-full transition-all disabled:opacity-50"
+                                    >
+                                        {isFetchingNextPage
+                                            ? <><Loader2 size={12} className="animate-spin" /> Loading…</>
+                                            : '↑ Load older messages'
+                                        }
+                                    </button>
+                                </div>
+                            )}
+
                             {msgsLoading && (
                                 <div className="flex-1 flex items-center justify-center">
                                     <Loader2 size={20} className="animate-spin text-muted" />
@@ -997,6 +1061,7 @@ export default function ConversationsPage() {
                                     <p className="text-sm text-muted">No messages yet</p>
                                 </div>
                             )}
+
                             {msgs.map((msg, idx) => {
                                 // Find if this is the last inbound message in the thread
                                 const isLastInbound = msg.direction === 'INBOUND' && 

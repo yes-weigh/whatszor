@@ -16,7 +16,7 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
     // Must be before /:id to avoid route conflict
     fastify.get('/profile-picture', async (req, reply) => {
         const { jid, sessionId } = req.query as { jid?: string, sessionId?: string };
-        if (!jid) return reply.status(400).send({ success: false, message: 'jid required' });
+        if (!jid) return reply.code(400).sendError({ code: 'BAD_REQUEST', message: 'jid required' });
 
         try {
             let targetSessionId = sessionId;
@@ -27,7 +27,7 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
                     where: { workspaceId: req.user.workspaceId, status: 'CONNECTED' },
                     select: { sessionId: true }
                 });
-                if (!account) return reply.send({ success: true, data: null });
+                if (!account) return reply.sendSuccess(null);
                 targetSessionId = account.sessionId;
             }
 
@@ -72,14 +72,21 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
 
     fastify.get('/:id/messages', async (req, reply) => {
         const { id } = req.params as { id: string };
-        const messages = await conversationService.getMessages(req.user.workspaceId, id);
+        const { cursor } = req.query as { cursor?: string };
+        const messages = await conversationService.getMessages(req.user.workspaceId, id, cursor);
         return reply.sendSuccess(messages);
     });
 
-    fastify.post('/:id/messages', { preHandler: requireRole('conversations:reply') }, async (req, reply) => {
+    fastify.post('/:id/messages', { config: { rateLimit: { max: 100, timeWindow: '1 minute' } }, preHandler: requireRole('conversations:reply') }, async (req, reply) => {
         const { id } = req.params as { id: string };
         const input = SendMessageSchema.parse(req.body);
-        const message = await conversationService.sendMessage(req.user.workspaceId, req.user.sub, id, input);
+        const message = await conversationService.sendMessage(
+            req.user.workspaceId,
+            req.user.sub,
+            req.user.role,   // ← passed for MEMBER session ownership guard
+            id,
+            input,
+        );
         return reply.sendSuccess(message, 201);
     });
 
@@ -94,5 +101,37 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
         const { id } = req.params as { id: string };
         const data = await conversationService.generateSuggestedReply(req.user.workspaceId, id);
         return reply.sendSuccess(data);
+    });
+
+    /**
+     * GET /conversations/:id/sync
+     *
+     * SSE Recovery Endpoint — called by the frontend immediately after an SSE
+     * reconnect to refetch the latest conversation state without replaying events.
+     *
+     * Returns:
+     *   - Full conversation record
+     *   - Last 20 messages (most recent first, for display)
+     *
+     * The client should merge this response into its local state to handle
+     * any updates missed during the disconnection window.
+     */
+    fastify.get('/:id/sync', async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const workspaceId = req.user.workspaceId;
+
+        const conversation = await conversationService.getConversation(workspaceId, id);
+
+        const allMessages = await conversationService.getMessages(workspaceId, id);
+
+        // For SSE recovery we only need the most-recent 20 messages —
+        // enough to reconstruct visible UI state without fetching the full history.
+        const recentMessages = allMessages.items.slice(-20);
+
+        return reply.sendSuccess({
+            conversation,
+            messages: recentMessages,
+            syncedAt: new Date().toISOString(),
+        });
     });
 };

@@ -14,7 +14,7 @@ export const automationRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
     fastify.get('/', async (req, reply) => {
         const { workspaceId } = req.user;
         const data = await automationService.getRules(workspaceId);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Create macro
@@ -23,7 +23,7 @@ export const automationRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const input = CreateAutomationRuleSchema.parse(req.body);
 
         const data = await automationService.createRule(workspaceId, input);
-        return reply.status(201).send({ success: true, data });
+        return reply.code(201).sendSuccess(data);
     });
 
     // Get macro details
@@ -32,7 +32,7 @@ export const automationRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const { id } = req.params as { id: string };
 
         const data = await automationService.getRule(workspaceId, id);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Update macro (enable/disable, etc)
@@ -42,7 +42,7 @@ export const automationRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const input = UpdateAutomationRuleSchema.parse(req.body);
 
         const data = await automationService.updateRule(workspaceId, id, input);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Delete macro
@@ -51,7 +51,7 @@ export const automationRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const { id } = req.params as { id: string };
 
         await automationService.deleteRule(workspaceId, id);
-        return reply.status(204).send();
+        return reply.code(204).sendSuccess(null);
     });
 
     // Get executions for a rule
@@ -61,7 +61,7 @@ export const automationRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const { page = 1, limit = 10 } = req.query as { page?: number, limit?: number };
 
         const data = await automationService.getRuleExecutions(workspaceId, id, Number(page), Number(limit));
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Get execution logs for a specific run
@@ -70,16 +70,16 @@ export const automationRoutes: FastifyPluginAsync = async (fastify: FastifyInsta
         const { id, executionId } = req.params as { id: string, executionId: string };
 
         const data = await automationService.getExecutionLogs(workspaceId, id, executionId);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Simulate an automation flow execution
     fastify.post('/:id/simulate', { preHandler: requireRole('automation:update') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
-        const payload = req.body as any; // Allow accepting test payload data
+        const payload = req.body as any;
 
         const data = await automationService.simulateRule(workspaceId, id, payload);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 };

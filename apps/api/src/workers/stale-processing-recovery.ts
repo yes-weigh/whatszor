@@ -1,7 +1,7 @@
 import { prisma } from '../prisma/client';
-import { logger } from '../core/logger';
+import { createLogger } from '../core/logger';
 
-const log = logger.child({ module: 'stale-processing-recovery' });
+const log = createLogger({ module: 'stale-processing-recovery' });
 
 export async function sweepStaleCampaignMembers() {
     log.info('Running stale CampaignMember recovery sweep');

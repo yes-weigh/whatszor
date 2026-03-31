@@ -21,16 +21,16 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const take = Number(req.query && (req.query as any).take) || 20;
 
         const data = await campaignService.getCampaigns(workspaceId, skip, take);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Create Campaign
-    fastify.post('/', { preHandler: requireRole('campaigns:create') }, async (req, reply) => {
+    fastify.post('/', { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } }, preHandler: requireRole('campaigns:create') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const input = CreateCampaignSchema.parse(req.body);
 
         const data = await campaignService.createCampaign(workspaceId, input as any);
-        return reply.status(201).send({ success: true, data });
+        return reply.code(201).sendSuccess(data);
     });
 
     // Get Single Campaign
@@ -39,7 +39,7 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { id } = req.params as { id: string };
 
         const data = await campaignService.getCampaign(workspaceId, id);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Update Campaign
@@ -48,8 +48,14 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { id } = req.params as { id: string };
         const input = UpdateCampaignSchema.parse(req.body) as any;
 
-        const data = await campaignService.updateCampaign(workspaceId, id, input as any);
-        return reply.send({ success: true, data });
+        const data = await campaignService.updateCampaign(
+            workspaceId,
+            id,
+            input as any,
+            req.user.sub,    // actorUserId — for MEMBER session ownership check
+            req.user.role,   // actorRole
+        );
+        return reply.sendSuccess(data);
     });
 
     // Add Audience Members (Bulk)
@@ -59,7 +65,7 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const input = AddCampaignMembersSchema.parse(req.body);
 
         const data = await campaignService.addCampaignMembers(workspaceId, id, input);
-        return reply.status(201).send({ success: true, data });
+        return reply.code(201).sendSuccess(data);
     });
 
     // Manually Trigger Start
@@ -68,7 +74,7 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { id } = req.params as { id: string };
 
         const data = await campaignService.startCampaign(workspaceId, id);
-        return reply.status(202).send({ success: true, data });
+        return reply.code(202).sendSuccess(data);
     });
 
     // Manually Cancel/Stop Campaign
@@ -77,7 +83,7 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { id } = req.params as { id: string };
 
         const data = await campaignService.cancelCampaign(workspaceId, id);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 
     // Delete Campaign
@@ -86,6 +92,6 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         const { id } = req.params as { id: string };
 
         const data = await campaignService.deleteCampaign(workspaceId, id);
-        return reply.send({ success: true, data });
+        return reply.sendSuccess(data);
     });
 };

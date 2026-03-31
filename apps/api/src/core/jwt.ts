@@ -5,6 +5,8 @@ import type { TokenPayload } from '@whatszor/shared';
 
 const ACCESS_SECRET = new TextEncoder().encode(env.JWT_SECRET + ':access');
 const REFRESH_SECRET = new TextEncoder().encode(env.JWT_SECRET + ':refresh');
+// Separate secret — impersonation tokens are cryptographically distinct from access tokens
+const IMPERSONATION_SECRET = new TextEncoder().encode(env.JWT_SECRET + ':impersonate');
 
 const ACCESS_TTL = env.JWT_EXPIRES_IN;         // e.g. "15m"
 const REFRESH_TTL = env.JWT_REFRESH_EXPIRES_IN; // e.g. "30d"
@@ -29,6 +31,39 @@ export async function signRefreshToken(payload: Omit<TokenPayload, 'type'>): Pro
         .setExpirationTime(REFRESH_TTL)
         .setIssuer('whatsvue')
         .sign(REFRESH_SECRET);
+}
+
+// ── Impersonation Token ─────────────────────────────────────
+// Used exclusively by super-admins to temporarily act as OWNER of a workspace.
+// Short-lived, non-renewable, and backed by a DB revocation record (ImpersonationLog).
+
+export interface ImpersonationTokenPayload {
+    sub: string;            // GlobalUser.id (NOT a workspace User.id)
+    workspaceId: string;
+    role: 'OWNER';
+    type: 'impersonation';
+    jti: string;            // Matches ImpersonationLog.tokenJti for revocation lookups
+    impersonatedBy: string; // GlobalUser.id (same as sub — for future delegated impersonation)
+}
+
+export async function signImpersonationToken(payload: Omit<ImpersonationTokenPayload, 'type'>): Promise<string> {
+    return new SignJWT({ ...payload, type: 'impersonation' } as JWTPayload)
+        .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
+        .setExpirationTime(env.IMPERSONATION_TTL)
+        .setIssuer('whatsvue')
+        .setJti(payload.jti)
+        .sign(IMPERSONATION_SECRET);
+}
+
+export async function verifyImpersonationToken(token: string): Promise<ImpersonationTokenPayload> {
+    const { payload } = await jwtVerify(token, IMPERSONATION_SECRET, {
+        issuer: 'whatsvue',
+    });
+    if (payload['type'] !== 'impersonation') {
+        throw new Error('Not an impersonation token');
+    }
+    return payload as unknown as ImpersonationTokenPayload;
 }
 
 // ── Token verification ─────────────────────────────────────
