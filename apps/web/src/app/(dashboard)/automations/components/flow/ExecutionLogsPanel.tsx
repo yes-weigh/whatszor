@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, PlayCircle, Clock, ChevronRight, Activity, AlertCircle, CheckCircle2 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -8,13 +8,7 @@ export function ExecutionLogsPanel({ ruleId, onClose, onLogsLoaded }: { ruleId: 
     const [logs, setLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        if (!ruleId) return;
-        fetchExecutions();
-    }, [ruleId]);
-
-    const fetchExecutions = async () => {
+    const fetchExecutions = useCallback(async () => {
         setLoading(true);
         try {
             const { data } = await api.get(`/automations/${ruleId}/executions`);
@@ -24,7 +18,12 @@ export function ExecutionLogsPanel({ ruleId, onClose, onLogsLoaded }: { ruleId: 
         } finally {
             setLoading(false);
         }
-    };
+    }, [ruleId]);
+
+    useEffect(() => {
+        if (!ruleId) return;
+        fetchExecutions();
+    }, [ruleId, fetchExecutions]);
 
     const fetchLogs = async (executionId: string) => {
         setSelectedExecution(executions.find(e => e.id === executionId));
