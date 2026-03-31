@@ -51,6 +51,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
     depends_on:
       db:
         condition: service_healthy
