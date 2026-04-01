@@ -26,6 +26,6 @@
 # Optional: Redirect trailing slash to non-trailing slash (e.g., example.com/api/ -> example.com/api)
 # ...or keep it as is.
 
-mail.yesweigh.in {
-    reverse_proxy 148.230.66.84:8080
-}
+#mail.yesweigh.in {
+#    reverse_proxy 148.230.66.84:8080
+#}
