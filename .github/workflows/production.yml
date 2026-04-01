@@ -59,14 +59,14 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Write env and deploy to Hostinger VPS
+      - name: Write env and deploy to Oracle Linux 9 VPS
         uses: appleboy/ssh-action@master
         env:
           VPS_ENV: ${{ secrets.VPS_ENV }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
-          password: ${{ secrets.VPS_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 30m
           envs: VPS_ENV
           script: |
@@ -75,62 +75,67 @@ jobs:
             # ── 1. Install Docker (if not present) ─────────────────────────────
             if ! command -v docker &> /dev/null; then
               echo "Installing Docker..."
-              curl -fsSL https://get.docker.com | sh
-              systemctl enable docker
-              systemctl start docker
+              sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+              sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+              sudo systemctl enable --now docker
+              sudo usermod -aG docker $USER
+              echo "Docker installed. Note: Group changes may require a re-login or use of 'newgrp docker' in this session."
             fi
 
             # ── 1.5 Ensure swap space exists to prevent OOM ────────────────
             if [ -z "$(swapon --show)" ]; then
               echo "Creating 2GB swap file..."
-              fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
-              chmod 600 /swapfile
-              mkswap /swapfile
-              swapon /swapfile
-              echo '/swapfile none swap sw 0 0' >> /etc/fstab
+              sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+              sudo chmod 600 /swapfile
+              sudo mkswap /swapfile
+              sudo swapon /swapfile
+              echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
             fi
 
             # ── 2. Install Git (if not present) ────────────────────────────────
             if ! command -v git &> /dev/null; then
-              apt-get update -qq && apt-get install -y git
+              sudo dnf install -y git
             fi
 
             # ── 3. Clone or pull the repository ────────────────────────────────
-            if [ -d /root/whatszor/.git ]; then
+            PROJECT_DIR="$HOME/whatszor"
+            if [ -d "$PROJECT_DIR/.git" ]; then
               echo "Repo exists — resetting to latest..."
-              cd /root/whatszor
+              cd "$PROJECT_DIR"
               git fetch origin main
               git reset --hard origin/main
             else
               echo "Fresh server — cloning repo..."
-              cd /root
+              cd "$HOME"
               git clone https://github.com/yes-weigh/whatszor.git
-              cd /root/whatszor
+              cd "$PROJECT_DIR"
             fi
 
             # ── 4. Write .env from the VPS_ENV secret (passed as envvar) ───────
-            cd /root/whatszor
+            cd "$PROJECT_DIR"
             printf '%s\n' "$VPS_ENV" > .env
             echo ".env written ($(wc -l < .env) lines)"
 
             # ── 5. Build & start services ────────────────────────────────────────
-            docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
-            docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle || true
-            if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
-              echo "❌ docker compose up failed! Fetching logs from whatszor-api-1 and whatszor-worker-1..."
-              docker compose -f docker-compose.prod.yml logs api worker || true
-              exit 1
-            fi
+            # Use 'sg docker' to ensure we have docker group permissions without logging out
+            sg docker -c "
+              docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
+              docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle || true
+              if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
+                echo '❌ docker compose up failed! Fetching logs...'
+                docker compose -f docker-compose.prod.yml logs api worker || true
+                exit 1
+              fi
 
-            # ── 6. Restart Caddy ─────────────────────────────────────────────────────────
-            docker compose -f docker-compose.prod.yml stop caddy
-            # docker run --rm -v whatszor_caddy-config:/config alpine sh -c "rm -rf /config/*" || true
-            docker compose -f docker-compose.prod.yml up -d caddy
-            echo "Caddy restarted (TLS state preserved)"
+              # ── 6. Restart Caddy ─────────────────────────────────────────────────────────
+              docker compose -f docker-compose.prod.yml stop caddy
+              docker compose -f docker-compose.prod.yml up -d caddy
+              echo 'Caddy restarted'
 
-            # ── 8. Show running containers ───────────────────────────────────────
-            docker compose -f docker-compose.prod.yml ps
+              # ── 7. Show running containers ───────────────────────────────────────
+              docker compose -f docker-compose.prod.yml ps
 
-            # ── 8. Prune old images ──────────────────────────────────────────────
-            docker system prune -f
+              # ── 8. Prune old images ──────────────────────────────────────────────
+              docker system prune -f
+            "
             echo "✅ Deployment complete!"
