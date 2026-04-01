@@ -364,11 +364,13 @@ export async function processInboundMessage(job: Job): Promise<void> {
                                     messageText: latestVersion.messageText,
                                     footerText: latestVersion.footerText ?? undefined,
                                     buttons: (latestVersion.buttons ?? []).map((b: any) => ({
+                                        type: b.type,
                                         label: b.label,
                                         payload: b.payload,
                                     })),
                                     headerMediaId: latestVersion.media?.id ?? undefined,
                                     headerMediaType: latestVersion.media?.type?.toUpperCase() ?? undefined,
+                                    headerFileName: latestVersion.media?.name ?? undefined,
                                 };
 
                                 const tplMsg = await prisma.message.create({

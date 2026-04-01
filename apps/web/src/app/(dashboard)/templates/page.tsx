@@ -3,11 +3,14 @@
 import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LayoutTemplate, Plus, FileEdit, Trash2, Globe, Clock, Layers } from 'lucide-react';
+import { Zap, LayoutTemplate, Plus, FileEdit, Trash2, Globe, Clock, Layers } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
+import { QuickRepliesTab } from './components/QuickRepliesTab';
 
 export default function TemplatesPage() {
     const qc = useQueryClient();
+    const [activeTab, setActiveTab] = useState<'whatsapp' | 'quick-replies'>('whatsapp');
 
     const { data: templatesData, isLoading } = useQuery({
         queryKey: ['templates'],
@@ -25,7 +28,24 @@ export default function TemplatesPage() {
         <div className="flex flex-col h-full bg-surface">
             <Header title="Template Studio" subtitle="Build and manage highly converting WhatsApp message templates" />
             
-            <div className="p-6 flex-1 flex flex-col gap-6 max-w-7xl mx-auto w-full">
+            <div className="px-6 flex gap-2 border-b border-theme bg-surface pt-4">
+                <button 
+                    onClick={() => setActiveTab('whatsapp')}
+                    className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'whatsapp' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
+                >
+                    <LayoutTemplate size={16} /> WhatsApp Templates
+                </button>
+                <button 
+                    onClick={() => setActiveTab('quick-replies')}
+                    className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'quick-replies' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
+                >
+                    <Zap size={16} /> Quick Replies
+                </button>
+            </div>
+
+            <div className="p-6 flex-1 flex flex-col max-w-7xl mx-auto w-full">
+                {activeTab === 'whatsapp' ? (
+                <div className="flex flex-col gap-6 w-full">
                 
                 {/* Action Bar */}
                 <div className="flex justify-end items-center gap-4">
@@ -105,6 +125,12 @@ export default function TemplatesPage() {
                                 </div>
                             );
                         })}
+                    </div>
+                )}
+                </div>
+                ) : (
+                    <div className="w-full">
+                        <QuickRepliesTab />
                     </div>
                 )}
             </div>

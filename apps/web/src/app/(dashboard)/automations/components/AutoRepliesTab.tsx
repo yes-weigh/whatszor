@@ -10,7 +10,7 @@ import {
     X, Image as ImageIcon, Video, FileText, LayoutTemplate, MessageSquare,
     ChevronDown,
 } from 'lucide-react';
-import { MediaPickerModal } from './MediaPickerModal';
+import { MediaPickerModal } from '@/components/media/MediaPickerModal';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 

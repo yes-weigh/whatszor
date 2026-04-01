@@ -5,8 +5,9 @@ import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
-import { Zap, CheckCircle2, PauseCircle, Activity, LayoutGrid, Sparkles, AlertTriangle, Clock, Server, ToggleLeft, ToggleRight, Trash2, Pencil } from 'lucide-react';
+import { Zap, CheckCircle2, PauseCircle, Activity, LayoutGrid, Sparkles, AlertTriangle, Clock, Server, ToggleLeft, ToggleRight, Trash2, Pencil, Bot, Network } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { AutoRepliesTab } from './components/AutoRepliesTab';
 
 const statusBadge: Record<string, string> = {
     ACTIVE: 'badge-green',
@@ -18,6 +19,7 @@ export default function AutomationsPage() {
     const qc = useQueryClient();
     const router = useRouter();
     const hasPermission = useAuthStore(s => s.hasPermission);
+    const [activeTab, setActiveTab] = React.useState<'workflows' | 'auto-replies'>('auto-replies');
 
     const { data: rulesData } = useQuery({
         queryKey: ['automations'],
@@ -47,9 +49,27 @@ export default function AutomationsPage() {
     const metrics = metricsData || { totalExecutions: 0, failedNodes: 0, averageDurationMs: 0 };
 
     return (
-        <div>
-            <Header title="Automations" subtitle="IFTTT rule engine" />
-            <div className="p-6 flex flex-col gap-4">
+        <div className="flex flex-col h-full bg-body">
+            <Header title="Automations" subtitle="IFTTT rule engine and auto replies" />
+            
+            <div className="px-6 flex gap-2 border-b border-theme bg-surface pt-4">
+                <button 
+                    onClick={() => setActiveTab('auto-replies')}
+                    className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'auto-replies' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
+                >
+                    <Bot size={16} /> Auto Replies
+                </button>
+                <button 
+                    onClick={() => setActiveTab('workflows')}
+                    className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'workflows' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
+                >
+                    <Network size={16} /> Workflows
+                </button>
+            </div>
+
+            <div className="p-6 flex-1 overflow-y-auto">
+                {activeTab === 'workflows' ? (
+                <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                     {hasPermission('automation:create') && (
                         <>
@@ -218,8 +238,14 @@ export default function AutomationsPage() {
                              </div>
                          );
                      })}
-                 </div>
-             </div>
-         </div>
-     );
- }
+                     </div>
+                </div>
+                ) : (
+                    <div className="max-w-4xl max-w-7xl w-full mx-auto">
+                        <AutoRepliesTab />
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

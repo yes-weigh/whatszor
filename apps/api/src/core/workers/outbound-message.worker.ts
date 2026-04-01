@@ -109,13 +109,43 @@ export async function processOutboundMessage(job: Job): Promise<void> {
 
     if (type === 'TEMPLATE' && mediaData?.templatePayload?.buttons?.length > 0) {
         const templateData = mediaData.templatePayload;
-        const interactiveButtons = templateData.buttons.map((btn: any, i: number) => ({
-            name: 'quick_reply',
-            buttonParamsJson: JSON.stringify({
-                display_text: btn.label,
-                id: btn.payload || `btn_id_${i}`,
-            }),
-        }));
+        const interactiveButtons = templateData.buttons.map((btn: any, i: number) => {
+            const type = btn.type?.toUpperCase();
+            if (type === 'CALL') {
+                let phone = (btn.payload || '').replace(/\s+/g, '');
+                if (phone.startsWith('+91')) {
+                    phone = phone.replace('+91', '');
+                } else if (phone.startsWith('91') && phone.length === 12) {
+                    phone = phone.substring(2);
+                }
+                phone = phone.replace(/[^0-9]/g, '');
+
+                return {
+                    name: 'cta_call',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: btn.label,
+                        phone_number: phone
+                    })
+                };
+            } else if (type === 'URL') {
+                return {
+                    name: 'cta_url',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: btn.label,
+                        url: btn.payload || '',
+                        merchant_url: btn.payload || ''
+                    })
+                };
+            } else {
+                return {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: btn.label,
+                        id: btn.payload || `btn_id_${i}`,
+                    })
+                };
+            }
+        });
 
         const buttonMessage: any = {
             footer: templateData.footerText || undefined,
@@ -125,6 +155,9 @@ export async function processOutboundMessage(job: Job): Promise<void> {
         if (templateData.headerMediaId) {
             const mediaType = templateData.headerMediaType?.toUpperCase();
             const filePath = await resolveMediaPath(templateData.headerMediaId);
+            
+            // Critical for interactiveButtons + media in this Baileys fork
+            buttonMessage.hasMediaAttachment = true;
             
             if (mediaType === 'IMAGE') {
                 buttonMessage.image = { url: filePath };

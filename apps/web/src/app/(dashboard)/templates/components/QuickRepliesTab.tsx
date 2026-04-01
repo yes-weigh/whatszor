@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useQuickReplies } from '@/hooks/use-quick-replies';
 import { Plus, Trash2, Edit2, Loader2, Zap, Check, Paperclip, X, Image as ImageIcon, Video, FileText } from 'lucide-react';
-import { MediaPickerModal } from './MediaPickerModal';
+import { MediaPickerModal } from '@/components/media/MediaPickerModal';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 

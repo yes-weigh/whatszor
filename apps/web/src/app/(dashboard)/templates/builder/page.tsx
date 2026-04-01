@@ -23,6 +23,13 @@ function TemplateBuilder() {
     });
     const [buttons, setButtons] = useState<any[]>([]);
     const [previewVars, setPreviewVars] = useState<Record<string, string>>({});
+    const [testSessionId, setTestSessionId] = useState('');
+    const [testPhoneNumber, setTestPhoneNumber] = useState('');
+
+    const { data: whatsappSessions = [] } = useQuery({
+        queryKey: ['whatsapp-sessions'],
+        queryFn: () => api.get('/whatsapp/sessions').then(r => r.data ?? []),
+    });
 
     const { data: mediaList = [] } = useQuery({
         queryKey: ['media'],
@@ -67,6 +74,23 @@ function TemplateBuilder() {
         },
         onError: (err: any) => {
             alert(err.response?.data?.message || 'Error saving template');
+        }
+    });
+
+    const testMutation = useMutation({
+        mutationFn: async () => {
+            if (!existingId) throw new Error("Please save the template first before testing");
+            return api.post(`/templates/${existingId}/test`, {
+                sessionId: testSessionId,
+                phoneNumber: testPhoneNumber,
+                variables: previewVars
+            });
+        },
+        onSuccess: () => {
+            alert('Test message enqueued successfully!');
+        },
+        onError: (err: any) => {
+            alert(err.response?.data?.message || 'Error sending test message');
         }
     });
 
@@ -275,6 +299,47 @@ function TemplateBuilder() {
                 <div className="w-[400px] bg-theme/50 p-6 flex flex-col hidden lg:flex">
                     <h2 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2"><Smartphone size={18}/> Realistic Preview</h2>
                     
+                    {/* Send Test Panel */}
+                    <div className="mb-6 bg-surface p-4 rounded-xl border border-theme shadow-sm">
+                        <h3 className="text-xs font-bold text-muted uppercase mb-3 tracking-wider">Send Test Message</h3>
+                        
+                        <div className="flex flex-col gap-3">
+                            <div>
+                                <label className="text-xs text-secondary mb-1 block">WhatsApp Session</label>
+                                <select 
+                                    title="Select a WhatsApp session for testing"
+                                    className="w-full p-2 text-sm bg-elevated border border-theme rounded outline-none focus:border-accent"
+                                    value={testSessionId}
+                                    onChange={e => setTestSessionId(e.target.value)}
+                                >
+                                    <option value="">Select a connected session</option>
+                                    {whatsappSessions.filter((s: any) => s.status === 'CONNECTED').map((s: any) => (
+                                        <option key={s.sessionId} value={s.sessionId}>{s.name} ({s.phoneNumber || s.sessionId})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs text-secondary mb-1 block">Recipient Phone Number</label>
+                                <input 
+                                    className="w-full p-2 text-sm bg-elevated border border-theme rounded outline-none focus:border-accent"
+                                    placeholder="e.g. +1234567890"
+                                    value={testPhoneNumber}
+                                    onChange={e => setTestPhoneNumber(e.target.value)}
+                                />
+                            </div>
+                            <button 
+                                className="btn btn-primary w-full py-2 text-sm mt-1"
+                                disabled={!existingId || !testSessionId || !testPhoneNumber || testMutation.isPending}
+                                onClick={() => testMutation.mutate()}
+                            >
+                                {testMutation.isPending ? 'Sending Test...' : 'Send Template Test'}
+                            </button>
+                            {!existingId && (
+                                <p className="text-[10px] text-yellow-600 leading-tight">You must save the template first before sending a test.</p>
+                            )}
+                        </div>
+                    </div>
+
                     {/* Variable Mock Editor */}
                     {Object.keys(previewVars).length > 0 && (
                         <div className="mb-6 bg-surface p-4 rounded-xl border border-theme shadow-sm">

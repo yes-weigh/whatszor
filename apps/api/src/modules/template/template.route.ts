@@ -3,6 +3,26 @@ import { prisma } from '../../prisma/client';
 import { ErrorCodes } from '@whatszor/shared';
 import { validateMessageVariables } from './template-renderer';
 import { authenticate } from '../../middleware/authenticate';
+import { createOrGetConversation } from '../messaging/conversation.service';
+import { composeAndQueueMessage } from '../../core/messaging/message-composer';
+import { RenderContext } from './template-renderer';
+
+function buildRenderContext(flatVariables: Record<string, any> = {}): RenderContext {
+    const context: any = {};
+    for (const [key, value] of Object.entries(flatVariables)) {
+        const parts = key.split('.');
+        const lastPart = parts.pop();
+        if (!lastPart) continue;
+
+        let current = context;
+        for (const part of parts) {
+            if (!current[part]) current[part] = {};
+            current = current[part];
+        }
+        current[lastPart] = value;
+    }
+    return context;
+}
 
 export default async function templateRoutes(fastify: FastifyInstance) {
     fastify.addHook('preHandler', authenticate);
@@ -196,5 +216,61 @@ export default async function templateRoutes(fastify: FastifyInstance) {
         await prisma.template.delete({ where: { id } });
 
         return reply.status(204).send();
+    });
+
+    /**
+     * @route POST /api/v1/templates/:id/test
+     * @desc Send a test message with the specified template using a connected WhatsApp session
+     */
+    fastify.post('/:id/test', async (request, reply) => {
+        const workspaceId = request.user?.workspaceId;
+        const { id } = request.params as { id: string };
+        const b = request.body as any;
+        const { sessionId, phoneNumber, variables } = b;
+
+        if (!workspaceId) {
+            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
+        }
+
+        if (!sessionId || !phoneNumber) {
+            return reply.sendError({ code: 'BAD_REQUEST', message: 'sessionId and phoneNumber are required' }, 400);
+        }
+
+        const template = await prisma.template.findUnique({
+            where: { id, workspaceId },
+            include: {
+                versions: {
+                    orderBy: { version: 'desc' },
+                    take: 1
+                }
+            }
+        });
+
+        if (!template || template.versions.length === 0) {
+            return reply.sendError({ code: 'NOT_FOUND', message: 'Template not found' }, 404);
+        }
+
+        const latestVersion = template.versions[0];
+        const context = buildRenderContext(variables);
+
+        // Ensure we have a conversation for this recipient
+        const conversation = await createOrGetConversation(workspaceId, {
+            provider: 'WHATSAPP',
+            providerId: phoneNumber,
+            sessionId: sessionId
+        });
+
+        // Use core messaging pipeline to dispatch
+        await composeAndQueueMessage({
+            workspaceId,
+            conversationId: conversation.id,
+            provider: 'WHATSAPP',
+            providerId: phoneNumber,
+            sessionId: sessionId,
+            templateVersionId: latestVersion.id,
+            templateVariables: context
+        });
+
+        return reply.sendSuccess({ message: 'Test message enqueued successfully' });
     });
 }

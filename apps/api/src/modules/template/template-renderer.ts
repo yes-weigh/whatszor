@@ -90,11 +90,11 @@ export async function renderTemplateVersion(
         headerMediaType = version.media.type;
     }
 
-    // 3. Map buttons
+    // 3. Map buttons and Parse Variables in them
     const buttons = version.buttons.map(b => ({
         type: b.type,
-        label: b.label,
-        payload: b.payload || undefined
+        label: parseVariables(b.label, context),
+        payload: b.payload ? parseVariables(b.payload, context) : undefined
     }));
 
     return {
