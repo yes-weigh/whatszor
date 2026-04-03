@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import { 
   Send, Phone, CheckCheck, Check, Sparkles, Loader2, 
-  Circle, Download, FileText, X, Paperclip, ChevronDown, Zap, Search
+  Circle, Download, FileText, X, Paperclip, ChevronDown, Zap, Search, MessageSquare
 } from 'lucide-react';
 import { Conversation, Message } from '@/hooks/useConversations';
 import { ContactAvatar, getDisplayName } from './ConversationsList';
