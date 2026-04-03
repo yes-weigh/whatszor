@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Megaphone, Zap, LayoutDashboard,
-    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, Shield
+    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, Shield, MapPin
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
@@ -15,6 +15,7 @@ const navItems = [
     { href: '/analytics',     label: 'Analytics',     icon: LayoutDashboard },
     { href: '/contacts',      label: 'Contacts',      icon: Users },
     { href: '/campaigns',     label: 'Campaigns',     icon: Megaphone },
+    { href: '/leads',         label: 'Lead Generation', icon: MapPin },
     { href: '/automations',   label: 'Automations',   icon: Zap },
     { href: '/media',         label: 'Media Gallery', icon: Image },
     { href: '/templates',     label: 'Templates',     icon: LayoutTemplate },

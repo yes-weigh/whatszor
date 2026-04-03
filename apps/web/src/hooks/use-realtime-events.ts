@@ -28,6 +28,12 @@ export interface RealtimePayload {
     type?: string;
     content?: string | null;
     status?: string;
+    // Lead Generation specifics
+    leadListId?: string;
+    totalFound?: number;
+    withPhone?: number;
+    errorReason?: string;
+    name?: string;
     [key: string]: unknown;
 }
 
@@ -35,6 +41,8 @@ export interface RealtimeHandlers {
     onMessageNew?: (payload: RealtimePayload) => void;
     onMessageStatus?: (payload: RealtimePayload) => void;
     onConversationUpdated?: (payload: RealtimePayload) => void;
+    onLeadListReady?: (payload: RealtimePayload) => void;
+    onLeadListFailed?: (payload: RealtimePayload) => void;
 }
 
 export function useRealtimeEvents(handlers: RealtimeHandlers) {
@@ -86,6 +94,12 @@ export function useRealtimeEvents(handlers: RealtimeHandlers) {
                             break;
                         case 'conversation.updated':
                             handlersRef.current.onConversationUpdated?.(payload);
+                            break;
+                        case 'lead_list.ready':
+                            handlersRef.current.onLeadListReady?.(payload);
+                            break;
+                        case 'lead_list.failed':
+                            handlersRef.current.onLeadListFailed?.(payload);
                             break;
                         // 'connected' is a no-op — just confirms the stream is live
                     }
