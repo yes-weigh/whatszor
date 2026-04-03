@@ -47,6 +47,13 @@ export function ContactAvatar({ jid, name, sessionId, sizeClass = 'w-10 h-10 tex
     );
 
     useEffect(() => {
+        // @lid JIDs are internal WhatsApp device IDs — they never have profile pictures.
+        if (jid.endsWith('@lid')) {
+            profilePicCache.set(jid, null);
+            setImgUrl(null);
+            return;
+        }
+
         if (profilePicCache.has(jid)) {
             setImgUrl(profilePicCache.get(jid) ?? null);
             return;

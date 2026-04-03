@@ -16,28 +16,37 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
     // Must be before /:id to avoid route conflict
     fastify.get('/profile-picture', async (req, reply) => {
         const { jid, sessionId } = req.query as { jid?: string, sessionId?: string };
-        if (!jid) return reply.code(400).sendError({ code: 'BAD_REQUEST', message: 'jid required' });
+
+        // @lid JIDs are internal WhatsApp device IDs — they never have profile pictures.
+        // Returning null immediately avoids 100s of pointless Baileys calls on page load.
+        if (!jid || jid.endsWith('@lid')) {
+            return reply.send({ success: true, data: null });
+        }
 
         try {
             let targetSessionId = sessionId;
 
             if (!targetSessionId) {
-                // Find any connected account for this workspace as fallback
                 const account = await prisma.whatsAppAccount.findFirst({
                     where: { workspaceId: req.user.workspaceId, status: 'CONNECTED' },
                     select: { sessionId: true }
                 });
-                if (!account) return reply.sendSuccess(null);
+                if (!account) return reply.send({ success: true, data: null });
                 targetSessionId = account.sessionId;
             }
 
             const sock = waManager.getSocket(targetSessionId);
             if (!sock) return reply.send({ success: true, data: null });
 
-            const url = await sock.profilePictureUrl(jid, 'image').catch(() => null);
-            return reply.sendSuccess(url);
+            // Race against a 5-second timeout to prevent connection hangs
+            const url = await Promise.race([
+                sock.profilePictureUrl(jid, 'image').catch(() => null),
+                new Promise<null>(res => setTimeout(() => res(null), 5000)),
+            ]);
+
+            return reply.send({ success: true, data: url ?? null });
         } catch {
-            return reply.sendSuccess(null);
+            return reply.send({ success: true, data: null });
         }
     });
 
