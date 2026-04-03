@@ -302,7 +302,7 @@ export function AutomationInsightsSection() {
             )}
 
             {/* Insight cards */}
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto pr-2 custom-scrollbar">
                 {insights.map(insight => (
                     <InsightCard
                         key={insight.id}

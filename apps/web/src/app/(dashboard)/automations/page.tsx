@@ -77,18 +77,16 @@ export default function AutomationsPage() {
 
             <div className="p-6 flex-1 overflow-y-auto">
                 {activeTab === 'keyword' && (
-                    <div className="max-w-4xl w-full mx-auto space-y-8">
-                        {/* Phase 3: Self-Learning Suggestions */}
-                        <AutomationInsightsSection />
-
-                        {/* Divider */}
-                        <div className="flex items-center gap-3">
-                            <div className="flex-1 h-px bg-white/8" />
-                            <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-medium">Active Automations</span>
-                            <div className="flex-1 h-px bg-white/8" />
+                    <div className="max-w-7xl w-full mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8 items-start pb-8">
+                        {/* Left Column: Active Automations */}
+                        <div className="xl:col-span-7 order-2 xl:order-1">
+                            <KeywordAutomationsTab />
                         </div>
-
-                        <KeywordAutomationsTab />
+                        
+                        {/* Right Column: AI Suggestions */}
+                        <div className="xl:col-span-5 order-1 xl:order-2 xl:sticky xl:top-2">
+                            <AutomationInsightsSection />
+                        </div>
                     </div>
                 )}
                 {activeTab === 'workflows' ? (
