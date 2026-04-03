@@ -51,8 +51,8 @@ export async function processInboundMessage(job: Job): Promise<void> {
             if (msg.key.remoteJid === 'status@broadcast') continue;
 
             const rawJid = msg.key.remoteJid as string;
-            if (rawJid?.endsWith('@g.us')) {
-                log.debug({ jid: rawJid }, 'Ignoring group message');
+            if (rawJid?.endsWith('@g.us') || rawJid?.endsWith('@newsletter')) {
+                log.debug({ jid: rawJid }, 'Ignoring group/newsletter message');
                 continue;
             }
 
