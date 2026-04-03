@@ -10,6 +10,9 @@ const envSchema = z.object({
     // Google Gemini API Key (optional — AI features disabled if not set)
     GEMINI_API_KEY: z.string().optional(),
 
+    // Google Places API (New) — Lead generation feature (optional — feature disabled if not set)
+    GOOGLE_PLACES_API_KEY: z.string().optional(),
+
     // Database
     DATABASE_URL: z.string().min(1),
 

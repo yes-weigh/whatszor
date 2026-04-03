@@ -19,6 +19,7 @@ export enum QueueName {
     AI = 'ai',
     KNOWLEDGE_OUTREACH = 'knowledge_outreach',
     KNOWLEDGE_INGESTION = 'knowledge_ingestion',
+    LEAD_GENERATION = 'lead-generation',
 }
 
 // ── Per-queue job option tuning ─────────────────────────────────────────────
@@ -53,6 +54,12 @@ const QUEUE_JOB_OPTIONS: Partial<Record<QueueName, QueueOptions['defaultJobOptio
         attempts: 3,
         backoff: { type: 'exponential', delay: 15_000 },
         removeOnComplete: { count: 50 },
+        removeOnFail: { count: 200 },
+    },
+    [QueueName.LEAD_GENERATION]: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: { count: 100 },
         removeOnFail: { count: 200 },
     },
 };

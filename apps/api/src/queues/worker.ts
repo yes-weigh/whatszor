@@ -18,6 +18,7 @@ import { processCampaignJob } from '../modules/campaign/campaign-worker';
 import { processAiJob } from '../modules/ai/ai-worker';
 import { processKnowledgeOutreachJob } from '../modules/knowledge/knowledge.worker';
 import { processIncomingKnowledgeJob } from '../modules/knowledge/knowledge.ingestion';
+import { processLeadGenerationJob } from '../modules/lead-generation/lead-generation.worker';
 import { startZombieSweeper, stopZombieSweeper } from '../core/zombie-sweeper';
 
 const log = createLogger({ module: 'workers', action: 'lifecycle' });
@@ -213,6 +214,7 @@ export function startBackgroundWorkers(): void {
         createWorker(QueueName.AI, processAiJob, 3),
         createWorker(QueueName.KNOWLEDGE_OUTREACH, processKnowledgeOutreachJob, 2),
         createWorker(QueueName.KNOWLEDGE_INGESTION, processIncomingKnowledgeJob, 2),
+        createWorker(QueueName.LEAD_GENERATION, processLeadGenerationJob, 3),
     );
 
     startHeartbeat();

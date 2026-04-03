@@ -32,6 +32,10 @@ export type EventType =
     | 'member_role_changed'          // OWNER changed a member's role
     | 'session_reassigned'           // Session ownership transferred between members
     | 'qr_relay_triggered'           // Admin triggered QR regeneration for a member
+    // ── Lead Generation Events ────────────────────────
+    | 'lead_list_created'            // User queued a new lead list
+    | 'lead_list_ready'              // Worker finished fetching/processing leads
+    | 'leads_converted'              // Leads were successfully converted to contacts
     | 'system_error';
 
 /**

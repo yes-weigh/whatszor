@@ -41,6 +41,7 @@ import { adminRoutes } from '../modules/admin/admin.routes';
 import { licenseRoutes } from '../modules/license/license.routes';
 import { keywordAutomationRoutes } from '../modules/automation/keyword-automation.route';
 import { automationInsightRoutes } from '../modules/automation/automation-insights.route';
+import { leadGenerationRoutes } from '../modules/lead-generation/lead-generation.route';
 
 /**
  * Creates and configures the Fastify server instance.
@@ -253,6 +254,9 @@ export async function createServer(): Promise<FastifyInstance> {
 
             // Automation Insights (Self-Learning Engine)
             await api.register(automationInsightRoutes, { prefix: '/automation-insights' });
+
+            // Lead Generation (Google Maps / Places API)
+            await api.register(leadGenerationRoutes, { prefix: '/lead-generation' });
         },
         { prefix: '/api/v1' },
     );
