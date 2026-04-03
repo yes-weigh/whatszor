@@ -14,39 +14,58 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
 
     // ── Profile Picture (proxy via Baileys) ──
     // Must be before /:id to avoid route conflict
+    //
+    // CONCURRENCY GUARD: Baileys profilePictureUrl throws non-standard errors
+    // under concurrent load (60+ requests at page load) that can bypass try/catch.
+    // We use a per-session in-flight counter capped at MAX_CONCURRENT to shed
+    // excess requests immediately (return null) rather than hammering the WA socket.
+    const MAX_CONCURRENT_PER_SESSION = 2;
+    const inFlightBySession = new Map<string, number>();
+
     fastify.get('/profile-picture', async (req, reply) => {
         const { jid, sessionId } = req.query as { jid?: string, sessionId?: string };
 
         // @lid JIDs are internal WhatsApp device IDs — they never have profile pictures.
-        // Returning null immediately avoids 100s of pointless Baileys calls on page load.
         if (!jid || jid.endsWith('@lid')) {
             return reply.send({ success: true, data: null });
         }
 
-        try {
-            let targetSessionId = sessionId;
+        // Always reply successfully — never let this endpoint return 500
+        const ok = (url: string | null = null) => reply.send({ success: true, data: url });
 
-            if (!targetSessionId) {
+        let targetSessionId = sessionId ?? 'unknown';
+
+        try {
+            if (!sessionId) {
                 const account = await prisma.whatsAppAccount.findFirst({
                     where: { workspaceId: req.user.workspaceId, status: 'CONNECTED' },
                     select: { sessionId: true }
-                });
-                if (!account) return reply.send({ success: true, data: null });
+                }).catch(() => null);
+                if (!account) return ok();
                 targetSessionId = account.sessionId;
             }
 
             const sock = waManager.getSocket(targetSessionId);
-            if (!sock) return reply.send({ success: true, data: null });
+            if (!sock) return ok();
 
-            // Race against a 5-second timeout to prevent connection hangs
-            const url = await Promise.race([
-                sock.profilePictureUrl(jid, 'image').catch(() => null),
-                new Promise<null>(res => setTimeout(() => res(null), 5000)),
-            ]);
+            // Concurrency shed: if already at max for this session, skip
+            const current = inFlightBySession.get(targetSessionId) ?? 0;
+            if (current >= MAX_CONCURRENT_PER_SESSION) return ok();
 
-            return reply.send({ success: true, data: url ?? null });
+            inFlightBySession.set(targetSessionId, current + 1);
+
+            try {
+                const url = await Promise.race([
+                    Promise.resolve().then(() => sock.profilePictureUrl(jid, 'image')).catch(() => null),
+                    new Promise<null>(res => setTimeout(() => res(null), 4000)),
+                ]);
+                return ok(url);
+            } finally {
+                const after = inFlightBySession.get(targetSessionId) ?? 1;
+                inFlightBySession.set(targetSessionId, Math.max(0, after - 1));
+            }
         } catch {
-            return reply.send({ success: true, data: null });
+            return ok();
         }
     });
 

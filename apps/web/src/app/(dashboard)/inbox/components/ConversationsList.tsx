@@ -247,7 +247,7 @@ export function ConversationsList({
                         {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-accent rounded-r-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />}
 
                         <div className="relative shrink-0 mt-0.5">
-                            <ContactAvatar jid={conv.providerId} name={name} sessionId={conv.sessionId} sizeClass="w-12 h-12 text-lg" delay={idx * 50} />
+                            <ContactAvatar jid={conv.providerId} name={name} sessionId={conv.sessionId} sizeClass="w-12 h-12 text-lg" delay={idx * 300} />
                             
                             {/* Session colour dot — helps distinguish which account this chat belongs to */}
                             {(() => {
