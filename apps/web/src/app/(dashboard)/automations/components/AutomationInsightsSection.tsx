@@ -7,6 +7,7 @@ import {
     Loader2, RefreshCw, Brain, ChevronDown, ChevronUp,
     BarChart3, Clock
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface AutomationInsight {
     id: string;
@@ -181,8 +182,12 @@ export function AutomationInsightsSection() {
             setAcceptingId(null);
             qc.invalidateQueries({ queryKey: ['automation-insights'] });
             qc.invalidateQueries({ queryKey: ['keyword-automations'] });
+            toast.success('Automation rule created!');
         },
-        onError: () => setAcceptingId(null),
+        onError: (err: any) => {
+            setAcceptingId(null);
+            toast.error(err.response?.data?.error?.message || 'Failed to accept suggestion');
+        },
     });
 
     const dismissMutation = useMutation({
@@ -190,8 +195,12 @@ export function AutomationInsightsSection() {
         onSuccess: () => {
             setDismissingId(null);
             qc.invalidateQueries({ queryKey: ['automation-insights'] });
+            toast.success('Suggestion dismissed');
         },
-        onError: () => setDismissingId(null),
+        onError: (err: any) => {
+            setDismissingId(null);
+            toast.error(err.response?.data?.error?.message || 'Failed to dismiss suggestion');
+        },
     });
 
     const insights = data ?? [];
