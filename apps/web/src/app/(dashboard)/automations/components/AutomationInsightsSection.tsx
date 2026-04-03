@@ -120,7 +120,7 @@ function InsightCard({ insight, onAccept, onDismiss, isAccepting, isDismissing }
                                     {examples.slice(0, 4).map((ex, i) => (
                                         <div key={i} className="flex items-start gap-2">
                                             <span className="text-[10px] text-zinc-600 shrink-0 mt-0.5">#{i + 1}</span>
-                                            <p className="text-[11px] text-zinc-500 italic truncate">"{ex}"</p>
+                                            <p className="text-[11px] text-zinc-500 italic truncate">&quot;{ex}&quot;</p>
                                         </div>
                                     ))}
                                 </div>

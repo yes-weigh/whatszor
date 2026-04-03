@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import { 
-  Send, Phone, CheckCheck, Check, Sparkles, Loader2, 
-  Circle, Download, FileText, X, Paperclip, ChevronDown, Zap, Search, MessageSquare
+  Send, CheckCheck, Check, Sparkles, Loader2, 
+  Download, FileText, Paperclip, Search, MessageSquare
 } from 'lucide-react';
 import { Conversation, Message } from '@/hooks/useConversations';
 import { ContactAvatar, getDisplayName } from './ConversationsList';
@@ -80,7 +80,7 @@ function StatusIcon({ status }: { status: string }) {
   return null;
 }
 
-function MessageBubble({ msg, onEdit }: { msg: Message; onEdit: (text: string) => void; }) {
+function MessageBubble({ msg }: { msg: Message }) {
   const isOut = msg.direction === 'OUTBOUND';
   const isMediaType = ['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT', 'STICKER'].includes(msg.type);
   const hasLocalPath = !!msg.mediaData?.localPath;
@@ -306,7 +306,6 @@ export function ChatWindow({
               <MessageBubble 
                   key={msg.id} 
                   msg={msg} 
-                  onEdit={() => {}} 
               />
           ))}
           <div ref={messagesEndRef} className="h-4" />

@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { motion, useScroll, useTransform, useMotionTemplate, useMotionValue } from 'framer-motion';
-import { useRef, MouseEvent } from 'react';
+import { MouseEvent } from 'react';
 import { 
     ArrowRight, Bot, Zap, ImageIcon, Users, MessageSquare, 
-    TrendingUp, ShieldCheck, CheckCircle2, ChevronRight, 
+    TrendingUp, ShieldCheck, CheckCircle2, 
     BarChart3, Database, Play, AlertCircle, PhoneMissed, 
     Clock, Store, Building2, MonitorSmartphone, Briefcase, Star
 } from 'lucide-react';
