@@ -165,6 +165,24 @@ export default function ContactsPage() {
             },
         },
         {
+            id: "source",
+            header: "Source",
+            cell: ({ row }) => {
+                const customData = row.original.customData as any;
+                const sessionName = customData?.sourceSessionName;
+                const phoneNumber = customData?.sourcePhoneNumber;
+                
+                if (!sessionName && !phoneNumber) return <span className="text-sm text-muted">—</span>;
+                
+                return (
+                    <div className="flex flex-col gap-0.5 text-sm text-secondary">
+                        <span className="font-medium text-primary">{sessionName || "Unknown Session"}</span>
+                        {phoneNumber && <span className="text-xs text-muted font-mono">{phoneNumber}</span>}
+                    </div>
+                );
+            },
+        },
+        {
             id: "actions",
             cell: ({ row }) => (
                 <DropdownMenu>

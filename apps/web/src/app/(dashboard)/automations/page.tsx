@@ -5,9 +5,8 @@ import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
-import { Zap, CheckCircle2, PauseCircle, Activity, LayoutGrid, Sparkles, AlertTriangle, Clock, Server, ToggleLeft, ToggleRight, Trash2, Pencil, Bot, Network } from 'lucide-react';
+import { Zap, CheckCircle2, PauseCircle, Activity, LayoutGrid, Sparkles, AlertTriangle, Clock, Server, ToggleLeft, ToggleRight, Trash2, Pencil, Network } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { AutoRepliesTab } from './components/AutoRepliesTab';
 import { KeywordAutomationsTab } from './components/KeywordAutomationsTab';
 import { AutomationInsightsSection } from './components/AutomationInsightsSection';
 
@@ -21,7 +20,7 @@ export default function AutomationsPage() {
     const qc = useQueryClient();
     const router = useRouter();
     const hasPermission = useAuthStore(s => s.hasPermission);
-    const [activeTab, setActiveTab] = React.useState<'keyword' | 'workflows' | 'auto-replies'>('keyword');
+    const [activeTab, setActiveTab] = React.useState<'keyword' | 'workflows'>('keyword');
 
     const { data: rulesData } = useQuery({
         queryKey: ['automations'],
@@ -60,12 +59,6 @@ export default function AutomationsPage() {
                     className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'keyword' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
                 >
                     <Zap size={16} /> Keyword Automations
-                </button>
-                <button 
-                    onClick={() => setActiveTab('auto-replies')}
-                    className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'auto-replies' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
-                >
-                    <Bot size={16} /> Auto Replies
                 </button>
                 <button 
                     onClick={() => setActiveTab('workflows')}
@@ -261,11 +254,7 @@ export default function AutomationsPage() {
                      })}
                      </div>
                 </div>
-                ) : (
-                    <div className="max-w-4xl max-w-7xl w-full mx-auto">
-                        <AutoRepliesTab />
-                    </div>
-                )}
+                ) : null}
             </div>
         </div>
     );

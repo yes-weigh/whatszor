@@ -26,9 +26,6 @@ import { emit as realtimeEmit } from '../realtime';
 import { getQueue, QueueName } from '../../queues';
 import { randomUUID } from 'crypto';
 import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } from '../idempotency';
-// Top-level import eliminates the require() hack — no circular dep because
-// quick-reply.service only imports prisma, it never imports any queue.
-import { findMatchingAutoReply } from '../../modules/quick-replies/quick-reply.service';
 // Keyword Automation Engine — PRIMARY layer that runs before QuickReply
 import {
     findMatchingKeywordAutomation,
@@ -44,11 +41,20 @@ export async function processInboundMessage(job: Job): Promise<void> {
     const { workspaceId, sessionId, messages } = job.data;
     const errors: Error[] = [];
 
+    const account = await prisma.whatsAppAccount.findUnique({
+        where: { sessionId },
+        select: { botMode: true, name: true, phoneNumber: true },
+    });
+
     for (const msg of messages) {
         try {
             if (msg.key.remoteJid === 'status@broadcast') continue;
 
             const rawJid = msg.key.remoteJid as string;
+            if (rawJid?.endsWith('@g.us')) {
+                log.debug({ jid: rawJid }, 'Ignoring group message');
+                continue;
+            }
 
             // ── @lid JID resolution ────────────────────────────────────────────
             let providerId = rawJid;
@@ -83,11 +89,6 @@ export async function processInboundMessage(job: Job): Promise<void> {
             // ── Knowledge bot interception ─────────────────────────────────────
             let kbHandled = false;
             if (!msg.key.fromMe) {
-                const account = await prisma.whatsAppAccount.findUnique({
-                    where: { sessionId },
-                    select: { botMode: true },
-                });
-
                 if (account?.botMode === 'INTERNAL') {
                     let senderPhone = providerId.split('@')[0];
                     if (providerId.endsWith('@lid')) {
@@ -176,7 +177,15 @@ export async function processInboundMessage(job: Job): Promise<void> {
                         contact = await prisma.contact.upsert({
                             where: { workspaceId_phone: { workspaceId, phone: phoneStr } },
                             update: {},
-                            create: { workspaceId, firstName: pushName || phoneStr, phone: phoneStr },
+                            create: { 
+                                workspaceId, 
+                                firstName: pushName || phoneStr, 
+                                phone: phoneStr,
+                                customData: {
+                                    sourceSessionName: account?.name,
+                                    sourcePhoneNumber: account?.phoneNumber,
+                                }
+                            },
                         });
                     } catch (upsertErr: unknown) {
                         // Concurrent worker won — retrieve their row
@@ -366,7 +375,6 @@ export async function processInboundMessage(job: Job): Promise<void> {
                         const { automation, matchedKeyword } = kwMatch;
                         const contactIdentifier = conversation.contactId ?? conversation.providerId;
 
-                        // Idempotency key: ensures same message never triggers same automation twice
                         const autoIdempotencyKey = `kw-auto:${workspaceId}:${msg.key.id}:${automation.id}`;
                         const alreadyHandled = await acquireIdempotencyLock(autoIdempotencyKey);
 
@@ -375,53 +383,99 @@ export async function processInboundMessage(job: Job): Promise<void> {
                             autoReplied = true;
                         } else if (!isOnCooldown(workspaceId, contactIdentifier, matchedKeyword, automation.cooldownSec)) {
                             log.info({ keyword: matchedKeyword, matchType: automation.matchType, conversationId: conversation.id }, 'Keyword automation matched');
+                            const startTime = Date.now();
 
-                            // Send media first if attached
-                            if (automation.media?.id) {
-                                const mediaType = automation.media.type === 'image' ? 'IMAGE'
-                                    : automation.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
-                                const mediaMsg = await prisma.message.create({
-                                    data: {
-                                        conversationId: conversation.id,
+                            if (automation.template) {
+                                // Template Mode
+                                const latestVersion = automation.template.versions?.[0];
+                                if (latestVersion) {
+                                    const templatePayload = {
+                                        messageText: latestVersion.messageText,
+                                        footerText: latestVersion.footerText ?? undefined,
+                                        buttons: (latestVersion.buttons ?? []).map((b: any) => ({
+                                            type: b.type,
+                                            label: b.label,
+                                            payload: b.payload,
+                                        })),
+                                        headerMediaId: latestVersion.media?.id ?? undefined,
+                                        headerMediaType: latestVersion.media?.type?.toUpperCase() ?? undefined,
+                                        headerFileName: latestVersion.media?.name ?? undefined,
+                                    };
+
+                                    const tplMsg = await prisma.message.create({
+                                        data: {
+                                            conversationId: conversation.id,
+                                            workspaceId,
+                                            direction: 'OUTBOUND',
+                                            type: 'TEMPLATE',
+                                            content: latestVersion.messageText,
+                                            mediaData: { templatePayload } as any,
+                                            status: 'QUEUED',
+                                        },
+                                    });
+                                    await getQueue(QueueName.OUTBOUND_MESSAGES).add(`kw-tpl-${tplMsg.id}`, {
                                         workspaceId,
-                                        direction: 'OUTBOUND',
-                                        type: mediaType as any,
-                                        content: null,
-                                        mediaData: { mediaId: automation.media.id, fileName: automation.media.name } as any,
-                                        status: 'QUEUED',
-                                    },
-                                });
-                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(
-                                    `kw-media-${mediaMsg.id}`,
-                                    { workspaceId, sessionId, messageId: mediaMsg.id, toJid: providerId, type: mediaType, content: null, mediaData: { mediaId: automation.media.id, fileName: automation.media.name } },
-                                );
+                                        sessionId,
+                                        messageId: tplMsg.id,
+                                        toJid: providerId,
+                                        type: 'TEMPLATE',
+                                        content: latestVersion.messageText,
+                                        mediaData: { templatePayload },
+                                    });
+                                } else {
+                                    log.warn({ templateId: automation.templateId }, 'Keyword automation template has no versions — skipping');
+                                }
+                            } else {
+                                // Standard Mode
+                                if (automation.media?.id) {
+                                    const mediaType = automation.media.type === 'image' ? 'IMAGE'
+                                        : automation.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
+                                    const mediaMsg = await prisma.message.create({
+                                        data: {
+                                            conversationId: conversation.id,
+                                            workspaceId,
+                                            direction: 'OUTBOUND',
+                                            type: mediaType as any,
+                                            content: null,
+                                            mediaData: { mediaId: automation.media.id, fileName: automation.media.name } as any,
+                                            status: 'QUEUED',
+                                        },
+                                    });
+                                    await getQueue(QueueName.OUTBOUND_MESSAGES).add(
+                                        `kw-media-${mediaMsg.id}`,
+                                        { workspaceId, sessionId, messageId: mediaMsg.id, toJid: providerId, type: mediaType, content: null, mediaData: { mediaId: automation.media.id, fileName: automation.media.name } },
+                                    );
+                                }
+
+                                if (automation.replyText) {
+                                    const textMsg = await prisma.message.create({
+                                        data: {
+                                            conversationId: conversation.id,
+                                            workspaceId,
+                                            direction: 'OUTBOUND',
+                                            type: 'TEXT',
+                                            content: automation.replyText,
+                                            status: 'QUEUED',
+                                        },
+                                    });
+                                    await getQueue(QueueName.OUTBOUND_MESSAGES).add(
+                                        `kw-text-${textMsg.id}`,
+                                        { workspaceId, sessionId, messageId: textMsg.id, toJid: providerId, type: 'TEXT', content: automation.replyText, mediaData: null },
+                                    );
+                                }
                             }
 
-                            // Send reply text
-                            const textMsg = await prisma.message.create({
-                                data: {
-                                    conversationId: conversation.id,
-                                    workspaceId,
-                                    direction: 'OUTBOUND',
-                                    type: 'TEXT',
-                                    content: automation.replyText,
-                                    status: 'QUEUED',
-                                },
-                            });
-                            await getQueue(QueueName.OUTBOUND_MESSAGES).add(
-                                `kw-text-${textMsg.id}`,
-                                { workspaceId, sessionId, messageId: textMsg.id, toJid: providerId, type: 'TEXT', content: automation.replyText, mediaData: null },
-                            );
-
-                            // Set cooldown to prevent spam loops
                             setCooldown(workspaceId, contactIdentifier, matchedKeyword);
 
-                            // Log trigger event for analytics
+                            const execTime = Date.now() - startTime;
                             await logAutomationTrigger({
                                 workspaceId,
                                 automationId: automation.id,
                                 keyword: matchedKeyword,
                                 matchType: automation.matchType,
+                                replyType: automation.template ? 'TEMPLATE' : 'STANDARD',
+                                priority: automation.priority,
+                                executionTimeMs: execTime,
                                 contactId: conversation.contactId ?? null,
                                 messageId: msg.key.id,
                             });
@@ -430,111 +484,14 @@ export async function processInboundMessage(job: Job): Promise<void> {
                             autoReplied = true;
                         } else {
                             log.debug({ keyword: matchedKeyword, contactId: contactIdentifier }, 'Keyword automation suppressed by cooldown');
-                            // Release lock so it doesn't stay stuck as PROCESSING
                             await releaseIdempotencyLock(autoIdempotencyKey);
-                            // Still mark as handled to skip QuickReply and AI
                             autoReplied = true;
                         }
                     }
                 } catch (kwErr) {
-                    log.warn({ err: kwErr }, 'Keyword automation engine error — falling through to QuickReply');
+                    log.warn({ err: kwErr }, 'Keyword automation engine error');
                 }
-
-                // ── LAYER 2: Legacy QuickReply / Auto-Reply (Secondary Fallback) ──
-                if (!autoReplied) {
-                try {
-                    const autoReply = await findMatchingAutoReply(workspaceId, content);
-                    if (autoReply) {
-                        log.info({ keyword: autoReply.keyword, conversationId: conversation.id }, 'Auto-reply matched');
-
-                        // ── Template mode ─────────────────────────────────────
-                        if (autoReply.template) {
-                            const latestVersion = autoReply.template.versions?.[0];
-                            if (latestVersion) {
-                                const templatePayload = {
-                                    messageText: latestVersion.messageText,
-                                    footerText: latestVersion.footerText ?? undefined,
-                                    buttons: (latestVersion.buttons ?? []).map((b: any) => ({
-                                        type: b.type,
-                                        label: b.label,
-                                        payload: b.payload,
-                                    })),
-                                    headerMediaId: latestVersion.media?.id ?? undefined,
-                                    headerMediaType: latestVersion.media?.type?.toUpperCase() ?? undefined,
-                                    headerFileName: latestVersion.media?.name ?? undefined,
-                                };
-
-                                const tplMsg = await prisma.message.create({
-                                    data: {
-                                        conversationId: conversation.id,
-                                        workspaceId,
-                                        direction: 'OUTBOUND',
-                                        type: 'TEMPLATE',
-                                        content: latestVersion.messageText,
-                                        mediaData: { templatePayload } as any,
-                                        status: 'QUEUED',
-                                    },
-                                });
-                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-tpl-${tplMsg.id}`, {
-                                    workspaceId,
-                                    sessionId,
-                                    messageId: tplMsg.id,
-                                    toJid: providerId,
-                                    type: 'TEMPLATE',
-                                    content: latestVersion.messageText,
-                                    mediaData: { templatePayload },
-                                });
-                                autoReplied = true;
-                            } else {
-                                log.warn({ templateId: autoReply.templateId }, 'Auto-reply template has no versions — skipping');
-                            }
-                        } else {
-                            // ── Standard mode: media then text ───────────────
-                            if (autoReply.media?.id) {
-                                const mediaType = autoReply.media.type === 'image' ? 'IMAGE'
-                                    : autoReply.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
-                                const mediaMsg = await prisma.message.create({
-                                    data: {
-                                        conversationId: conversation.id,
-                                        workspaceId,
-                                        direction: 'OUTBOUND',
-                                        type: mediaType as any,
-                                        content: null,
-                                        mediaData: { mediaId: autoReply.media.id, fileName: autoReply.media.name } as any,
-                                        status: 'QUEUED',
-                                    },
-                                });
-                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-media-${mediaMsg.id}`, {
-                                    workspaceId, sessionId, messageId: mediaMsg.id, toJid: providerId,
-                                    type: mediaType, content: null,
-                                    mediaData: { mediaId: autoReply.media.id, fileName: autoReply.media.name },
-                                });
-                            }
-
-                            if (autoReply.content) {
-                                const textMsg = await prisma.message.create({
-                                    data: {
-                                        conversationId: conversation.id,
-                                        workspaceId,
-                                        direction: 'OUTBOUND',
-                                        type: 'TEXT',
-                                        content: autoReply.content,
-                                        status: 'QUEUED',
-                                    },
-                                });
-                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(`auto-text-${textMsg.id}`, {
-                                    workspaceId, sessionId, messageId: textMsg.id, toJid: providerId,
-                                    type: 'TEXT', content: autoReply.content, mediaData: null,
-                                });
-                            }
-                            autoReplied = true;
-                        }
-                    }
-                } catch (arErr) {
-                    log.warn({ err: arErr }, 'Auto-reply matching failed — continuing');
-                }
-                } // end if (!autoReplied) for QuickReply
-
+                
                 if (!autoReplied) {
                     await getQueue(QueueName.AI).add(`ai-${msg.key.id}`, {
                         workspaceId,

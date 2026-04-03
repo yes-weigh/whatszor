@@ -5,7 +5,8 @@ import api from '@/lib/api';
 import {
     Zap, Plus, Trash2, ToggleLeft, ToggleRight,
     Image as ImageIcon, Clock, TrendingUp,
-    MessageSquare, X, Check, Loader2, ChevronDown
+    MessageSquare, X, Check, Loader2, ChevronDown, Pencil,
+    Layout, ArrowUpDown, Regex, Brain
 } from 'lucide-react';
 
 interface Media {
@@ -15,40 +16,56 @@ interface Media {
     type: string;
 }
 
+interface Template {
+    id: string;
+    name: string;
+}
+
 interface KeywordAutomation {
     id: string;
     keyword: string;
-    matchType: 'contains' | 'exact';
-    replyText: string;
+    matchType: 'EXACT' | 'CONTAINS' | 'REGEX' | 'AI_INTENT';
+    replyText: string | null;
     mediaId: string | null;
     media: Media | null;
+    templateId: string | null;
+    template: Template | null;
     intent: string | null;
     isActive: boolean;
+    priority: number;
     cooldownSec: number;
     createdAt: string;
 }
 
-interface StatsData {
-    triggerCount: number;
-    lastTriggeredAt: string | null;
-}
+type ReplyMode = 'standard' | 'template';
 
 // ── Create / Edit Modal ──────────────────────────────────────────────────────
 
 function AutomationModal({
     onClose,
     onSuccess,
+    editRule,
 }: {
     onClose: () => void;
     onSuccess: () => void;
+    editRule?: KeywordAutomation | null;
 }) {
-    const [keyword, setKeyword] = useState('');
-    const [matchType, setMatchType] = useState<'contains' | 'exact'>('contains');
-    const [replyText, setReplyText] = useState('');
-    const [intent, setIntent] = useState('');
-    const [cooldownSec, setCooldownSec] = useState(30);
-    const [selectedMedia, setSelectedMedia] = useState<Media | null>(null);
+    const isEdit = !!editRule;
+
+    // Determine initial reply mode 
+    const initialMode: ReplyMode = editRule?.templateId ? 'template' : 'standard';
+
+    const [keyword, setKeyword] = useState(editRule?.keyword || '');
+    const [matchType, setMatchType] = useState<KeywordAutomation['matchType']>(editRule?.matchType || 'CONTAINS');
+    const [replyMode, setReplyMode] = useState<ReplyMode>(initialMode);
+    const [replyText, setReplyText] = useState(editRule?.replyText || '');
+    const [intent, setIntent] = useState(editRule?.intent || '');
+    const [priority, setPriority] = useState(editRule?.priority ?? 0);
+    const [cooldownSec, setCooldownSec] = useState(editRule?.cooldownSec || 30);
+    const [selectedMedia, setSelectedMedia] = useState<Media | null>(editRule?.media || null);
+    const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(editRule?.template || null);
     const [showMediaPicker, setShowMediaPicker] = useState(false);
+    const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
     const qc = useQueryClient();
 
@@ -56,58 +73,95 @@ function AutomationModal({
         queryKey: ['media-gallery'],
         queryFn: () => api.get('/media-gallery').then(r => r.data ?? []),
     });
+
+    const { data: templatesData } = useQuery({
+        queryKey: ['templates'],
+        queryFn: () => api.get('/templates').then(r => r.data ?? []),
+        enabled: replyMode === 'template',
+    });
+
     const mediaList: Media[] = mediaData ?? [];
+    const templateList: Template[] = templatesData ?? [];
 
     const createMutation = useMutation({
         mutationFn: (data: any) => api.post('/keyword-automations', data),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['keyword-automations'] });
-            onSuccess();
-        },
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ['keyword-automations'] }); onSuccess(); },
     });
+
+    const updateMutation = useMutation({
+        mutationFn: (data: any) => api.patch(`/keyword-automations/${editRule!.id}`, data),
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ['keyword-automations'] }); onSuccess(); },
+    });
+
+    const isPending = createMutation.isPending || updateMutation.isPending;
+    const isError = createMutation.isError || updateMutation.isError;
+
+    const isSubmitDisabled =
+        isPending ||
+        !keyword.trim() ||
+        (replyMode === 'standard' && !replyText.trim()) ||
+        (replyMode === 'template' && !selectedTemplate);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!keyword.trim() || !replyText.trim()) return;
-        createMutation.mutate({
+
+        const payload: any = {
             keyword: keyword.trim().toLowerCase(),
             matchType,
-            replyText: replyText.trim(),
-            mediaId: selectedMedia?.id ?? null,
+            priority,
             intent: intent.trim() || null,
             cooldownSec,
-        });
+        };
+
+        if (replyMode === 'template') {
+            payload.templateId = selectedTemplate!.id;
+            payload.replyText = null;
+            payload.mediaId = null;
+        } else {
+            payload.replyText = replyText.trim();
+            payload.mediaId = selectedMedia?.id ?? null;
+            payload.templateId = null;
+        }
+
+        if (isEdit) {
+            updateMutation.mutate(payload);
+        } else {
+            createMutation.mutate(payload);
+        }
     };
 
     const intentOptions = ['pricing', 'support', 'demo', 'order', 'complaint', 'availability', 'discount'];
 
+    const matchTypeInfo: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
+        CONTAINS: { label: 'Contains', desc: 'Triggers when message contains this keyword anywhere', icon: <MessageSquare size={12} /> },
+        EXACT: { label: 'Exact', desc: 'Triggers only on exact match of the full message', icon: <Check size={12} /> },
+        REGEX: { label: 'Regex', desc: 'Pattern matching — use regex syntax (max 100 chars)', icon: <Regex size={12} /> },
+        AI_INTENT: { label: 'AI Intent', desc: 'AI classifies message intent (falls back to contains on failure)', icon: <Brain size={12} /> },
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div
-                className="w-full max-w-lg rounded-2xl border border-white/10 shadow-2xl bg-[rgba(10,10,10,0.98)]"
-            >
+            <div className="w-full max-w-lg rounded-2xl border border-white/10 shadow-2xl bg-[rgba(10,10,10,0.98)] max-h-[90vh] overflow-y-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-white/8">
+                <div className="flex items-center justify-between p-6 border-b border-white/8 sticky top-0 z-10 bg-[rgba(10,10,10,0.98)]">
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
                             <Zap size={18} className="text-emerald-400" />
                         </div>
                         <div>
-                            <h2 className="text-base font-semibold text-white">New Keyword Automation</h2>
+                            <h2 className="text-base font-semibold text-white">
+                                {isEdit ? 'Edit Keyword Automation' : 'New Keyword Automation'}
+                            </h2>
                             <p className="text-xs text-zinc-500">Auto-reply when message matches keyword</p>
                         </div>
                     </div>
-                    <button
-                        onClick={onClose}
-                        title="Close"
-                        aria-label="Close modal"
-                        className="text-zinc-500 hover:text-white transition-colors"
-                    >
+                    <button onClick={onClose} title="Close" aria-label="Close modal" className="text-zinc-500 hover:text-white transition-colors">
                         <X size={18} />
                     </button>
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
+
                     {/* Keyword + Match Type */}
                     <div>
                         <label className="block text-xs font-medium text-zinc-400 mb-2">Trigger Keyword</label>
@@ -126,89 +180,183 @@ function AutomationModal({
                                 title="Match type"
                                 aria-label="Match type"
                                 value={matchType}
-                                onChange={e => setMatchType(e.target.value as any)}
+                                onChange={e => setMatchType(e.target.value as KeywordAutomation['matchType'])}
                                 className="px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500/60"
                             >
-                                <option value="contains">Contains</option>
-                                <option value="exact">Exact</option>
+                                {Object.entries(matchTypeInfo).map(([val, info]) => (
+                                    <option key={val} value={val}>{info.label}</option>
+                                ))}
                             </select>
                         </div>
-                        <p className="text-xs text-zinc-600 mt-1.5">
-                            {matchType === 'contains'
-                                ? '→ Triggers when message contains this keyword anywhere'
-                                : '→ Triggers only on exact match of the full message'}
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                            <span className="text-zinc-600">{matchTypeInfo[matchType]?.icon}</span>
+                            <p className="text-xs text-zinc-500">→ {matchTypeInfo[matchType]?.desc}</p>
+                        </div>
                     </div>
 
-                    {/* Reply Text */}
+                    {/* Priority */}
                     <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-2">Auto Reply Text</label>
-                        <textarea
-                            id="kw-reply-text"
-                            rows={4}
-                            placeholder={"Hi! Our pricing starts at ₹999/month. Here's what's included:\n• Feature A\n• Feature B\nReply 'DEMO' to see it live! 🚀"}
-                            value={replyText}
-                            onChange={e => setReplyText(e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/60 resize-none"
-                            required
-                        />
-                    </div>
-
-                    {/* Media Attachment */}
-                    <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-2">
-                            Attach Media <span className="text-zinc-600">(optional)</span>
+                        <label className="block text-xs font-medium text-zinc-400 mb-2 flex items-center gap-1.5">
+                            <ArrowUpDown size={11} className="text-zinc-500" />
+                            Priority <span className="text-zinc-600">(higher = runs first)</span>
                         </label>
-                        {selectedMedia ? (
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                                <div className="w-8 h-8 rounded-md bg-emerald-500/20 flex items-center justify-center">
-                                    <ImageIcon size={14} className="text-emerald-400" />
-                                </div>
-                                <span className="text-sm text-emerald-300 flex-1 truncate">{selectedMedia.name}</span>
-                                <button
-                                    type="button"
-                                    title="Remove media"
-                                    aria-label="Remove selected media"
-                                    onClick={() => setSelectedMedia(null)}
-                                    className="text-zinc-500 hover:text-red-400 transition-colors"
-                                >
-                                    <X size={14} />
-                                </button>
-                            </div>
-                        ) : (
+                        <input
+                            id="kw-priority"
+                            type="number"
+                            title="Priority"
+                            aria-label="Automation priority (higher runs first)"
+                            min={0}
+                            max={100}
+                            value={priority}
+                            onChange={e => setPriority(Number(e.target.value))}
+                            className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white focus:outline-none focus:border-emerald-500/60"
+                        />
+                        <p className="text-xs text-zinc-600 mt-1">When multiple keywords match, highest priority triggers first.</p>
+                    </div>
+
+                    {/* Reply Mode Toggle */}
+                    <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-2">Reply Mode</label>
+                        <div className="flex rounded-lg overflow-hidden border border-white/10 p-0.5 bg-white/5">
                             <button
                                 type="button"
-                                id="kw-pick-media"
-                                onClick={() => setShowMediaPicker(!showMediaPicker)}
-                                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 border-dashed text-sm text-zinc-500 hover:text-zinc-300 hover:border-white/20 transition-colors"
+                                onClick={() => setReplyMode('standard')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-md transition-all ${replyMode === 'standard'
+                                    ? 'bg-emerald-500 text-black'
+                                    : 'text-zinc-400 hover:text-white'
+                                    }`}
                             >
-                                <ImageIcon size={14} />
-                                Pick from Media Gallery
-                                <ChevronDown size={12} className="ml-auto" />
+                                <MessageSquare size={12} />
+                                Standard Message
                             </button>
-                        )}
+                            <button
+                                type="button"
+                                onClick={() => setReplyMode('template')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-md transition-all ${replyMode === 'template'
+                                    ? 'bg-emerald-500 text-black'
+                                    : 'text-zinc-400 hover:text-white'
+                                    }`}
+                            >
+                                <Layout size={12} />
+                                Rich Template
+                            </button>
+                        </div>
+                    </div>
 
-                        {showMediaPicker && (
-                            <div className="mt-2 rounded-lg border border-white/10 bg-black/80 max-h-48 overflow-y-auto">
-                                {mediaList.length === 0 ? (
-                                    <p className="text-xs text-zinc-500 p-4 text-center">No media in gallery</p>
-                                ) : (
-                                    mediaList.map((m: Media) => (
-                                        <button
-                                            key={m.id}
-                                            type="button"
-                                            onClick={() => { setSelectedMedia(m); setShowMediaPicker(false); }}
-                                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 transition-colors text-left"
-                                        >
-                                            <ImageIcon size={12} className="text-zinc-500 shrink-0" />
-                                            <span className="truncate">{m.name}</span>
-                                            <span className="text-xs text-zinc-600 ml-auto shrink-0">{m.type}</span>
+                    {/* Standard Mode Fields */}
+                    {replyMode === 'standard' && (
+                        <>
+                            <div>
+                                <label className="block text-xs font-medium text-zinc-400 mb-2">Auto Reply Text</label>
+                                <textarea
+                                    id="kw-reply-text"
+                                    rows={4}
+                                    placeholder={"Hi! Our pricing starts at ₹999/month. Here's what's included:\n• Feature A\n• Feature B\nReply 'DEMO' to see it live! 🚀"}
+                                    value={replyText}
+                                    onChange={e => setReplyText(e.target.value)}
+                                    className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/60 resize-none"
+                                    required={replyMode === 'standard'}
+                                />
+                            </div>
+
+                            {/* Media Attachment */}
+                            <div>
+                                <label className="block text-xs font-medium text-zinc-400 mb-2">
+                                    Attach Media <span className="text-zinc-600">(optional)</span>
+                                </label>
+                                {selectedMedia ? (
+                                    <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                                        <div className="w-8 h-8 rounded-md bg-emerald-500/20 flex items-center justify-center">
+                                            <ImageIcon size={14} className="text-emerald-400" />
+                                        </div>
+                                        <span className="text-sm text-emerald-300 flex-1 truncate">{selectedMedia.name}</span>
+                                        <button type="button" title="Remove media" onClick={() => setSelectedMedia(null)} className="text-zinc-500 hover:text-red-400 transition-colors">
+                                            <X size={14} />
                                         </button>
-                                    ))
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        id="kw-pick-media"
+                                        onClick={() => setShowMediaPicker(!showMediaPicker)}
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 border-dashed text-sm text-zinc-500 hover:text-zinc-300 hover:border-white/20 transition-colors"
+                                    >
+                                        <ImageIcon size={14} />
+                                        Pick from Media Gallery
+                                        <ChevronDown size={12} className="ml-auto" />
+                                    </button>
+                                )}
+                                {showMediaPicker && (
+                                    <div className="mt-2 rounded-lg border border-white/10 bg-black/80 max-h-48 overflow-y-auto">
+                                        {mediaList.length === 0 ? (
+                                            <p className="text-xs text-zinc-500 p-4 text-center">No media in gallery</p>
+                                        ) : (
+                                            mediaList.map((m: Media) => (
+                                                <button
+                                                    key={m.id}
+                                                    type="button"
+                                                    onClick={() => { setSelectedMedia(m); setShowMediaPicker(false); }}
+                                                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 transition-colors text-left"
+                                                >
+                                                    <ImageIcon size={12} className="text-zinc-500 shrink-0" />
+                                                    <span className="truncate">{m.name}</span>
+                                                    <span className="text-xs text-zinc-600 ml-auto shrink-0">{m.type}</span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                        )}
-                    </div>
+                        </>
+                    )}
+
+                    {/* Template Mode Fields */}
+                    {replyMode === 'template' && (
+                        <div>
+                            <label className="block text-xs font-medium text-zinc-400 mb-2">Select Template</label>
+                            {selectedTemplate ? (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                                    <div className="w-8 h-8 rounded-md bg-purple-500/20 flex items-center justify-center">
+                                        <Layout size={14} className="text-purple-400" />
+                                    </div>
+                                    <span className="text-sm text-purple-300 flex-1 truncate">{selectedTemplate.name}</span>
+                                    <button type="button" title="Remove template" onClick={() => setSelectedTemplate(null)} className="text-zinc-500 hover:text-red-400 transition-colors">
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    id="kw-pick-template"
+                                    onClick={() => setShowTemplatePicker(!showTemplatePicker)}
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 border-dashed text-sm text-zinc-500 hover:text-zinc-300 hover:border-white/20 transition-colors"
+                                >
+                                    <Layout size={14} />
+                                    Pick from Template Studio
+                                    <ChevronDown size={12} className="ml-auto" />
+                                </button>
+                            )}
+                            {showTemplatePicker && (
+                                <div className="mt-2 rounded-lg border border-white/10 bg-black/80 max-h-48 overflow-y-auto">
+                                    {templateList.length === 0 ? (
+                                        <p className="text-xs text-zinc-500 p-4 text-center">No templates found. Create one in Template Studio.</p>
+                                    ) : (
+                                        templateList.map((t: Template) => (
+                                            <button
+                                                key={t.id}
+                                                type="button"
+                                                onClick={() => { setSelectedTemplate(t); setShowTemplatePicker(false); }}
+                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 transition-colors text-left"
+                                            >
+                                                <Layout size={12} className="text-zinc-500 shrink-0" />
+                                                <span className="truncate">{t.name}</span>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Intent Tag + Cooldown */}
                     <div className="grid grid-cols-2 gap-4">
@@ -254,24 +402,36 @@ function AutomationModal({
                                     {keyword || 'keyword'}
                                 </span>
                                 <span className="text-xs text-zinc-600 mx-1.5">
-                                    ({matchType === 'contains' ? 'appears in' : 'exactly equals'} message)
+                                    ({matchType.toLowerCase()} match)
                                 </span>
+                                {priority > 0 && (
+                                    <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+                                        P{priority}
+                                    </span>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-start gap-2 mt-1.5">
                             <div className="text-xs text-zinc-600 mt-0.5">Sends:</div>
-                            <div className="text-xs text-zinc-400 flex-1 truncate">
-                                {replyText ? <>&quot;{replyText.substring(0, 60)}{replyText.length > 60 ? '...' : ''}&quot;</> : 'reply text'}
-                                {selectedMedia && (
-                                    <span className="ml-1 text-emerald-400">+ {selectedMedia.name}</span>
+                            <div className="text-xs text-zinc-400 flex-1">
+                                {replyMode === 'template' ? (
+                                    <span className="text-purple-400 flex items-center gap-1">
+                                        <Layout size={10} />
+                                        {selectedTemplate?.name || 'Rich Template'}
+                                    </span>
+                                ) : (
+                                    <>
+                                        {replyText ? <>&quot;{replyText.substring(0, 60)}{replyText.length > 60 ? '...' : ''}&quot;</> : 'reply text'}
+                                        {selectedMedia && <span className="ml-1 text-emerald-400">+ {selectedMedia.name}</span>}
+                                    </>
                                 )}
                             </div>
                         </div>
                     </div>
 
                     {/* Error */}
-                    {createMutation.isError && (
-                        <p className="text-xs text-red-400">Failed to create automation. Please try again.</p>
+                    {isError && (
+                        <p className="text-xs text-red-400">Failed to save automation. Please try again.</p>
                     )}
 
                     {/* Actions */}
@@ -286,11 +446,11 @@ function AutomationModal({
                         <button
                             type="submit"
                             id="kw-submit"
-                            disabled={createMutation.isPending || !keyword.trim() || !replyText.trim()}
+                            disabled={isSubmitDisabled}
                             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-500 text-black text-sm font-semibold hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {createMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                            Create Automation
+                            {isPending ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                            {isEdit ? 'Save Changes' : 'Create Automation'}
                         </button>
                     </div>
                 </form>
@@ -302,7 +462,7 @@ function AutomationModal({
 // ── Stats Badge ──────────────────────────────────────────────────────────────
 
 function StatsBadge({ automationId }: { automationId: string }) {
-    const { data } = useQuery<StatsData>({
+    const { data } = useQuery<{ triggerCount: number; lastTriggeredAt: string | null }>({
         queryKey: ['kw-stats', automationId],
         queryFn: () => api.get(`/keyword-automations/${automationId}/stats`).then(r => r.data),
         staleTime: 30_000,
@@ -323,6 +483,7 @@ function StatsBadge({ automationId }: { automationId: string }) {
 export function KeywordAutomationsTab() {
     const qc = useQueryClient();
     const [showModal, setShowModal] = useState(false);
+    const [editingRule, setEditingRule] = useState<KeywordAutomation | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
     const { data, isLoading } = useQuery<KeywordAutomation[]>({
@@ -346,9 +507,18 @@ export function KeywordAutomationsTab() {
 
     const automations = data ?? [];
 
-    const matchTypeColor = {
-        contains: 'bg-blue-500/15 text-blue-300',
-        exact: 'bg-purple-500/15 text-purple-300',
+    const matchTypeStyles: Record<string, string> = {
+        CONTAINS: 'bg-blue-500/15 text-blue-300',
+        EXACT: 'bg-purple-500/15 text-purple-300',
+        REGEX: 'bg-amber-500/15 text-amber-300',
+        AI_INTENT: 'bg-pink-500/15 text-pink-300',
+    };
+
+    const matchTypeIcons: Record<string, React.ReactNode> = {
+        CONTAINS: <MessageSquare size={9} />,
+        EXACT: <Check size={9} />,
+        REGEX: <Regex size={9} />,
+        AI_INTENT: <Brain size={9} />,
     };
 
     return (
@@ -358,12 +528,12 @@ export function KeywordAutomationsTab() {
                 <div>
                     <h3 className="text-sm font-semibold text-white">Keyword Automations</h3>
                     <p className="text-xs text-zinc-500 mt-0.5">
-                        Instant replies when leads send specific keywords — zero delay, 24/7
+                        Instant replies triggered by keyword matching — text or rich templates
                     </p>
                 </div>
                 <button
                     id="kw-new-btn"
-                    onClick={() => setShowModal(true)}
+                    onClick={() => { setEditingRule(null); setShowModal(true); }}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-black text-sm font-semibold hover:bg-emerald-400 transition-colors"
                 >
                     <Plus size={14} />
@@ -378,11 +548,11 @@ export function KeywordAutomationsTab() {
                         <Zap size={14} className="text-emerald-400" />
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-emerald-300">How it works</p>
+                        <p className="text-sm font-medium text-emerald-300">Unified Automation Engine</p>
                         <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
-                            Lead sends &quot;PRICE&quot; → System instantly replies with your pricing card + image → AI follows up → You close.
+                            Lead sends &quot;PRICE&quot; → System instantly replies with your pricing card or rich template → AI follows up → You close.
                             <br />
-                            <span className="text-emerald-400">This is your automated sales funnel inside WhatsApp.</span>
+                            <span className="text-emerald-400">Supports text, media, and interactive button templates in one place.</span>
                         </p>
                     </div>
                 </div>
@@ -426,20 +596,41 @@ export function KeywordAutomationsTab() {
                     >
                         <div className="flex items-start gap-4">
                             {/* Icon */}
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${auto.isActive ? 'bg-emerald-500/20' : 'bg-white/5'}`}>
-                                <Zap size={16} className={auto.isActive ? 'text-emerald-400' : 'text-zinc-600'} />
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${auto.isActive
+                                ? auto.template ? 'bg-purple-500/20' : 'bg-emerald-500/20'
+                                : 'bg-white/5'
+                                }`}>
+                                {auto.template
+                                    ? <Layout size={16} className={auto.isActive ? 'text-purple-400' : 'text-zinc-600'} />
+                                    : <Zap size={16} className={auto.isActive ? 'text-emerald-400' : 'text-zinc-600'} />
+                                }
                             </div>
 
                             {/* Content */}
                             <div className="flex-1 min-w-0">
-                                {/* Keyword + match type */}
+                                {/* Keyword + badges */}
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <code className="text-sm font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded-md">
                                         {auto.keyword}
                                     </code>
-                                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${matchTypeColor[auto.matchType] ?? 'bg-zinc-700 text-zinc-300'}`}>
+                                    <span className={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${matchTypeStyles[auto.matchType] ?? 'bg-zinc-700 text-zinc-300'}`}>
+                                        {matchTypeIcons[auto.matchType]}
                                         {auto.matchType}
                                     </span>
+                                    {/* Priority badge — only shown if > 0 */}
+                                    {auto.priority > 0 && (
+                                        <span className="text-[10px] bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                            <ArrowUpDown size={8} />
+                                            P{auto.priority}
+                                        </span>
+                                    )}
+                                    {/* Reply mode badge */}
+                                    {auto.template ? (
+                                        <span className="text-[10px] bg-purple-500/15 text-purple-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                            <Layout size={8} />
+                                            Template
+                                        </span>
+                                    ) : null}
                                     {auto.intent && (
                                         <span className="text-[10px] bg-orange-500/15 text-orange-300 px-2 py-0.5 rounded-full">
                                             {auto.intent}
@@ -450,13 +641,22 @@ export function KeywordAutomationsTab() {
 
                                 {/* Reply preview */}
                                 <p className="text-xs text-zinc-400 mt-1.5 line-clamp-2 leading-relaxed">
-                                    <MessageSquare size={10} className="inline mr-1 text-zinc-600" />
-                                    {auto.replyText}
+                                    {auto.template ? (
+                                        <span className="flex items-center gap-1 text-purple-400">
+                                            <Layout size={10} className="shrink-0" />
+                                            {auto.template.name}
+                                        </span>
+                                    ) : (
+                                        <>
+                                            <MessageSquare size={10} className="inline mr-1 text-zinc-600" />
+                                            {auto.replyText}
+                                        </>
+                                    )}
                                 </p>
 
                                 {/* Meta */}
                                 <div className="flex items-center gap-4 mt-2">
-                                    {auto.media && (
+                                    {auto.media && !auto.template && (
                                         <div className="flex items-center gap-1 text-xs text-zinc-500">
                                             <ImageIcon size={10} />
                                             {auto.media.name}
@@ -471,6 +671,13 @@ export function KeywordAutomationsTab() {
 
                             {/* Actions */}
                             <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                    title="Edit"
+                                    onClick={() => { setEditingRule(auto); setShowModal(true); }}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                >
+                                    <Pencil size={15} className="text-zinc-500 hover:text-white transition-colors" />
+                                </button>
                                 <button
                                     title={auto.isActive ? 'Disable' : 'Enable'}
                                     onClick={() => toggleMutation.mutate({ id: auto.id, isActive: !auto.isActive })}
@@ -517,8 +724,9 @@ export function KeywordAutomationsTab() {
             {/* Modal */}
             {showModal && (
                 <AutomationModal
-                    onClose={() => setShowModal(false)}
-                    onSuccess={() => setShowModal(false)}
+                    editRule={editingRule}
+                    onClose={() => { setShowModal(false); setEditingRule(null); }}
+                    onSuccess={() => { setShowModal(false); setEditingRule(null); }}
                 />
             )}
         </div>

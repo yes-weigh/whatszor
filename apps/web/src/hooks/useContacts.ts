@@ -14,6 +14,7 @@ export interface Contact {
     email?: string;
     pipeline?: { name: string };
     tags?: string[];
+    customData?: any;
 }
 
 export function useContacts() {

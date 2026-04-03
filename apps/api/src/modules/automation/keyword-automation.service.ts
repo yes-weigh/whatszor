@@ -4,23 +4,20 @@
  * The Keyword Automation Revenue Engine.
  * Handles CRUD and the matching engine that intercepts inbound messages.
  *
- * Matching rules (per co-founder constraints):
- *  - Normalize: lowercase + trim + remove punctuation
- *  - Support "contains" and "exact" match types
- *  - If multiple automations match → prefer longest keyword (most specific wins)
- *  - Per-contact cooldown via in-memory Map (30s default)
+ * Matching rules:
+ *  - Normalize: lowercase + trim + remove punctuation (for exact/contains)
+ *  - Support MatchTypes: EXACT, CONTAINS, REGEX, AI_INTENT
+ *  - Deterministic Resolution: priority DESC, createdAt ASC
  *  - Idempotency: contactId + messageId + automationId
+ *  - Strict Payload Exclusivity: templateId vs (replyText + mediaId)
  */
 import { prisma } from '../../prisma/client';
 import { createLogger } from '../../core/logger';
 
 const log = createLogger({ module: 'keyword-automation' });
 
-// ── In-memory cooldown tracker ────────────────────────────────────────────────
-// Key: `${workspaceId}:${contactId}:${keyword}`  →  timestamp of last trigger
 const cooldownStore = new Map<string, number>();
 
-// Cleanup stale cooldowns every 5 minutes to prevent memory leaks
 setInterval(() => {
     const cutoff = Date.now() - 5 * 60 * 1000;
     for (const [key, ts] of cooldownStore) {
@@ -28,25 +25,14 @@ setInterval(() => {
     }
 }, 5 * 60 * 1000);
 
-// ── Text normalization ─────────────────────────────────────────────────────────
-/** Normalize text: lowercase, trim, remove punctuation */
-function normalizeText(text: string): string {
+export function normalizeText(text: string): string {
     return text
         .toLowerCase()
         .trim()
-        .replace(/[^\w\s]/g, '') // Remove punctuation
-        .replace(/\s+/g, ' ');   // Collapse multiple spaces
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ');
 }
 
-// ── Main matching engine ───────────────────────────────────────────────────────
-
-/**
- * Find the best matching keyword automation for an inbound message.
- * - Loads all active automations for the workspace in one DB query.
- * - Normalizes input text.
- * - Sorts candidates by keyword length (longest = most specific) before evaluating.
- * - Returns the first match, or null if none.
- */
 export async function findMatchingKeywordAutomation(
     workspaceId: string,
     text: string
@@ -56,35 +42,61 @@ export async function findMatchingKeywordAutomation(
 } | null> {
     const normalized = normalizeText(text);
 
+    // FETCH ALREADY ORDERED BY PRIORITY DESC, CREATED_AT ASC
     const automations = await (prisma as any).keywordAutomation.findMany({
         where: { workspaceId, isActive: true },
         include: {
-            media: {
-                select: { id: true, url: true, type: true, name: true, mimeType: true, storageKey: true },
-            },
+            media: { select: { id: true, url: true, type: true, name: true, mimeType: true, storageKey: true } },
+            template: {
+                include: {
+                    versions: {
+                        orderBy: { version: 'desc' },
+                        take: 1,
+                        include: { media: true, buttons: true }
+                    }
+                }
+            }
         },
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     });
 
     if (!automations.length) return null;
 
-    // Sort by keyword length descending (longest/most-specific wins on ties)
-    const sorted = [...automations].sort(
-        (a: any, b: any) => b.keyword.length - a.keyword.length
-    );
-
-    for (const auto of sorted) {
-        const normalizedKeyword = normalizeText(auto.keyword);
+    for (const auto of automations) {
         let matches = false;
 
-        if (auto.matchType === 'exact') {
-            matches = normalized === normalizedKeyword;
-        } else {
-            // "contains" — default
-            matches = normalized.includes(normalizedKeyword);
+        switch (auto.matchType) {
+            case 'EXACT':
+                matches = normalized === normalizeText(auto.keyword);
+                break;
+            case 'CONTAINS':
+                matches = normalized.includes(normalizeText(auto.keyword));
+                break;
+            case 'REGEX':
+                try {
+                    // ReDoS protection: Limit evaluation
+                    if (text.length > 500) {
+                        matches = false;
+                        break;
+                    }
+                    const regex = new RegExp(auto.keyword, 'i');
+                    matches = regex.test(text);
+                } catch (err) {
+                    log.warn({ err, keyword: auto.keyword }, 'Invalid regex pattern in automation');
+                }
+                break;
+            case 'AI_INTENT':
+                // AI_INTENT logic is handled externally or requires an LLM call.
+                // For safety, fallback to CONTAINS if reaching this synchronous loop.
+                matches = normalized.includes(normalizeText(auto.keyword));
+                break;
+            default:
+                // Legacy fallback
+                matches = normalized.includes(normalizeText(auto.keyword));
         }
 
         if (matches) {
+            // Because our query already ordered by priority, the first match found is the ultimate winner.
             return { automation: auto, matchedKeyword: auto.keyword };
         }
     }
@@ -92,43 +104,26 @@ export async function findMatchingKeywordAutomation(
     return null;
 }
 
-/**
- * Check and enforce the per-contact cooldown for an automation.
- * Returns true if the message should be rate-limited (i.e. still in cooldown).
- */
-export function isOnCooldown(
-    workspaceId: string,
-    contactId: string,
-    keyword: string,
-    cooldownSec: number
-): boolean {
+export function isOnCooldown(workspaceId: string, contactId: string, keyword: string, cooldownSec: number): boolean {
     const key = `${workspaceId}:${contactId}:${keyword}`;
     const lastTriggered = cooldownStore.get(key);
     if (!lastTriggered) return false;
     return Date.now() - lastTriggered < cooldownSec * 1000;
 }
 
-/**
- * Set the cooldown timestamp for a contact + keyword combination.
- */
-export function setCooldown(
-    workspaceId: string,
-    contactId: string,
-    keyword: string
-): void {
+export function setCooldown(workspaceId: string, contactId: string, keyword: string): void {
     const key = `${workspaceId}:${contactId}:${keyword}`;
     cooldownStore.set(key, Date.now());
 }
 
-/**
- * Log a keyword automation trigger to the database for analytics.
- * Fire-and-forget — failures log a warning but don't block message processing.
- */
 export async function logAutomationTrigger(params: {
     workspaceId: string;
     automationId: string;
     keyword: string;
     matchType: string;
+    replyType: string;
+    priority: number;
+    executionTimeMs?: number;
     contactId?: string | null;
     messageId?: string | null;
 }): Promise<void> {
@@ -139,6 +134,9 @@ export async function logAutomationTrigger(params: {
                 automationId: params.automationId,
                 keyword: params.keyword,
                 matchType: params.matchType,
+                replyType: params.replyType,
+                priority: params.priority,
+                executionTimeMs: params.executionTimeMs ?? 0,
                 contactId: params.contactId ?? null,
                 messageId: params.messageId ?? null,
             },
@@ -153,79 +151,101 @@ export async function logAutomationTrigger(params: {
 export async function getKeywordAutomations(workspaceId: string) {
     return (prisma as any).keywordAutomation.findMany({
         where: { workspaceId },
-        include: { media: { select: { id: true, name: true, url: true, type: true } } },
-        orderBy: { createdAt: 'desc' },
+        include: { 
+            media: { select: { id: true, name: true, url: true, type: true } },
+            template: { select: { id: true, name: true } }
+        },
+        orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
     });
 }
 
 export async function getKeywordAutomationById(workspaceId: string, id: string) {
     const auto = await (prisma as any).keywordAutomation.findFirst({
         where: { id, workspaceId },
-        include: { media: { select: { id: true, name: true, url: true, type: true } } },
+        include: { 
+            media: { select: { id: true, name: true, url: true, type: true } },
+            template: { select: { id: true, name: true } }
+        },
     });
     if (!auto) throw new Error('Automation not found');
     return auto;
 }
 
 export async function getKeywordAutomationStats(workspaceId: string, id: string) {
-    // Verify ownership
     await getKeywordAutomationById(workspaceId, id);
 
-    const [logs, lastLog] = await Promise.all([
+    const [total, lastLog] = await Promise.all([
         (prisma as any).automationLog.count({ where: { automationId: id } }),
         (prisma as any).automationLog.findFirst({
             where: { automationId: id },
             orderBy: { triggeredAt: 'desc' },
-            select: { triggeredAt: true },
+            select: { triggeredAt: true, replyType: true, executionTimeMs: true },
         }),
     ]);
 
     return {
-        triggerCount: logs,
+        triggerCount: total,
         lastTriggeredAt: lastLog?.triggeredAt ?? null,
+        lastReplyType: lastLog?.replyType ?? null,
+        avgExecutionTimeMs: lastLog?.executionTimeMs ?? null,
     };
 }
 
-export async function createKeywordAutomation(workspaceId: string, data: {
-    keyword: string;
-    matchType?: string;
-    replyText: string;
-    mediaId?: string | null;
-    intent?: string | null;
-    cooldownSec?: number;
-}) {
+
+function validateExclusivity(data: any) {
+    if (data.templateId) {
+        if (data.replyText || data.mediaId) {
+            throw new Error('Payload exclusivity violated: Cannot provide both templateId and replyText/mediaId');
+        }
+    }
+}
+
+export async function createKeywordAutomation(workspaceId: string, data: any) {
+    validateExclusivity(data);
+
     return (prisma as any).keywordAutomation.create({
         data: {
             workspaceId,
-            keyword: data.keyword.trim().toLowerCase(),
-            matchType: data.matchType ?? 'contains',
-            replyText: data.replyText,
+            keyword: data.matchType === 'REGEX' ? data.keyword : data.keyword.trim().toLowerCase(),
+            matchType: data.matchType ?? 'CONTAINS',
+            priority: data.priority ?? 0,
+            replyText: data.replyText ?? null,
             mediaId: data.mediaId ?? null,
+            templateId: data.templateId ?? null,
             intent: data.intent ?? null,
             cooldownSec: data.cooldownSec ?? 30,
-            isActive: true,
+            isActive: data.isActive ?? true,
         },
-        include: { media: { select: { id: true, name: true, url: true, type: true } } },
+        include: { 
+            media: { select: { id: true, name: true, url: true, type: true } },
+            template: { select: { id: true, name: true } }
+        },
     });
 }
 
-export async function updateKeywordAutomation(workspaceId: string, id: string, data: {
-    keyword?: string;
-    matchType?: string;
-    replyText?: string;
-    mediaId?: string | null;
-    intent?: string | null;
-    isActive?: boolean;
-    cooldownSec?: number;
-}) {
+export async function updateKeywordAutomation(workspaceId: string, id: string, data: any) {
+    validateExclusivity(data);
+
     const updateData: any = { ...data };
-    if (data.keyword !== undefined) {
+    if (data.keyword !== undefined && data.matchType !== 'REGEX') {
         updateData.keyword = data.keyword.trim().toLowerCase();
     }
+    
+    // Explicit null assignments if switching modes
+    if (data.templateId) {
+        updateData.replyText = null;
+        updateData.mediaId = null;
+    } else if (data.replyText) {
+        updateData.templateId = null;
+    }
+
     return (prisma as any).keywordAutomation.update({
         where: { id, workspaceId },
         data: updateData,
-        include: { media: { select: { id: true, name: true, url: true, type: true } } },
+        include: { 
+            media: { select: { id: true, name: true, url: true, type: true } },
+            template: { select: { id: true, name: true } }
+        },
     });
 }
 

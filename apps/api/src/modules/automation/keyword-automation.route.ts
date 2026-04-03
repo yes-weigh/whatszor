@@ -21,7 +21,7 @@ export const keywordAutomationRoutes: FastifyPluginAsync = async (fastify: Fasti
         return reply.sendSuccess(data);
     });
 
-    // Get stats for an automation (trigger count, last triggered)
+    // Get stats for an automation (trigger count, last triggered, reply type)
     fastify.get('/:id/stats', async (req, reply) => {
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
@@ -30,6 +30,9 @@ export const keywordAutomationRoutes: FastifyPluginAsync = async (fastify: Fasti
     });
 
     // Create a new keyword automation
+    // Supports two mutually exclusive reply modes:
+    //   1. Standard:  replyText (+ optional mediaId)
+    //   2. Template:  templateId
     fastify.post('/', { preHandler: requireRole('automation:create') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const body = req.body as any;
@@ -37,17 +40,25 @@ export const keywordAutomationRoutes: FastifyPluginAsync = async (fastify: Fasti
         if (!body.keyword || typeof body.keyword !== 'string' || !body.keyword.trim()) {
             return reply.code(400).sendError({ code: 'VALIDATION_ERROR', message: 'keyword is required' });
         }
-        if (!body.replyText || typeof body.replyText !== 'string' || !body.replyText.trim()) {
-            return reply.code(400).sendError({ code: 'VALIDATION_ERROR', message: 'replyText is required' });
+
+        // Must have either replyText OR templateId — not both, not neither
+        if (!body.replyText && !body.templateId) {
+            return reply.code(400).sendError({ code: 'VALIDATION_ERROR', message: 'Either replyText or templateId is required' });
+        }
+        if (body.replyText && body.templateId) {
+            return reply.code(400).sendError({ code: 'VALIDATION_ERROR', message: 'replyText and templateId are mutually exclusive' });
         }
 
         const data = await kwService.createKeywordAutomation(workspaceId, {
             keyword: body.keyword,
             matchType: body.matchType,
-            replyText: body.replyText,
+            priority: body.priority,
+            replyText: body.replyText ?? null,
             mediaId: body.mediaId ?? null,
+            templateId: body.templateId ?? null,
             intent: body.intent ?? null,
             cooldownSec: body.cooldownSec,
+            isActive: body.isActive,
         });
         return reply.code(201).sendSuccess(data);
     });
@@ -57,6 +68,12 @@ export const keywordAutomationRoutes: FastifyPluginAsync = async (fastify: Fasti
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
         const body = req.body as any;
+
+        // Enforce exclusivity on update too
+        if (body.replyText && body.templateId) {
+            return reply.code(400).sendError({ code: 'VALIDATION_ERROR', message: 'replyText and templateId are mutually exclusive' });
+        }
+
         const data = await kwService.updateKeywordAutomation(workspaceId, id, body);
         return reply.sendSuccess(data);
     });
