@@ -23,6 +23,8 @@ export interface Campaign {
     scheduledAt: string | null;
     startedAt: string | null;
     completedAt: string | null;
+    messageText: string | null;
+    expectedReplyRate: number | null;
     stats: CampaignStats | null;
     createdAt: string;
     updatedAt: string;
@@ -50,6 +52,8 @@ export interface CreateCampaignInput {
     contactIds?: string[] | null;
     audienceId?: string | null;
     whatsappAccountId?: string | null;
+    messageText?: string | null;
+    expectedReplyRate?: number | null;
 }
 
 export interface UpdateCampaignInput {
@@ -58,6 +62,8 @@ export interface UpdateCampaignInput {
     templateId?: string;
     templateLanguage?: string;
     scheduledAt?: string;
+    messageText?: string;
+    expectedReplyRate?: number;
 }
 
 export interface AddCampaignMembersInput {

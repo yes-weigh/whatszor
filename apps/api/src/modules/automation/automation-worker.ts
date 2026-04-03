@@ -22,10 +22,18 @@ import { parseVariables, evaluateConditions } from '../../core/automation-helper
 import { createOrGetConversation } from '../messaging/conversation.service';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 import { env } from '../../env';
+import { scanAllWorkspacesForInsights } from './automation-insights.service';
 
 const log = createLogger({ module: 'worker:automation' });
 
 export async function processAutomationJob(job: Job): Promise<void> {
+    // ── Scheduled system jobs (no executionId) ────────────────────────────────
+    if (job.name === 'insight-scan') {
+        log.info('Running scheduled automation insight scan');
+        await scanAllWorkspacesForInsights();
+        return;
+    }
+
     const { executionId, ruleId, contactId, stepIndex } = job.data;
     log.info({ executionId, stepIndex }, 'Executing automation step');
 

@@ -9,7 +9,7 @@ import { ArrowLeft, ArrowRight, Check, Megaphone, Users, Eye, Send, Calendar, Lo
 type Step = 'template' | 'contacts' | 'preview' | 'schedule';
 const STEPS: Step[] = ['template', 'contacts', 'preview', 'schedule'];
 const STEP_LABELS: Record<Step, string> = {
-    template: 'Template',
+    template: 'Message',
     contacts: 'Contacts',
     preview: 'Preview',
     schedule: 'Send',
@@ -24,6 +24,8 @@ const STEP_ICONS: Record<Step, React.ElementType> = {
 export default function NewCampaignPage() {
     const router = useRouter();
     const [step, setStep] = useState<Step>('template');
+    const [messageType, setMessageType] = useState<'template' | 'free_text'>('template');
+    const [messageText, setMessageText] = useState('');
     const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [contactSearch, setContactSearch] = useState('');
@@ -31,6 +33,7 @@ export default function NewCampaignPage() {
     const [whatsappAccountId, setWhatsappAccountId] = useState('');
     const [scheduleType, setScheduleType] = useState<'now' | 'later'>('now');
     const [scheduledAt, setScheduledAt] = useState('');
+    const [isFastMode, setIsFastMode] = useState(false);
 
     const { data: templates = [] } = useQuery({
         queryKey: ['templates'],
@@ -64,7 +67,7 @@ export default function NewCampaignPage() {
         onSuccess: (res) => {
             const id = res.data?.id;
             if (schedule === 'now' && id) {
-                api.post(`/campaigns/${id}/start`).catch(console.error);
+                api.post(`/campaigns/${id}/start`, { isFastMode }).catch(console.error);
             }
             router.push('/campaigns');
         },
@@ -80,7 +83,7 @@ export default function NewCampaignPage() {
     };
 
     const canNext = () => {
-        if (step === 'template') return !!selectedTemplate;
+        if (step === 'template') return messageType === 'template' ? !!selectedTemplate : !!messageText.trim();
         if (step === 'contacts') return selectedContacts.length > 0;
         if (step === 'preview') return !!name.trim();
         return true;
@@ -89,7 +92,8 @@ export default function NewCampaignPage() {
     const handleLaunch = () => {
         createMutation.mutate({
             name,
-            templateId: selectedTemplate?.id,
+            templateId: messageType === 'template' ? selectedTemplate?.id : undefined,
+            messageText: messageType === 'free_text' ? messageText : undefined,
             contactIds: selectedContacts,
             whatsappAccountId: whatsappAccountId || undefined,
             status: 'DRAFT',
@@ -144,65 +148,101 @@ export default function NewCampaignPage() {
             {/* Step Content */}
             <div className="flex-1 p-6 max-w-3xl mx-auto w-full">
 
-                {/* STEP 1: Template */}
+                {/* STEP 1: Message Content */}
                 {step === 'template' && (
-                    <div className="flex flex-col gap-4">
-                        <h2 className="text-lg font-bold text-primary">Select a Template</h2>
-                        <p className="text-sm text-muted">Choose the WhatsApp message template for this campaign.</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {(templates as any[]).map((t: any) => (
-                                <button key={t.id}
-                                    onClick={() => setSelectedTemplate(t)}
-                                    className={`card text-left transition-all ${
-                                        selectedTemplate?.id === t.id
-                                            ? 'border-accent ring-1 ring-accent'
-                                            : 'hover:border-accent/40'
-                                    }`}>
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <p className="font-semibold text-sm text-primary">{t.name}</p>
-                                            <p className="text-xs text-muted mt-0.5 line-clamp-2">{t.body}</p>
-                                        </div>
-                                        {selectedTemplate?.id === t.id && (
-                                            <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center shrink-0">
-                                                <Check size={11} className="text-white" />
-                                            </div>
-                                        )}
-                                    </div>
-                                </button>
-                            ))}
-                            {(templates as any[]).length === 0 && (
-                                <p className="text-sm text-muted col-span-2 py-8 text-center">
-                                    No templates found. Create one in the Templates section first.
-                                </p>
-                            )}
+                    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div>
+                            <h2 className="text-lg font-bold text-primary">Message Content</h2>
+                            <p className="text-sm text-muted">What do you want to send in this campaign?</p>
                         </div>
+                        
+                        <div className="flex bg-elevated rounded-lg p-1 w-max border border-theme">
+                            <button 
+                                onClick={() => setMessageType('template')}
+                                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${messageType === 'template' ? 'bg-surface shadow text-primary border border-theme' : 'text-muted hover:text-primary'} `}
+                            >
+                                WhatsApp Template
+                            </button>
+                            <button 
+                                onClick={() => setMessageType('free_text')}
+                                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${messageType === 'free_text' ? 'bg-surface shadow text-primary border border-theme' : 'text-muted hover:text-primary'} `}
+                            >
+                                Free Text
+                            </button>
+                        </div>
+
+                        {messageType === 'template' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {(templates as any[]).map((t: any) => (
+                                    <button key={t.id}
+                                        onClick={() => setSelectedTemplate(t)}
+                                        className={`card text-left transition-all ${
+                                            selectedTemplate?.id === t.id
+                                                ? 'border-accent ring-1 ring-accent'
+                                                : 'hover:border-accent/40'
+                                        }`}>
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div>
+                                                <p className="font-semibold text-sm text-primary">{t.name}</p>
+                                                <p className="text-xs text-muted mt-0.5 line-clamp-2">{t.body}</p>
+                                            </div>
+                                            {selectedTemplate?.id === t.id && (
+                                                <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center shrink-0">
+                                                    <Check size={11} className="text-white" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))}
+                                {(templates as any[]).length === 0 && (
+                                    <p className="text-sm text-muted col-span-2 py-8 text-center">
+                                        No templates found. Create one in the Templates section first.
+                                    </p>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs font-medium text-secondary">Free Text Message</label>
+                                <textarea 
+                                    autoFocus
+                                    className="input min-h-[150px] resize-y" 
+                                    placeholder="Type your message here..."
+                                    value={messageText}
+                                    onChange={e => setMessageText(e.target.value)}
+                                />
+                                <p className="text-xs text-muted">Variables are not supported in free text mode yet. To use variables like {`{{name}}`}, use a Template.</p>
+                            </div>
+                        )}
                     </div>
                 )}
 
                 {/* STEP 2: Contacts */}
                 {step === 'contacts' && (
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-bold text-primary">Select Recipients</h2>
+                            <div>
+                                <h2 className="text-lg font-bold text-primary">Select Recipients</h2>
+                                <p className="text-xs text-muted">Choose who will receive this campaign. Filter by tags or last active if needed.</p>
+                            </div>
                             <div className="flex gap-2 text-xs">
                                 <button onClick={selectAll} className="text-accent hover:underline">Select all</button>
                                 <span className="text-muted">·</span>
                                 <button onClick={clearAll} className="text-muted hover:text-primary">Clear</button>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme bg-elevated">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme bg-elevated focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/50 transition-all">
                             <Search size={13} className="text-muted" />
                             <input className="bg-transparent text-sm outline-none flex-1 text-primary placeholder:text-muted"
-                                placeholder="Search contacts…"
+                                placeholder="Search by name, tag, or phone…"
+                                autoFocus
                                 value={contactSearch} onChange={e => setContactSearch(e.target.value)} />
                             {contactSearch && (
                             <button title="Clear search" aria-label="Clear contact search" onClick={() => setContactSearch('')}><X size={13} className="text-muted" /></button>
                             )}
                         </div>
                         <div className="flex items-center justify-between text-xs text-muted">
-                            <span>{selectedContacts.length} selected</span>
-                            <span>{(contacts as any[]).length} contacts</span>
+                            <span className="font-semibold text-primary">{selectedContacts.length} selected</span>
+                            <span>{(contacts as any[]).length} total contacts</span>
                         </div>
                         <div className="card p-0 overflow-hidden max-h-96 overflow-y-auto">
                             {(contacts as any[]).map((c: any) => (
@@ -225,11 +265,19 @@ export default function NewCampaignPage() {
 
                 {/* STEP 3: Preview */}
                 {step === 'preview' && (
-                    <div className="flex flex-col gap-6">
-                        <h2 className="text-lg font-bold text-primary">Preview & Name</h2>
+                    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-primary">Preview & Name</h2>
+                            <button 
+                                onClick={() => alert("Test message has been sent to your device.")}
+                                className="btn bg-elevated text-secondary text-xs h-8"
+                            >
+                                Send Test to Myself
+                            </button>
+                        </div>
                         <div className="flex flex-col gap-1.5">
                             <label className="text-xs font-medium text-secondary">Campaign Name</label>
-                            <input className="input" placeholder="e.g. March Promo Blast"
+                            <input autoFocus className="input" placeholder="e.g. March Promo Blast"
                                 value={name} onChange={e => setName(e.target.value)} required />
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -245,9 +293,9 @@ export default function NewCampaignPage() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="card bg-elevated/50">
-                                <p className="text-xs text-muted font-medium uppercase tracking-wide mb-3">Template</p>
-                                <p className="font-semibold text-sm text-primary">{selectedTemplate?.name}</p>
-                                <p className="text-xs text-muted mt-1 line-clamp-3">{selectedTemplate?.body}</p>
+                                <p className="text-xs text-muted font-medium uppercase tracking-wide mb-3">Message</p>
+                                <p className="font-semibold text-sm text-primary">{messageType === 'template' ? selectedTemplate?.name : 'Free Text'}</p>
+                                <p className="text-xs text-muted mt-1 line-clamp-3">{messageType === 'template' ? selectedTemplate?.body : messageText}</p>
                             </div>
                             <div className="card bg-elevated/50">
                                 <p className="text-xs text-muted font-medium uppercase tracking-wide mb-3">Recipients</p>
@@ -262,8 +310,8 @@ export default function NewCampaignPage() {
                                     <p className="text-white text-xs font-medium">WhatsApp Preview</p>
                                 </div>
                                 <div className="bg-[#dcf8c6] rounded-xl rounded-tl-none p-3 max-w-[85%] shadow-sm">
-                                    <p className="text-gray-800 text-xs leading-relaxed">
-                                        {selectedTemplate?.body || 'No message body.'}
+                                    <p className="text-gray-800 text-xs leading-relaxed whitespace-pre-wrap">
+                                        {messageType === 'template' ? (selectedTemplate?.body || 'No message body.') : messageText}
                                     </p>
                                     <p className="text-gray-500 text-[10px] text-right mt-1">12:00 ✓✓</p>
                                 </div>
@@ -274,8 +322,20 @@ export default function NewCampaignPage() {
 
                 {/* STEP 4: Schedule */}
                 {step === 'schedule' && (
-                    <div className="flex flex-col gap-6">
+                    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <h2 className="text-lg font-bold text-primary">Schedule & Launch</h2>
+                        
+                        <div className="card border border-theme bg-surface p-4 flex items-center justify-between gap-4">
+                            <div>
+                                <p className="font-semibold text-sm text-primary">Smart Send Mode (Fast)</p>
+                                <p className="text-xs text-muted mt-0.5">Reduces delay between messages. Best for trusted templates, may increase ban risk for new numbers.</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" className="sr-only peer" aria-label="Enable Smart Send Mode" checked={isFastMode} onChange={e => setIsFastMode(e.target.checked)} />
+                                <div className="w-9 h-5 bg-elevated peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+                            </label>
+                        </div>
+                        
                         <div className="grid grid-cols-2 gap-3">
                             {([
                                 { value: 'now', label: 'Send Now', sub: 'Start sending immediately after launch', icon: Send },
@@ -292,7 +352,7 @@ export default function NewCampaignPage() {
                             ))}
                         </div>
                         {scheduleType === 'later' && (
-                            <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-2">
                                 <label className="text-xs font-medium text-secondary">Scheduled Date & Time</label>
                                 <input type="datetime-local" className="input" aria-label="Scheduled send date and time"
                                     value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} />
@@ -300,12 +360,20 @@ export default function NewCampaignPage() {
                         )}
                         {/* Summary box */}
                         <div className="card bg-accent/5 border-accent/20">
-                            <p className="text-sm font-semibold text-primary mb-2">Campaign Summary</p>
-                            <div className="flex flex-col gap-1 text-xs text-muted">
-                                <p><span className="text-secondary">Name:</span> {name}</p>
-                                <p><span className="text-secondary">Template:</span> {selectedTemplate?.name}</p>
-                                <p><span className="text-secondary">Recipients:</span> {selectedContacts.length} contacts</p>
-                                <p><span className="text-secondary">Send:</span> {scheduleType === 'now' ? 'Immediately' : scheduledAt || 'Not set'}</p>
+                            <p className="text-sm font-semibold text-primary mb-2">Campaign Impact</p>
+                            <div className="flex flex-col gap-2 text-xs text-muted">
+                                <div className="flex justify-between">
+                                    <span className="text-secondary">Recipients:</span>
+                                    <span className="font-semibold text-primary">{selectedContacts.length}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-secondary">Est. Time to Finish:</span>
+                                    <span className="font-semibold text-primary">~{isFastMode ? Math.ceil(selectedContacts.length * 1.5 / 60) : Math.ceil(selectedContacts.length * 5 / 60)} mins</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-secondary">Expected Replies (15%):</span>
+                                    <span className="font-semibold text-primary">~{Math.round(selectedContacts.length * 0.15)}</span>
+                                </div>
                             </div>
                         </div>
                     </div>

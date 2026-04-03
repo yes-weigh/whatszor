@@ -14,7 +14,7 @@ import { env } from './env';
 import { createLogger } from './core/logger';
 import { connectRedis, disconnectRedis } from './core/redis';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
-import { initQueues, closeQueues } from './queues/index';
+import { initQueues, closeQueues, getQueue, QueueName } from './queues/index';
 import { startApiNodeWorkers, startBackgroundWorkers, stopWorkers } from './queues/worker';
 import { initializeWorkers } from './core/queue';
 import { createServer } from './core/server';
@@ -66,6 +66,27 @@ async function bootstrap() {
     // The API container is the SOLE owner of Baileys sockets. The worker container
     // handles only BullMQ job processing and must NOT call restoreAllSessions().
     await waManager.restoreAllSessions();
+
+    // 4.6. Schedule the Automation Insights scan (self-learning revenue engine).
+    // Runs every 30 minutes on the AUTOMATION queue. Deduplicates via BullMQ repeat key.
+    // Also fires an immediate scan so insights are available on first launch.
+    try {
+        const automationQueue = getQueue(QueueName.AUTOMATION);
+        await automationQueue.add(
+            'insight-scan',
+            { traceId: 'scheduled-insight-scan' },
+            { repeat: { every: 30 * 60 * 1000 }, jobId: 'insight-scan-recurring' }
+        );
+        // Immediate first run (delayed 10s to let workers finish starting)
+        await automationQueue.add(
+            'insight-scan',
+            { traceId: 'insight-scan-init' },
+            { delay: 10_000, jobId: `insight-scan-init-${Date.now()}` }
+        );
+        log.info('Automation insight scan scheduled (every 30 min)');
+    } catch (err) {
+        log.warn({ err }, 'Failed to schedule insight scan — non-fatal');
+    }
 
     // 5. Create Fastify server
     const server = await createServer();

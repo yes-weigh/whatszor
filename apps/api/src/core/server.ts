@@ -39,6 +39,8 @@ import { knowledgeRoutes } from '../modules/knowledge/knowledge.route';
 import messageTemplateRoutes from '../modules/template/template.route'; 
 import { adminRoutes } from '../modules/admin/admin.routes';
 import { licenseRoutes } from '../modules/license/license.routes';
+import { keywordAutomationRoutes } from '../modules/automation/keyword-automation.route';
+import { automationInsightRoutes } from '../modules/automation/automation-insights.route';
 
 /**
  * Creates and configures the Fastify server instance.
@@ -245,6 +247,12 @@ export async function createServer(): Promise<FastifyInstance> {
 
             // Internal Knowledge Bot (Products)
             await api.register(knowledgeRoutes, { prefix: '/products' });
+
+            // Keyword Automation Engine (Revenue Engine)
+            await api.register(keywordAutomationRoutes, { prefix: '/keyword-automations' });
+
+            // Automation Insights (Self-Learning Engine)
+            await api.register(automationInsightRoutes, { prefix: '/automation-insights' });
         },
         { prefix: '/api/v1' },
     );

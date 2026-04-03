@@ -161,9 +161,12 @@ model Workspace {
   eventLogs        EventLog[]
   media            Media[]
   templates        Template[]
-  QuickReply       QuickReply[]
-  productKnowledge ProductKnowledge[]
-  allowedNumbers   AllowedNumber[]
+  QuickReply          QuickReply[]
+  productKnowledge    ProductKnowledge[]
+  allowedNumbers      AllowedNumber[]
+  keywordAutomations  KeywordAutomation[]
+  automationLogs      AutomationLog[]
+  automationInsights  AutomationInsight[]
 
   @@map("workspaces")
 }
@@ -613,6 +616,9 @@ model Campaign {
   templateVersionId String? @map("template_version_id")
   templateLanguage  String? @map("template_language")
 
+  // Optional plain text message content (used if no template)
+  messageText       String? @map("message_text")
+
   // Timing
   scheduledAt DateTime? @map("scheduled_at")
   startedAt   DateTime? @map("started_at")
@@ -621,6 +627,9 @@ model Campaign {
   // High-level aggregate stats stored as JSON
   // { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
   stats Json? @default("{}")
+
+  // Metrics for forecasting (optional)
+  expectedReplyRate Float? @map("expected_reply_rate")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -836,6 +845,7 @@ model Media {
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   templateVersions TemplateVersion[]
   quickReplies     QuickReply[]
+  keywordAutomations KeywordAutomation[]
 
   @@index([workspaceId, type])
   @@index([workspaceId, category])
@@ -975,4 +985,94 @@ model ProductKnowledgeSource {
   
   @@index([productId])
   @@map("product_knowledge_sources")
+}
+
+// ============================================================
+// KEYWORD AUTOMATION ENGINE (Revenue Engine - Phase 2)
+// ============================================================
+
+model KeywordAutomation {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+
+  keyword     String
+  // "contains" | "exact" — normalized text matching
+  matchType   String   @default("contains") @map("match_type")
+  replyText   String   @map("reply_text")
+
+  // Links to existing Media Gallery asset (preferred over raw URLs)
+  mediaId     String?  @map("media_id")
+
+  // Advanced: intent tag for AI merging later (e.g. "pricing", "support")
+  intent      String?
+
+  isActive    Boolean  @default(true) @map("is_active")
+
+  // Per-contact cooldown in seconds to prevent spam loops
+  cooldownSec Int      @default(30) @map("cooldown_sec")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  media     Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  logs      AutomationLog[]
+
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, keyword])
+  @@map("keyword_automations")
+}
+
+// Audit log for every keyword automation trigger.
+// Powers analytics dashboard and pricing justification.
+model AutomationLog {
+  id           String   @id @default(cuid())
+  workspaceId  String   @map("workspace_id")
+  automationId String   @map("automation_id")
+
+  keyword      String
+  contactId    String?  @map("contact_id")
+  messageId    String?  @map("message_id")
+  matchType    String   @map("match_type")
+
+  triggeredAt  DateTime @default(now()) @map("triggered_at")
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation KeywordAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, triggeredAt])
+  @@index([automationId])
+  @@map("automation_logs")
+}
+
+// ============================================================
+// AUTOMATION INSIGHTS ENGINE (Phase 3 — Self-Learning)
+// ============================================================
+
+// Suggested automations surfaced by pattern analysis.
+// Status lifecycle: pending → accepted (creates KeywordAutomation) | dismissed
+model AutomationInsight {
+  id             String    @id @default(cuid())
+  workspaceId    String    @map("workspace_id")
+
+  keyword        String
+  intent         String               // e.g. "pricing", "support", "demo"
+  frequency      Int                  // number of times seen in scan window
+  suggestedReply String    @map("suggested_reply") @db.Text
+
+  // Top example messages that triggered this insight (JSON array of strings)
+  exampleMessages Json     @default("[]") @map("example_messages")
+
+  // pending | accepted | dismissed
+  status         String    @default("pending")
+
+  scannedAt      DateTime  @default(now()) @map("scanned_at")
+  resolvedAt     DateTime? @map("resolved_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, keyword, status])
+  @@index([workspaceId, status])
+  @@index([workspaceId, scannedAt])
+  @@map("automation_insights")
 }

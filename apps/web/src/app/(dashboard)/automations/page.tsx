@@ -8,6 +8,8 @@ import { useAuthStore } from '@/store/auth';
 import { Zap, CheckCircle2, PauseCircle, Activity, LayoutGrid, Sparkles, AlertTriangle, Clock, Server, ToggleLeft, ToggleRight, Trash2, Pencil, Bot, Network } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { AutoRepliesTab } from './components/AutoRepliesTab';
+import { KeywordAutomationsTab } from './components/KeywordAutomationsTab';
+import { AutomationInsightsSection } from './components/AutomationInsightsSection';
 
 const statusBadge: Record<string, string> = {
     ACTIVE: 'badge-green',
@@ -19,7 +21,7 @@ export default function AutomationsPage() {
     const qc = useQueryClient();
     const router = useRouter();
     const hasPermission = useAuthStore(s => s.hasPermission);
-    const [activeTab, setActiveTab] = React.useState<'workflows' | 'auto-replies'>('auto-replies');
+    const [activeTab, setActiveTab] = React.useState<'keyword' | 'workflows' | 'auto-replies'>('keyword');
 
     const { data: rulesData } = useQuery({
         queryKey: ['automations'],
@@ -54,6 +56,12 @@ export default function AutomationsPage() {
             
             <div className="px-6 flex gap-2 border-b border-theme bg-surface pt-4">
                 <button 
+                    onClick={() => setActiveTab('keyword')}
+                    className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'keyword' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
+                >
+                    <Zap size={16} /> Keyword Automations
+                </button>
+                <button 
                     onClick={() => setActiveTab('auto-replies')}
                     className={`pb-3 px-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'auto-replies' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-secondary'}`}
                 >
@@ -68,6 +76,21 @@ export default function AutomationsPage() {
             </div>
 
             <div className="p-6 flex-1 overflow-y-auto">
+                {activeTab === 'keyword' && (
+                    <div className="max-w-4xl w-full mx-auto space-y-8">
+                        {/* Phase 3: Self-Learning Suggestions */}
+                        <AutomationInsightsSection />
+
+                        {/* Divider */}
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 h-px bg-white/8" />
+                            <span className="text-[10px] uppercase tracking-widest text-zinc-600 font-medium">Active Automations</span>
+                            <div className="flex-1 h-px bg-white/8" />
+                        </div>
+
+                        <KeywordAutomationsTab />
+                    </div>
+                )}
                 {activeTab === 'workflows' ? (
                 <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">

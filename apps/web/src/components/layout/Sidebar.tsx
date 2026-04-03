@@ -4,14 +4,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Megaphone, Zap, LayoutDashboard,
-    Settings, ChevronLeft, ChevronRight, Bot, Image, LayoutTemplate, Shield
+    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, Shield
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
+import NextImage from 'next/image';
 
 const navItems = [
-    { href: '/dashboard',     label: 'Dashboard',    icon: LayoutDashboard },
-    { href: '/conversations', label: 'Conversations', icon: MessageSquare,  requiredPermission: 'conversations:read' },
+    { href: '/inbox',         label: 'Inbox',         icon: MessageSquare,  requiredPermission: 'conversations:read' },
+    { href: '/analytics',     label: 'Analytics',     icon: LayoutDashboard },
     { href: '/contacts',      label: 'Contacts',      icon: Users },
     { href: '/campaigns',     label: 'Campaigns',     icon: Megaphone },
     { href: '/automations',   label: 'Automations',   icon: Zap },
@@ -37,16 +38,16 @@ export function Sidebar() {
 
     return (
         <aside
-            className={`flex flex-col h-screen sticky top-0 border-r border-theme bg-surface shrink-0 transition-all duration-200 ${collapsed ? 'w-16' : 'w-[220px]'}`}
+            className={`flex flex-col h-screen sticky top-0 border-r border-white/5 bg-black/40 backdrop-blur-xl shrink-0 transition-all duration-200 ${collapsed ? 'w-16' : 'w-[220px]'}`}
         >
             {/* Logo */}
-            <div className="flex items-center gap-2 px-4 h-14 border-b border-theme">
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent flex-shrink-0">
-                    <Bot size={16} color="#fff" />
+            <div className="flex items-center gap-3 px-4 h-16 border-b border-white/5">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 glass-card p-1">
+                    <NextImage src="/logo.png" alt="WhatsVue Logo" width={24} height={24} className="object-contain" />
                 </div>
                 {!collapsed && (
-                    <span className="font-bold text-sm tracking-tight text-primary">
-                        Whatsvue
+                    <span className="font-bold text-sm tracking-wide text-white">
+                        WhatsVue
                     </span>
                 )}
             </div>
@@ -70,20 +71,20 @@ export function Sidebar() {
             </nav>
 
             {/* Bottom */}
-            <div className="border-t border-theme px-2 py-3 flex flex-col gap-1">
+            <div className="border-t border-white/5 px-2 py-3 flex flex-col gap-1">
                 <Link href="/settings" className="nav-item" title={collapsed ? 'Settings' : undefined}>
                     <Settings size={18} className="shrink-0" />
                     {!collapsed && <span>Settings</span>}
                 </Link>
 
                 {isMounted && !collapsed && user && (
-                    <div className="flex items-center gap-2 px-3 py-2 mt-1 rounded-lg bg-elevated">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-accent text-white">
+                    <div className="flex items-center gap-2 px-3 py-2 mt-1 rounded-lg glass-card p-2 border-transparent">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
                             {user.name?.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 overflow-hidden">
-                            <p className="text-xs font-medium truncate text-primary">{user.name}</p>
-                            <p className="text-xs truncate text-muted">{user.email}</p>
+                            <p className="text-xs font-medium truncate text-white">{user.name}</p>
+                            <p className="text-xs truncate text-zinc-500">{user.email}</p>
                         </div>
                     </div>
                 )}
@@ -93,7 +94,7 @@ export function Sidebar() {
             <button
                 aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 onClick={() => setCollapsed(c => !c)}
-                className="absolute -right-3 top-16 w-6 h-6 rounded-full flex items-center justify-center border border-theme bg-elevated text-secondary"
+                className="absolute -right-3 top-16 w-6 h-6 rounded-full flex items-center justify-center border border-white/10 bg-black/80 backdrop-blur-md text-zinc-400 hover:text-white hover:border-emerald-500/50 hover:shadow-[0_0_10px_rgba(16,185,129,0.3)] transition-all z-20"
             >
                 {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
             </button>

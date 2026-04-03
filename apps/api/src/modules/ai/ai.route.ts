@@ -1,9 +1,31 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { authenticate } from '../../middleware/authenticate';
-import { generateFlow } from './ai.service';
+import { generateFlow, generateSuggestions } from './ai.service';
 
 export const aiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
+
+    /**
+     * POST /ai/suggest
+     * Body: { messages: any[], contact: any }
+     * Returns: { intent, confidence, suggestions }
+     */
+    fastify.post('/suggest', {
+        config: { rateLimit: { max: 60, timeWindow: '1 minute' } }
+    }, async (req, reply) => {
+        const { messages, contact } = req.body as { messages: any[], contact: any };
+        
+        if (!messages || !Array.isArray(messages)) {
+            return reply.code(400).send({ success: false, error: 'Messages array is required' });
+        }
+
+        const result = await generateSuggestions(messages, contact);
+        if (result.error) {
+            return reply.code(500).send({ success: false, error: result.error });
+        }
+
+        return reply.send({ success: true, ...result });
+    });
 
     /**
      * POST /ai/generate-flow

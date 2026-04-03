@@ -21,6 +21,8 @@ export const CampaignSchema = z.object({
     status: CampaignStatusSchema,
     templateId: z.string().nullable(),
     templateLanguage: z.string().nullable(),
+    messageText: z.string().nullable().optional(),
+    expectedReplyRate: z.number().nullable().optional(),
     scheduledAt: z.string().datetime().nullable(),
     startedAt: z.string().datetime().nullable(),
     completedAt: z.string().datetime().nullable(),
@@ -48,6 +50,8 @@ export const CreateCampaignSchema = z.object({
     templateId: z.string().optional().nullable(),
     templateVersionId: z.string().optional().nullable(),
     templateLanguage: z.string().optional().nullable(),
+    messageText: z.string().optional().nullable(),
+    expectedReplyRate: z.number().optional().nullable(),
     scheduledAt: z.string().datetime().optional().nullable(),
     status: CampaignStatusSchema.optional().nullable(),
     contactIds: z.array(z.string()).optional().nullable(),
@@ -60,6 +64,8 @@ export const UpdateCampaignSchema = z.object({
     status: CampaignStatusSchema.optional(),
     templateId: z.string().optional(),
     templateLanguage: z.string().optional(),
+    messageText: z.string().optional(),
+    expectedReplyRate: z.number().optional(),
     scheduledAt: z.string().datetime().optional(),
 });
 

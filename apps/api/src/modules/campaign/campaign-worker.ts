@@ -58,8 +58,8 @@ export async function processCampaignJob(job: Job) {
         }
     }
 
-    if (!templateVersionId) {
-        log.error({ campaignId }, 'Campaign missing template version');
+    if (!templateVersionId && !campaign.messageText) {
+        log.error({ campaignId }, 'Campaign missing template version and message text');
         return;
     }
 
@@ -91,11 +91,12 @@ export async function processCampaignJob(job: Job) {
             });
 
             // Stagger messages to prevent burst sending
-            const MIN_DELAY_MS = 3000;
-            const JITTER_MS = 2000;
+            // Normal: 3s + 2s jitter. Fast: 1s + 500ms jitter.
+            const MIN_DELAY_MS = job.data.isFastMode ? 1000 : 3000;
+            const JITTER_MS = job.data.isFastMode ? 500 : 2000;
             const jobDelay = processed * (MIN_DELAY_MS + Math.floor(Math.random() * JITTER_MS));
 
-            // Universal Messaging Pipeline integration
+            const isTemplate = !!templateVersionId;
             const message = await composeAndQueueMessage({
                 workspaceId,
                 conversationId: conversation.id,
@@ -103,11 +104,16 @@ export async function processCampaignJob(job: Job) {
                 providerId: member.contact.phone, // Real JID resolution happens in WA worker
                 campaignId: campaign.id,
                 delay: jobDelay,
-                templateVersionId: member.templateVersionId || templateVersionId,
-                templateVariables: {
-                    contact: member.contact.customData as any,
-                    ...((member.variables as Record<string, any>) || {})
-                }
+                ...(isTemplate ? {
+                    templateVersionId: (member.templateVersionId || templateVersionId) as string,
+                    templateVariables: {
+                        contact: member.contact.customData as any,
+                        ...((member.variables as Record<string, any>) || {})
+                    }
+                } : {
+                    type: 'TEXT',
+                    content: campaign.messageText || '',
+                })
             });
 
             // Mark as queued locally

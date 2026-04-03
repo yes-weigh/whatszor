@@ -241,3 +241,61 @@ export async function generateFlow(description: string): Promise<{ name: string;
         return { name: 'Generated Flow', nodes: [], edges: [], error: err.message };
     }
 }
+// ── Copilot / Suggestion Engine ──────────────────────────────────────────────
+
+const SUGGESTION_SYSTEM_PROMPT = `You are a high-performing WhatsApp sales assistant for Indian businesses.
+
+Your job:
+- Identify customer intent based on their latest messages
+- Generate short, friendly, conversion-focused replies
+- Keep replies under 2 sentences
+- Use simple English (India-friendly)
+- Push toward next step (demo / close, if applicable)
+
+Return ONLY valid JSON in format:
+{
+  "intent": "string (e.g. Pricing Inquiry, Technical Support, Greeting, etc.)",
+  "confidence": 0.0 to 1.0,
+  "suggestions": [
+    "Short friendly reply 1",
+    "Short friendly reply 2",
+    "Short friendly reply 3"
+  ]
+}`;
+
+export async function generateSuggestions(messages: any[], contact: any): Promise<{ intent?: string, confidence?: number, suggestions?: string[], error?: string }> {
+    try {
+        const historyText = messages.map(m => `${m.role}: ${m.content}`).join('\n');
+        const contactInfo = contact ? `Name: ${contact.name || 'Unknown'}\nTags: ${(contact.tags || []).join(', ')}` : 'No contact info provided';
+
+        const prompt = `Conversation History:\n${historyText}\n\nContact Info:\n${contactInfo}`;
+
+        const response = await ai.models.generateContent({
+            model: MODEL,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            config: { 
+                systemInstruction: SUGGESTION_SYSTEM_PROMPT, 
+                temperature: 0.3,
+                responseMimeType: "application/json"
+            }
+        });
+
+        const raw = (response.text || '').trim();
+        let parsed: any;
+        try {
+            parsed = JSON.parse(raw);
+        } catch {
+            log.warn({ raw }, 'AI generated invalid JSON for suggestions');
+            return { error: 'Failed to parse AI intent and suggestions.' };
+        }
+
+        return {
+            intent: parsed.intent || 'Unknown',
+            confidence: parsed.confidence || 0,
+            suggestions: parsed.suggestions || []
+        };
+    } catch (err: any) {
+        log.error({ err }, 'generateSuggestions failed');
+        return { error: err.message };
+    }
+}

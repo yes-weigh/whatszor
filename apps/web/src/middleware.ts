@@ -17,8 +17,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // Routes that require authentication
 const PROTECTED_PREFIXES = [
-    '/dashboard',
-    '/conversations',
+    '/inbox',
+    '/analytics',
     '/campaigns',
     '/contacts',
     '/instances',

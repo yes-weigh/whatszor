@@ -29,6 +29,13 @@ import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } f
 // Top-level import eliminates the require() hack — no circular dep because
 // quick-reply.service only imports prisma, it never imports any queue.
 import { findMatchingAutoReply } from '../../modules/quick-replies/quick-reply.service';
+// Keyword Automation Engine — PRIMARY layer that runs before QuickReply
+import {
+    findMatchingKeywordAutomation,
+    isOnCooldown,
+    setCooldown,
+    logAutomationTrigger,
+} from '../../modules/automation/keyword-automation.service';
 import { BatchProcessingError } from '../errors';
 
 const log = createLogger({ module: 'worker:inbound-messages' });
@@ -351,6 +358,90 @@ export async function processInboundMessage(job: Job): Promise<void> {
             // ── Auto-reply & AI queuing (inbound only, skip KB-handled messages) ─
             if (!msg.key.fromMe && content && !kbHandled) {
                 let autoReplied = false;
+
+                // ── LAYER 1: Keyword Automation Engine (Primary Revenue Layer) ──
+                try {
+                    const kwMatch = await findMatchingKeywordAutomation(workspaceId, content);
+                    if (kwMatch) {
+                        const { automation, matchedKeyword } = kwMatch;
+                        const contactIdentifier = conversation.contactId ?? conversation.providerId;
+
+                        // Idempotency key: ensures same message never triggers same automation twice
+                        const autoIdempotencyKey = `kw-auto:${workspaceId}:${msg.key.id}:${automation.id}`;
+                        const alreadyHandled = await acquireIdempotencyLock(autoIdempotencyKey);
+
+                        if (alreadyHandled === 'COMPLETED') {
+                            log.info({ automationId: automation.id }, 'Keyword automation already handled — skipping');
+                            autoReplied = true;
+                        } else if (!isOnCooldown(workspaceId, contactIdentifier, matchedKeyword, automation.cooldownSec)) {
+                            log.info({ keyword: matchedKeyword, matchType: automation.matchType, conversationId: conversation.id }, 'Keyword automation matched');
+
+                            // Send media first if attached
+                            if (automation.media?.id) {
+                                const mediaType = automation.media.type === 'image' ? 'IMAGE'
+                                    : automation.media.type === 'video' ? 'VIDEO' : 'DOCUMENT';
+                                const mediaMsg = await prisma.message.create({
+                                    data: {
+                                        conversationId: conversation.id,
+                                        workspaceId,
+                                        direction: 'OUTBOUND',
+                                        type: mediaType as any,
+                                        content: null,
+                                        mediaData: { mediaId: automation.media.id, fileName: automation.media.name } as any,
+                                        status: 'QUEUED',
+                                    },
+                                });
+                                await getQueue(QueueName.OUTBOUND_MESSAGES).add(
+                                    `kw-media-${mediaMsg.id}`,
+                                    { workspaceId, sessionId, messageId: mediaMsg.id, toJid: providerId, type: mediaType, content: null, mediaData: { mediaId: automation.media.id, fileName: automation.media.name } },
+                                );
+                            }
+
+                            // Send reply text
+                            const textMsg = await prisma.message.create({
+                                data: {
+                                    conversationId: conversation.id,
+                                    workspaceId,
+                                    direction: 'OUTBOUND',
+                                    type: 'TEXT',
+                                    content: automation.replyText,
+                                    status: 'QUEUED',
+                                },
+                            });
+                            await getQueue(QueueName.OUTBOUND_MESSAGES).add(
+                                `kw-text-${textMsg.id}`,
+                                { workspaceId, sessionId, messageId: textMsg.id, toJid: providerId, type: 'TEXT', content: automation.replyText, mediaData: null },
+                            );
+
+                            // Set cooldown to prevent spam loops
+                            setCooldown(workspaceId, contactIdentifier, matchedKeyword);
+
+                            // Log trigger event for analytics
+                            await logAutomationTrigger({
+                                workspaceId,
+                                automationId: automation.id,
+                                keyword: matchedKeyword,
+                                matchType: automation.matchType,
+                                contactId: conversation.contactId ?? null,
+                                messageId: msg.key.id,
+                            });
+
+                            await completeIdempotency(autoIdempotencyKey);
+                            autoReplied = true;
+                        } else {
+                            log.debug({ keyword: matchedKeyword, contactId: contactIdentifier }, 'Keyword automation suppressed by cooldown');
+                            // Release lock so it doesn't stay stuck as PROCESSING
+                            await releaseIdempotencyLock(autoIdempotencyKey);
+                            // Still mark as handled to skip QuickReply and AI
+                            autoReplied = true;
+                        }
+                    }
+                } catch (kwErr) {
+                    log.warn({ err: kwErr }, 'Keyword automation engine error — falling through to QuickReply');
+                }
+
+                // ── LAYER 2: Legacy QuickReply / Auto-Reply (Secondary Fallback) ──
+                if (!autoReplied) {
                 try {
                     const autoReply = await findMatchingAutoReply(workspaceId, content);
                     if (autoReply) {
@@ -380,7 +471,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
                                         direction: 'OUTBOUND',
                                         type: 'TEMPLATE',
                                         content: latestVersion.messageText,
-                                        mediaData: { templatePayload } as Prisma.InputJsonValue,
+                                        mediaData: { templatePayload } as any,
                                         status: 'QUEUED',
                                     },
                                 });
@@ -407,9 +498,9 @@ export async function processInboundMessage(job: Job): Promise<void> {
                                         conversationId: conversation.id,
                                         workspaceId,
                                         direction: 'OUTBOUND',
-                                        type: mediaType as MessageType,
+                                        type: mediaType as any,
                                         content: null,
-                                        mediaData: { mediaId: autoReply.media.id, fileName: autoReply.media.name } as Prisma.InputJsonValue,
+                                        mediaData: { mediaId: autoReply.media.id, fileName: autoReply.media.name } as any,
                                         status: 'QUEUED',
                                     },
                                 });
@@ -442,6 +533,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
                 } catch (arErr) {
                     log.warn({ err: arErr }, 'Auto-reply matching failed — continuing');
                 }
+                } // end if (!autoReplied) for QuickReply
 
                 if (!autoReplied) {
                     await getQueue(QueueName.AI).add(`ai-${msg.key.id}`, {

@@ -72,8 +72,9 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
     fastify.post('/:id/start', { preHandler: requireRole('campaigns:update') }, async (req, reply) => {
         const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
+        const { isFastMode } = (req.body as any) || { isFastMode: false };
 
-        const data = await campaignService.startCampaign(workspaceId, id);
+        const data = await campaignService.startCampaign(workspaceId, id, !!isFastMode);
         return reply.code(202).sendSuccess(data);
     });
 

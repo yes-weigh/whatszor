@@ -4,22 +4,28 @@
 
 @layer base {
   :root {
-    --bg-base: #0d0f14;
-    --bg-surface: #13161e;
-    --bg-elevated: #1a1f2e;
-    --bg-hover: #1e2435;
-    --border: #252b3b;
-    --border-strong: #2f3856;
-    --text-primary: #e8eaf0;
-    --text-secondary: #8b93a8;
-    --text-muted: #545d72;
-    --accent: #4f7ef8;
-    --accent-hover: #6690fa;
-    --accent-dim: rgba(79, 126, 248, 0.12);
+    /* Emerald + Deep Black Theme */
+    --bg-base: #000000;
+    --bg-surface: #050505;
+    --bg-elevated: #0a0a0a;
+    --bg-hover: rgba(255, 255, 255, 0.05);
+    
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa; /* zinc-400 */
+    --text-muted: #52525b;     /* zinc-600 */
+    
+    --accent: #10b981; /* emerald-500 */
+    --accent-hover: #34d399; /* emerald-400 */
+    --accent-glow: rgba(16, 185, 129, 0.35);
+    --accent-dim: rgba(16, 185, 129, 0.12);
+    
     --success: #34d399;
     --warning: #fbbf24;
     --danger: #f87171;
-    --radius: 10px;
+    --radius: 12px;
   }
 
   * { box-sizing: border-box; }
@@ -33,12 +39,15 @@
 
   body {
     background: var(--bg-base);
+    /* Subtle radial glow from top-center */
+    background-image: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 60%);
+    background-attachment: fixed;
     margin: 0;
     min-height: 100vh;
   }
 
   ::-webkit-scrollbar { width: 5px; height: 5px; }
-  ::-webkit-scrollbar-track { background: var(--bg-base); }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
@@ -48,8 +57,31 @@
 }
 
 @layer components {
+  /* New Glassmorphism Card System */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Interactive cards that lift and glow emerald on hover */
+  .glass-card-interactive {
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .glass-card-interactive:hover {
+    transform: translateY(-2px);
+    border-color: rgba(16, 185, 129, 0.4);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(16, 185, 129, 0.15);
+  }
+
+  /* Keep legacy .card for backward compatibility but update its styling to match */
   .card {
-    background: var(--bg-surface);
+    background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.25rem;
@@ -72,16 +104,22 @@
 
   .btn-primary {
     background: var(--accent);
-    color: #fff;
+    color: #000; /* Emerald text contrast usually better with pure black/dark for emphasis */
+    font-weight: 600;
   }
-  .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 0 16px rgba(79,126,248,0.35); }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-primary:hover { 
+    background: var(--accent-hover); 
+    box-shadow: 0 0 20px var(--accent-glow); 
+  }
 
   .btn-ghost {
     background: transparent;
     color: var(--text-secondary);
     border: 1px solid var(--border);
   }
-  .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .btn-ghost:active { transform: scale(0.97); }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-strong); }
 
   .btn-danger {
     background: rgba(248,113,113,0.12);
@@ -92,17 +130,22 @@
 
   .input {
     width: 100%;
-    background: var(--bg-elevated);
+    background: rgba(0, 0, 0, 0.4);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     color: var(--text-primary);
     outline: none;
-    transition: border-color 0.15s;
+    transition: all 0.15s;
+    backdrop-filter: blur(8px);
   }
   .input::placeholder { color: var(--text-muted); }
-  .input:focus { border-color: var(--accent); }
+  .input:focus { 
+    border-color: var(--accent); 
+    box-shadow: 0 0 0 1px var(--accent-glow); 
+    background: rgba(0, 0, 0, 0.6);
+  }
 
   .badge {
     display: inline-flex;
@@ -116,11 +159,11 @@
     text-transform: uppercase;
   }
 
-  .badge-green { background: rgba(52,211,153,0.12); color: var(--success); }
-  .badge-yellow { background: rgba(251,191,36,0.12); color: var(--warning); }
-  .badge-red { background: rgba(248,113,113,0.12); color: var(--danger); }
-  .badge-blue { background: var(--accent-dim); color: var(--accent); }
-  .badge-gray { background: rgba(139,147,168,0.1); color: var(--text-secondary); }
+  .badge-green { background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
+  .badge-yellow { background: rgba(251,191,36,0.12); color: var(--warning); border: 1px solid rgba(251, 191, 36, 0.2); }
+  .badge-red { background: rgba(248,113,113,0.12); color: var(--danger); border: 1px solid rgba(248, 113, 113, 0.2); }
+  .badge-blue { background: rgba(59, 130, 246, 0.12); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); }
+  .badge-gray { background: rgba(139,147,168,0.1); color: var(--text-secondary); border: 1px solid rgba(139, 147, 168, 0.2); }
 
   .nav-item {
     display: flex;
@@ -131,17 +174,23 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--text-secondary);
-    transition: all 0.15s;
+    transition: all 0.2s;
     cursor: pointer;
   }
-  .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-  .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+  .nav-item:hover { 
+    background: var(--bg-hover); 
+    color: var(--text-primary); 
+    transform: translateX(2px);
+  }
+  .nav-item.active { 
+    background: var(--accent-dim); 
+    color: var(--accent); 
+    border-left: 2px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+  }
 }
 
 @layer utilities {
-  /* Glow backgrounds for auth pages */
-  .bg-glow-blue { background: radial-gradient(circle, #4f7ef8 0%, transparent 70%); }
-  .bg-glow-purple { background: radial-gradient(circle, #a78bfa 0%, transparent 70%); }
-  /* Strong border color as text (used for empty state icons) */
+  .bg-glow-emerald { background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 60%); }
   .text-strong { color: var(--border-strong); }
 }

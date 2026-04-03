@@ -54,7 +54,7 @@ export default function LoginPage() {
                 })
                 .catch(() => { /* non-critical */ });
 
-            router.push('/dashboard');
+            router.push('/inbox');
         } catch (err: any) {
             toast.error(err.response?.data?.message || 'Login failed');
         } finally {

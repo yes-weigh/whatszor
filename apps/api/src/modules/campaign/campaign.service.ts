@@ -13,6 +13,8 @@ export async function createCampaign(workspaceId: string, input: CreateCampaignI
             templateId: input.templateId || null,
             templateVersionId: input.templateVersionId || null,
             templateLanguage: input.templateLanguage || null,
+            messageText: input.messageText || null,
+            expectedReplyRate: input.expectedReplyRate || null,
             scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
         },
     });
@@ -96,6 +98,8 @@ export async function updateCampaign(
     if (input.templateId !== undefined) data.templateId = input.templateId || null;
     if ((input as any).templateVersionId !== undefined) data.templateVersionId = (input as any).templateVersionId || null;
     if (input.templateLanguage !== undefined) data.templateLanguage = input.templateLanguage || null;
+    if (input.messageText !== undefined) data.messageText = input.messageText || null;
+    if (input.expectedReplyRate !== undefined) data.expectedReplyRate = input.expectedReplyRate || null;
     if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
 
     // ── Campaign session ownership validation ───────────────────────────────────────
@@ -180,7 +184,7 @@ export async function addCampaignMembers(workspaceId: string, campaignId: string
 /**
  * Initiates a campaign by queuing a background job to process the members.
  */
-export async function startCampaign(workspaceId: string, campaignId: string) {
+export async function startCampaign(workspaceId: string, campaignId: string, isFastMode: boolean = false) {
     const campaign = await getCampaign(workspaceId, campaignId);
 
     if (campaign.status === 'RUNNING' || campaign.status === 'COMPLETED') {
@@ -199,7 +203,8 @@ export async function startCampaign(workspaceId: string, campaignId: string) {
     // Enqueue job. The worker will paginate through CampaignMembers and push them to outbound routing.
     await getQueue(QueueName.CAMPAIGN).add(`campaign-${campaignId}`, {
         workspaceId,
-        campaignId
+        campaignId,
+        isFastMode
     });
 
     // Log global event

@@ -36,9 +36,11 @@ export default function CampaignsPage() {
 
     const { data: campaignsData } = useQuery({
         queryKey: ['campaigns'],
-        // Backend returns { campaigns: Campaign[], total: number } via sendSuccess({ campaigns, total })
-        // After interceptor unwrap, r.data is { campaigns, total }.
         queryFn: () => api.get('/campaigns').then(r => r.data),
+        refetchInterval: (query) => {
+            const data: any = query.state.data;
+            return data?.campaigns?.some((c: any) => c.status === 'RUNNING') ? 3000 : false;
+        }
     });
 
     const startMutation = useMutation({
@@ -100,17 +102,35 @@ export default function CampaignsPage() {
                                 </div>
 
                                 {stats && (
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {[
-                                            { label: 'Sent', value: stats.sent ?? 0 },
-                                            { label: 'Delivered', value: stats.delivered ?? 0 },
-                                            { label: 'Failed', value: stats.failed ?? 0 },
-                                        ].map(s => (
-                                            <div key={s.label} className="rounded-lg p-2 text-center bg-elevated">
-                                                <p className="font-bold text-lg text-primary">{s.value}</p>
-                                                <p className="text-xs text-muted">{s.label}</p>
+                                    <>
+                                        {c.status === 'RUNNING' && (
+                                            <div className="w-full bg-border rounded-full h-2 mb-2">
+                                                <div
+                                                    className="bg-primary h-2 rounded-full transition-all duration-500"
+                                                    style={{ width: `${Math.min(100, Math.round(((stats.sent + stats.failed) / (c._count?.members || 1)) * 100))}%` }}
+                                                ></div>
                                             </div>
-                                        ))}
+                                        )}
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[
+                                                { label: 'Sent', value: stats.sent ?? 0 },
+                                                { label: 'Delivered', value: stats.delivered ?? 0 },
+                                                { label: 'Failed', value: stats.failed ?? 0 },
+                                                { label: 'Replies', value: stats.replies ?? '0' },
+                                            ].map(s => (
+                                                <div key={s.label} className="rounded-lg p-2 text-center bg-elevated border border-border/50">
+                                                    <p className="font-bold text-lg text-primary">{s.value}</p>
+                                                    <p className="text-xs text-muted">{s.label}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+
+                                {c.status === 'RUNNING' && (
+                                    <div className="bg-primary/10 border border-primary/20 text-primary rounded-md p-3 text-sm flex items-center gap-2">
+                                        <Megaphone size={16} />
+                                        <span>Campaign running! Replies will appear in Inbox &rarr; AI will assist.</span>
                                     </div>
                                 )}
 
