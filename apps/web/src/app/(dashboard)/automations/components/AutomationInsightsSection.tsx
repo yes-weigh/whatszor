@@ -231,7 +231,7 @@ export function AutomationInsightsSection() {
                 {scanMutation.isSuccess && (
                     <div className="mt-3 text-xs text-emerald-400 flex items-center gap-1.5">
                         <CheckCircle2 size={12} />
-                        Scan complete — {(scanMutation.data?.data as any)?.newInsights ?? 0} new insights found
+                        Scan complete — {(scanMutation.data as any)?.newInsights ?? 0} new insights found
                     </div>
                 )}
             </div>

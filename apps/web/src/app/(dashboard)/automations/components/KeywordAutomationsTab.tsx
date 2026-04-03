@@ -261,7 +261,7 @@ function AutomationModal({
                         <div className="flex items-start gap-2 mt-1.5">
                             <div className="text-xs text-zinc-600 mt-0.5">Sends:</div>
                             <div className="text-xs text-zinc-400 flex-1 truncate">
-                                {replyText ? `"${replyText.substring(0, 60)}${replyText.length > 60 ? '...' : ''}"` : 'reply text'}
+                                {replyText ? <>&quot;{replyText.substring(0, 60)}{replyText.length > 60 ? '...' : ''}&quot;</> : 'reply text'}
                                 {selectedMedia && (
                                     <span className="ml-1 text-emerald-400">+ {selectedMedia.name}</span>
                                 )}
@@ -380,7 +380,7 @@ export function KeywordAutomationsTab() {
                     <div>
                         <p className="text-sm font-medium text-emerald-300">How it works</p>
                         <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
-                            Lead sends "PRICE" → System instantly replies with your pricing card + image → AI follows up → You close.
+                            Lead sends &quot;PRICE&quot; → System instantly replies with your pricing card + image → AI follows up → You close.
                             <br />
                             <span className="text-emerald-400">This is your automated sales funnel inside WhatsApp.</span>
                         </p>
@@ -403,7 +403,7 @@ export function KeywordAutomationsTab() {
                     </div>
                     <p className="text-sm font-medium text-white mb-1">No keyword automations yet</p>
                     <p className="text-xs text-zinc-500 mb-4">
-                        Create your first one. When a lead texts "price", they'll get your reply instantly.
+                        Create your first one. When a lead texts &quot;price&quot;, they&apos;ll get your reply instantly.
                     </p>
                     <button
                         onClick={() => setShowModal(true)}

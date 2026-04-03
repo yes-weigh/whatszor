@@ -175,7 +175,7 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
               <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/0 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
               
               <p className="text-sm text-primary/90 leading-relaxed relative z-10">
-                "{reply}"
+                &quot;{reply}&quot;
               </p>
               
               <div className="flex items-center justify-end w-full mt-1 relative z-10">
