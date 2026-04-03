@@ -160,20 +160,25 @@ export function ConversationsList({
             {/* Session Switcher — only shown when >1 connected account */}
             {connectedAccounts.length > 1 && (
                 <div className="flex gap-1.5 mt-3 flex-wrap">
+                    {/* ── All chip ── */}
                     <button
                         onClick={() => setActiveSessionId(null)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all duration-200 border shadow-sm ${
                             activeSessionId === null
-                                ? 'bg-accent/20 border-accent/40 text-accent'
-                                : 'bg-white/5 border-white/10 text-muted hover:text-primary hover:border-white/20'
+                                ? 'bg-accent/20 border-accent/50 text-accent shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                                : 'bg-white/10 border-white/25 text-white/85 hover:bg-white/15 hover:border-white/40 hover:text-white'
                         }`}
                     >
                         All
-                        <span className="opacity-60">({conversations.length})</span>
+                        <span className={activeSessionId === null ? 'opacity-70' : 'opacity-55'}>({conversations.length})</span>
                     </button>
+
+                    {/* ── Per-session chips ── */}
                     {connectedAccounts.map((acc, i) => {
                         const dotColors = ['bg-violet-400','bg-emerald-400','bg-blue-400','bg-amber-400','bg-rose-400','bg-cyan-400'];
+                        const borderColors = ['border-violet-400/40','border-emerald-400/40','border-blue-400/40','border-amber-400/40','border-rose-400/40','border-cyan-400/40'];
                         const dot = dotColors[i % dotColors.length];
+                        const borderAccent = borderColors[i % borderColors.length];
                         const count = conversations.filter(c => c.sessionId === acc.sessionId).length;
                         const isActive = activeSessionId === acc.sessionId;
                         return (
@@ -181,18 +186,19 @@ export function ConversationsList({
                                 key={acc.sessionId}
                                 onClick={() => setActiveSessionId(isActive ? null : acc.sessionId)}
                                 title={acc.phoneNumber ?? acc.name}
-                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-all duration-200 border shadow-sm ${
                                     isActive
-                                        ? 'bg-accent/20 border-accent/40 text-accent'
-                                        : 'bg-white/5 border-white/10 text-muted hover:text-primary hover:border-white/20'
+                                        ? `bg-accent/20 ${borderAccent} text-white shadow-[0_0_8px_rgba(16,185,129,0.2)]`
+                                        : `bg-white/10 border-white/25 text-white/85 hover:bg-white/15 hover:border-white/40 hover:text-white`
                                 }`}
                             >
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${dot} ${isActive ? 'shadow-[0_0_5px_currentColor]' : ''}`} />
                                 <span className="truncate max-w-[80px]">{acc.name}</span>
-                                <span className="opacity-60">({count})</span>
+                                <span className={isActive ? 'opacity-70' : 'opacity-55'}>({count})</span>
                             </button>
                         );
                     })}
+
                 </div>
             )}
         </div>
