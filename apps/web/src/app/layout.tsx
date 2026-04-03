@@ -13,7 +13,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en" suppressHydrationWarning>
-            <body>
+            {/* suppressHydrationWarning on body prevents false-positive hydration errors
+                caused by zustand-persist rehydrating from localStorage on mount */}
+            <body suppressHydrationWarning>
                 <Providers>{children}</Providers>
             </body>
         </html>

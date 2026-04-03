@@ -39,7 +39,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }).catch(() => {});
             });
         }
-    }, [isAuthenticated, user, router, setAuth]);
+    // Intentionally run only once on mount — function refs (isAuthenticated, setAuth)
+    // from zustand change on every render and would cause an infinite loop if included.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="flex h-screen overflow-hidden bg-base">

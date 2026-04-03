@@ -73,14 +73,19 @@ export default function LeadGenerationPage() {
         },
     });
 
+    // Store mutation.reset in a ref so it doesn't change the effect's deps
+    const mutationResetRef = React.useRef(previewMutation.reset);
+    mutationResetRef.current = previewMutation.reset;
+
     // Reset modal state when closed
     React.useEffect(() => {
         if (!isAddModalOpen) {
             form.reset();
             setPreviewData(null);
-            previewMutation.reset();
+            mutationResetRef.current();
         }
-    }, [isAddModalOpen, form, previewMutation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAddModalOpen]);
 
     const onPreviewSubmit = async (values: SearchFormValues) => {
         try {

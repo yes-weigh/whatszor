@@ -533,7 +533,7 @@ export default function LandingPage() {
                         </div>
                         <span className="font-semibold text-white">WhatsVue</span>
                     </div>
-                    <p className="text-sm">© {new Date().getFullYear()} WhatsVue. All rights reserved.</p>
+                    <p className="text-sm" suppressHydrationWarning>© {new Date().getFullYear()} WhatsVue. All rights reserved.</p>
                     <div className="flex gap-6 text-sm">
                         <Link href="/terms" className="hover:text-zinc-400">Terms</Link>
                         <Link href="/privacy" className="hover:text-zinc-400">Privacy</Link>
