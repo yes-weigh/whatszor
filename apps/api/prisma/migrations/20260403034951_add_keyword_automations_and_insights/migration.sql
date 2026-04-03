@@ -74,10 +74,14 @@ ALTER TABLE "keyword_automations"
     ADD CONSTRAINT "keyword_automations_workspace_id_fkey"
     FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey: keyword_automations → media (optional)
-ALTER TABLE "keyword_automations"
-    ADD CONSTRAINT "keyword_automations_media_id_fkey"
-    FOREIGN KEY ("media_id") REFERENCES "media"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- AddForeignKey: keyword_automations → media_gallery (optional)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'keyword_automations_media_id_fkey') THEN
+    ALTER TABLE "keyword_automations"
+      ADD CONSTRAINT "keyword_automations_media_id_fkey"
+      FOREIGN KEY ("media_id") REFERENCES "media_gallery"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
 
 -- AddForeignKey: automation_logs → workspaces
 ALTER TABLE "automation_logs"
