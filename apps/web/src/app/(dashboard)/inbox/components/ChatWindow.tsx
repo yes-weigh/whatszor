@@ -134,13 +134,13 @@ function MessageBubble({ msg }: { msg: Message }) {
           <div className={`max-w-[75%] flex flex-col gap-1 ${isOut ? 'items-end' : 'items-start'}`}>
               <div className={`px-4 py-2.5 text-[15px] leading-relaxed shadow-sm relative ${
                   isOut
-                      ? 'bg-accent/90 text-black rounded-[20px_4px_20px_20px] font-medium'
+                      ? 'bg-accent text-white rounded-[20px_4px_20px_20px] font-medium'
                       : 'bg-[#202c33] text-[#e9edef] rounded-[4px_20px_20px_20px]'
               }`}>
                   {renderContent()}
                   
                   {/* Inline Time & Tick */}
-                  <div className={`flex items-center gap-1 justify-end ml-4 -mb-1 mt-1 float-right ${isOut ? 'text-black/60' : 'text-white/60'}`}>
+                  <div className={`flex items-center gap-1 justify-end ml-4 -mb-1 mt-1 float-right ${isOut ? 'text-white/70' : 'text-white/60'}`}>
                       <span className="text-[10px] uppercase font-bold tracking-wider">
                           {format(new Date(msg.createdAt), 'HH:mm')}
                       </span>

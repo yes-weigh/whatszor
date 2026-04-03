@@ -91,7 +91,9 @@ interface ConversationsListProps {
   conversations: Conversation[];
   loading: boolean;
   accounts: WaAccount[];
+  connectedAccounts: WaAccount[];
   activeSessionId: string | null;
+  setActiveSessionId: (id: string | null) => void;
   activeConversation: Conversation | null;
   onSelect: (conv: Conversation) => void;
 }
@@ -100,7 +102,9 @@ export function ConversationsList({
   conversations,
   loading,
   accounts,
+  connectedAccounts,
   activeSessionId,
+  setActiveSessionId,
   activeConversation,
   onSelect
 }: ConversationsListProps) {
@@ -130,7 +134,7 @@ export function ConversationsList({
                     <PenSquare size={13} />
                 </button>
             </div>
-            {/* Glassy Search Input */}
+            {/* Search */}
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/20 border border-theme focus-within:border-accent/40 focus-within:ring-1 focus-within:ring-accent/40 shadow-inner transition-all">
                 <Search size={14} className="text-muted shrink-0" />
                 <input
@@ -145,6 +149,45 @@ export function ConversationsList({
                     </button>
                 )}
             </div>
+
+            {/* Session Switcher — only shown when >1 connected account */}
+            {connectedAccounts.length > 1 && (
+                <div className="flex gap-1.5 mt-3 flex-wrap">
+                    <button
+                        onClick={() => setActiveSessionId(null)}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${
+                            activeSessionId === null
+                                ? 'bg-accent/20 border-accent/40 text-accent'
+                                : 'bg-white/5 border-white/10 text-muted hover:text-primary hover:border-white/20'
+                        }`}
+                    >
+                        All
+                        <span className="opacity-60">({conversations.length})</span>
+                    </button>
+                    {connectedAccounts.map((acc, i) => {
+                        const dotColors = ['bg-violet-400','bg-emerald-400','bg-blue-400','bg-amber-400','bg-rose-400','bg-cyan-400'];
+                        const dot = dotColors[i % dotColors.length];
+                        const count = conversations.filter(c => c.sessionId === acc.sessionId).length;
+                        const isActive = activeSessionId === acc.sessionId;
+                        return (
+                            <button
+                                key={acc.sessionId}
+                                onClick={() => setActiveSessionId(isActive ? null : acc.sessionId)}
+                                title={acc.phoneNumber ?? acc.name}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${
+                                    isActive
+                                        ? 'bg-accent/20 border-accent/40 text-accent'
+                                        : 'bg-white/5 border-white/10 text-muted hover:text-primary hover:border-white/20'
+                                }`}
+                            >
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                                <span className="truncate max-w-[80px]">{acc.name}</span>
+                                <span className="opacity-60">({count})</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
         </div>
 
         {/* List */}
@@ -193,8 +236,13 @@ export function ConversationsList({
                         <div className="relative shrink-0 mt-0.5">
                             <ContactAvatar jid={conv.providerId} name={name} sessionId={conv.sessionId} sizeClass="w-12 h-12 text-lg" delay={idx * 50} />
                             
-                            {/* "Online/Active" Green Dot indicator requested by user */}
-                            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-secondary shadow-sm" />
+                            {/* Session colour dot — helps distinguish which account this chat belongs to */}
+                            {(() => {
+                                const dotColors = ['bg-violet-400','bg-emerald-400','bg-blue-400','bg-amber-400','bg-rose-400','bg-cyan-400'];
+                                const accIdx = connectedAccounts.findIndex(a => a.sessionId === conv.sessionId);
+                                const dot = accIdx >= 0 ? dotColors[accIdx % dotColors.length] : 'bg-emerald-500';
+                                return <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 ${dot} rounded-full border-2 border-secondary shadow-sm`} />;
+                            })()}
                         </div>
 
                         <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">

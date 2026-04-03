@@ -9,7 +9,9 @@ import { AISuggestions } from './components/AISuggestions';
 export default function InboxCommandCenter() {
   const {
       accounts,
+      connectedAccounts,
       activeSessionId,
+      setActiveSessionId,
       conversations,
       convsLoading,
       activeConversation,
@@ -40,7 +42,9 @@ export default function InboxCommandCenter() {
             conversations={conversations}
             loading={convsLoading}
             accounts={accounts}
+            connectedAccounts={connectedAccounts}
             activeSessionId={activeSessionId}
+            setActiveSessionId={setActiveSessionId}
             activeConversation={activeConversation}
             onSelect={setActiveConversation}
         />
