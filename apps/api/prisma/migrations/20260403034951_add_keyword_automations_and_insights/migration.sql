@@ -1,4 +1,9 @@
--- CreateTable: keyword_automations
+-- =============================================================
+-- Fully idempotent migration for keyword automation tables
+-- Safe to re-run even if partially applied in a previous attempt
+-- =============================================================
+
+-- 1. keyword_automations
 CREATE TABLE IF NOT EXISTS "keyword_automations" (
     "id"            TEXT NOT NULL,
     "workspace_id"  TEXT NOT NULL,
@@ -11,11 +16,10 @@ CREATE TABLE IF NOT EXISTS "keyword_automations" (
     "cooldown_sec"  INTEGER NOT NULL DEFAULT 30,
     "created_at"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "keyword_automations_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: automation_logs
+-- 2. automation_logs
 CREATE TABLE IF NOT EXISTS "automation_logs" (
     "id"             TEXT NOT NULL,
     "workspace_id"   TEXT NOT NULL,
@@ -25,11 +29,10 @@ CREATE TABLE IF NOT EXISTS "automation_logs" (
     "message_id"     TEXT,
     "match_type"     TEXT NOT NULL,
     "triggered_at"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
     CONSTRAINT "automation_logs_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: automation_insights
+-- 3. automation_insights
 CREATE TABLE IF NOT EXISTS "automation_insights" (
     "id"               TEXT NOT NULL,
     "workspace_id"     TEXT NOT NULL,
@@ -41,40 +44,19 @@ CREATE TABLE IF NOT EXISTS "automation_insights" (
     "status"           TEXT NOT NULL DEFAULT 'pending',
     "scanned_at"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "resolved_at"      TIMESTAMP(3),
-
     CONSTRAINT "automation_insights_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "keyword_automations_workspace_id_is_active_idx"
-    ON "keyword_automations"("workspace_id", "is_active");
+-- 4. All foreign keys and indexes — wrapped in DO blocks for idempotency
 
-CREATE INDEX IF NOT EXISTS "keyword_automations_workspace_id_keyword_idx"
-    ON "keyword_automations"("workspace_id", "keyword");
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'keyword_automations_workspace_id_fkey') THEN
+    ALTER TABLE "keyword_automations"
+      ADD CONSTRAINT "keyword_automations_workspace_id_fkey"
+      FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
--- CreateIndex
-CREATE INDEX IF NOT EXISTS "automation_logs_workspace_id_triggered_at_idx"
-    ON "automation_logs"("workspace_id", "triggered_at");
-
-CREATE INDEX IF NOT EXISTS "automation_logs_automation_id_idx"
-    ON "automation_logs"("automation_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX IF NOT EXISTS "automation_insights_workspace_id_keyword_status_key"
-    ON "automation_insights"("workspace_id", "keyword", "status");
-
-CREATE INDEX IF NOT EXISTS "automation_insights_workspace_id_status_idx"
-    ON "automation_insights"("workspace_id", "status");
-
-CREATE INDEX IF NOT EXISTS "automation_insights_workspace_id_scanned_at_idx"
-    ON "automation_insights"("workspace_id", "scanned_at");
-
--- AddForeignKey: keyword_automations → workspaces
-ALTER TABLE "keyword_automations"
-    ADD CONSTRAINT "keyword_automations_workspace_id_fkey"
-    FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey: keyword_automations → media_gallery (optional)
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'keyword_automations_media_id_fkey') THEN
     ALTER TABLE "keyword_automations"
@@ -83,23 +65,55 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- AddForeignKey: automation_logs → workspaces
-ALTER TABLE "automation_logs"
-    ADD CONSTRAINT "automation_logs_workspace_id_fkey"
-    FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'automation_logs_workspace_id_fkey') THEN
+    ALTER TABLE "automation_logs"
+      ADD CONSTRAINT "automation_logs_workspace_id_fkey"
+      FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
--- AddForeignKey: automation_logs → keyword_automations
-ALTER TABLE "automation_logs"
-    ADD CONSTRAINT "automation_logs_automation_id_fkey"
-    FOREIGN KEY ("automation_id") REFERENCES "keyword_automations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'automation_logs_automation_id_fkey') THEN
+    ALTER TABLE "automation_logs"
+      ADD CONSTRAINT "automation_logs_automation_id_fkey"
+      FOREIGN KEY ("automation_id") REFERENCES "keyword_automations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
--- AddForeignKey: automation_insights → workspaces
-ALTER TABLE "automation_insights"
-    ADD CONSTRAINT "automation_insights_workspace_id_fkey"
-    FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'automation_insights_workspace_id_fkey') THEN
+    ALTER TABLE "automation_insights"
+      ADD CONSTRAINT "automation_insights_workspace_id_fkey"
+      FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
--- AddColumns to campaigns (if not already present)
+-- Unique index
+CREATE UNIQUE INDEX IF NOT EXISTS "automation_insights_workspace_id_keyword_status_key"
+  ON "automation_insights"("workspace_id", "keyword", "status");
+
+-- Regular indexes
+CREATE INDEX IF NOT EXISTS "keyword_automations_workspace_id_is_active_idx"
+  ON "keyword_automations"("workspace_id", "is_active");
+
+CREATE INDEX IF NOT EXISTS "keyword_automations_workspace_id_keyword_idx"
+  ON "keyword_automations"("workspace_id", "keyword");
+
+CREATE INDEX IF NOT EXISTS "automation_logs_workspace_id_triggered_at_idx"
+  ON "automation_logs"("workspace_id", "triggered_at");
+
+CREATE INDEX IF NOT EXISTS "automation_logs_automation_id_idx"
+  ON "automation_logs"("automation_id");
+
+CREATE INDEX IF NOT EXISTS "automation_insights_workspace_id_status_idx"
+  ON "automation_insights"("workspace_id", "status");
+
+CREATE INDEX IF NOT EXISTS "automation_insights_workspace_id_scanned_at_idx"
+  ON "automation_insights"("workspace_id", "scanned_at");
+
+-- 5. campaigns: add columns only if not already present
 ALTER TABLE "campaigns"
-    ADD COLUMN IF NOT EXISTS "message_text"          TEXT,
-    ADD COLUMN IF NOT EXISTS "send_mode"             TEXT NOT NULL DEFAULT 'template',
-    ADD COLUMN IF NOT EXISTS "expected_reply_rate"   DOUBLE PRECISION;
+  ADD COLUMN IF NOT EXISTS "message_text"        TEXT,
+  ADD COLUMN IF NOT EXISTS "send_mode"           TEXT NOT NULL DEFAULT 'template',
+  ADD COLUMN IF NOT EXISTS "expected_reply_rate" DOUBLE PRECISION;
