@@ -123,6 +123,18 @@ jobs:
               docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle || true
               docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate resolve --rolled-back 20260403034951_add_keyword_automations_and_insights || true
               docker compose -f docker-compose.prod.yml run --rm api npx prisma migrate resolve --rolled-back 20260403211729_add_lead_generation || true
+
+              # ── 5.5 Migrate media from old volume name to new ────────────────────
+              # api-uploads → api-media (one-time, safe to re-run)
+              OLD_MEDIA=$(docker volume ls -q | grep api-uploads || true)
+              if [ -n "$OLD_MEDIA" ]; then
+                echo "Migrating media files from api-uploads to api-media volume..."
+                docker run --rm \
+                  -v whatszor_api-uploads:/src \
+                  -v whatszor_api-media:/dst \
+                  alpine sh -c "cp -rn /src/. /dst/ 2>/dev/null; echo 'Media migration done'"
+              fi
+
               if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
                 echo '❌ docker compose up failed! Fetching logs...'
                 docker compose -f docker-compose.prod.yml logs api worker || true

@@ -29,7 +29,7 @@ async function resolveMediaPath(mediaId: string): Promise<string> {
     }
 
     // Currently all media is local. In the future, this would use a storage provider.
-    return resolve(process.cwd(), env.MEDIA_DIR || 'uploads/media', media.storageKey);
+    return resolve(process.cwd(), env.MEDIA_DIR || 'media', media.storageKey);
 }
 
 export async function processOutboundMessage(job: Job): Promise<void> {
