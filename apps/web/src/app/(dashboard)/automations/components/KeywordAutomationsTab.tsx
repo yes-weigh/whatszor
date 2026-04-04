@@ -73,7 +73,7 @@ function AutomationModal({
         queryKey: ['media-gallery'],
         queryFn: () => api.get('/media-gallery').then(r => {
             if (Array.isArray(r.data)) return r.data;
-            return r.data?.media || r.data?.data || [];
+            return r.data?.media || [];
         }),
     });
 
@@ -81,7 +81,7 @@ function AutomationModal({
         queryKey: ['templates'],
         queryFn: () => api.get('/templates').then(r => {
             if (Array.isArray(r.data)) return r.data;
-            return r.data?.templates || r.data?.data || [];
+            return r.data?.templates || [];
         }),
         enabled: replyMode === 'template',
     });
