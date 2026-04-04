@@ -7,7 +7,7 @@ const log = createLogger({ module: 'ai.service' });
 
 const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 
-const MODEL = 'gemini-1.5-flash';
+const MODEL = 'gemini-2.5-flash';
 
 async function buildConversationContext(conversationId: string) {
     const conversation = await prisma.conversation.findUnique({

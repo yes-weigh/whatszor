@@ -71,17 +71,23 @@ function AutomationModal({
 
     const { data: mediaData } = useQuery({
         queryKey: ['media-gallery'],
-        queryFn: () => api.get('/media-gallery').then(r => r.data ?? []),
+        queryFn: () => api.get('/media-gallery').then(r => {
+            if (Array.isArray(r.data)) return r.data;
+            return r.data?.media || r.data?.data || [];
+        }),
     });
 
     const { data: templatesData } = useQuery({
         queryKey: ['templates'],
-        queryFn: () => api.get('/templates').then(r => r.data ?? []),
+        queryFn: () => api.get('/templates').then(r => {
+            if (Array.isArray(r.data)) return r.data;
+            return r.data?.templates || r.data?.data || [];
+        }),
         enabled: replyMode === 'template',
     });
 
-    const mediaList: Media[] = mediaData ?? [];
-    const templateList: Template[] = templatesData ?? [];
+    const mediaList: Media[] = Array.isArray(mediaData) ? mediaData : [];
+    const templateList: Template[] = Array.isArray(templatesData) ? templatesData : [];
 
     const createMutation = useMutation({
         mutationFn: (data: any) => api.post('/keyword-automations', data),
