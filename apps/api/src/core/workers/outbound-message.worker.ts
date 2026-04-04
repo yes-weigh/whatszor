@@ -154,22 +154,31 @@ export async function processOutboundMessage(job: Job): Promise<void> {
 
         if (templateData.headerMediaId) {
             const mediaType = templateData.headerMediaType?.toUpperCase();
-            const filePath = await resolveMediaPath(templateData.headerMediaId);
-            
-            // Critical for interactiveButtons + media in this Baileys fork
-            buttonMessage.hasMediaAttachment = true;
-            
-            if (mediaType === 'IMAGE') {
-                buttonMessage.image = { url: filePath };
-                buttonMessage.caption = content;
-            } else if (mediaType === 'VIDEO') {
-                buttonMessage.video = { url: filePath };
-                buttonMessage.caption = content;
-            } else if (mediaType === 'DOCUMENT') {
-                buttonMessage.document = { url: filePath };
-                buttonMessage.caption = content;
-                buttonMessage.fileName = templateData.headerFileName || 'document.pdf';
-            } else {
+            try {
+                const filePath = await resolveMediaPath(templateData.headerMediaId);
+
+                // Critical for interactiveButtons + media in this Baileys fork
+                buttonMessage.hasMediaAttachment = true;
+
+                if (mediaType === 'IMAGE') {
+                    buttonMessage.image = { url: filePath };
+                    buttonMessage.caption = content;
+                } else if (mediaType === 'VIDEO') {
+                    buttonMessage.video = { url: filePath };
+                    buttonMessage.caption = content;
+                } else if (mediaType === 'DOCUMENT') {
+                    buttonMessage.document = { url: filePath };
+                    buttonMessage.caption = content;
+                    buttonMessage.fileName = templateData.headerFileName || 'document.pdf';
+                } else {
+                    buttonMessage.text = content;
+                }
+            } catch (mediaErr: any) {
+                // Media is broken/missing — degrade gracefully to text + buttons
+                log.warn(
+                    { err: mediaErr, mediaId: templateData.headerMediaId, messageId },
+                    'Template media unavailable — falling back to text+buttons'
+                );
                 buttonMessage.text = content;
             }
         } else {
@@ -180,20 +189,29 @@ export async function processOutboundMessage(job: Job): Promise<void> {
     } else if (type === 'TEMPLATE') {
         const templateData = mediaData?.templatePayload;
         if (templateData?.headerMediaId) {
-             const mediaType = templateData.headerMediaType?.toUpperCase();
-             const filePath = await resolveMediaPath(templateData.headerMediaId);
-             
-             if (mediaType === 'IMAGE') {
-                 payload = { image: { url: filePath }, caption: content };
-             } else if (mediaType === 'VIDEO') {
-                 payload = { video: { url: filePath }, caption: content };
-             } else if (mediaType === 'DOCUMENT') {
-                 payload = { document: { url: filePath }, caption: content, fileName: templateData.headerFileName || 'document.pdf' };
-             } else {
-                 payload = { text: content };
-             }
+            const mediaType = templateData.headerMediaType?.toUpperCase();
+            try {
+                const filePath = await resolveMediaPath(templateData.headerMediaId);
+
+                if (mediaType === 'IMAGE') {
+                    payload = { image: { url: filePath }, caption: content };
+                } else if (mediaType === 'VIDEO') {
+                    payload = { video: { url: filePath }, caption: content };
+                } else if (mediaType === 'DOCUMENT') {
+                    payload = { document: { url: filePath }, caption: content, fileName: templateData.headerFileName || 'document.pdf' };
+                } else {
+                    payload = { text: content };
+                }
+            } catch (mediaErr: any) {
+                // Media is broken/missing — degrade gracefully to text-only
+                log.warn(
+                    { err: mediaErr, mediaId: templateData.headerMediaId, messageId },
+                    'Template media unavailable — falling back to text-only'
+                );
+                payload = { text: content };
+            }
         } else {
-             payload = { text: content };
+            payload = { text: content };
         }
     } else if (type === 'IMAGE' && mediaData?.mediaId) {
         payload = { 
