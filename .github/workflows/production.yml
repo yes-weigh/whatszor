@@ -127,12 +127,12 @@ jobs:
               # ── 5.5 Migrate media from old volume name to new ────────────────────
               # api-uploads → api-media (one-time, safe to re-run)
               OLD_MEDIA=\$(docker volume ls -q | grep api-uploads || true)
-              if [ -n "\$OLD_MEDIA" ]; then
-                echo "Migrating media files from api-uploads to api-media volume..."
+              if [ -n \"\$OLD_MEDIA\" ]; then
+                echo \"Migrating media files from api-uploads to api-media volume...\"
                 docker run --rm \
                   -v whatszor_api-uploads:/src \
                   -v whatszor_api-media:/dst \
-                  alpine sh -c 'cp -rn /src/. /dst/ 2>/dev/null; echo "Media migration done"'
+                  alpine sh -c 'cp -rn /src/. /dst/ 2>/dev/null; echo \"Media migration done\"'
               fi
 
               if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
