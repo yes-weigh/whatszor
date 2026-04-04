@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { Slot } from '@radix-ui/react-slot';
 import { useFormContext, Controller, FormProvider, type ControllerProps, type FieldPath, type FieldValues } from 'react-hook-form';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -10,21 +11,37 @@ function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+type FormFieldContextValue = {
+    name: string;
+};
+
+const FormFieldContext = React.createContext<FormFieldContextValue>(
+    {} as FormFieldContextValue
+);
+
 const FormField = <
     TFieldValues extends FieldValues = FieldValues,
     TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
 >({
     ...props
 }: ControllerProps<TFieldValues, TName>) => {
-    return <Controller {...props} />;
+    return (
+        <FormFieldContext.Provider value={{ name: props.name }}>
+            <Controller {...props} />
+        </FormFieldContext.Provider>
+    );
 };
 
 const useFormField = () => {
-    const fieldContext = React.useContext(FormItemContext);
+    const fieldContext = React.useContext(FormFieldContext);
     const itemContext = React.useContext(FormItemContext);
     const formContext = useFormContext();
 
     if (!fieldContext) {
+        throw new Error("useFormField should be used within <FormField>");
+    }
+
+    if (!itemContext) {
         throw new Error("useFormField should be used within <FormItem>");
     }
     
@@ -92,13 +109,13 @@ const FormLabel = React.forwardRef<
 FormLabel.displayName = "FormLabel";
 
 const FormControl = React.forwardRef<
-    React.ElementRef<"div">,
-    React.ComponentPropsWithoutRef<"div">
+    React.ElementRef<typeof Slot>,
+    React.ComponentPropsWithoutRef<typeof Slot>
 >(({ ...props }, ref) => {
     const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
 
     return (
-        <div
+        <Slot
             ref={ref}
             id={formItemId}
             aria-describedby={

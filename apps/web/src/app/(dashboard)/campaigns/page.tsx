@@ -86,6 +86,10 @@ export default function CampaignsPage() {
                     {campaigns.map((c: any) => {
                         const Icon = statusIcon[c.status] || Clock;
                         const stats = c.stats as any;
+                        const sentCount = stats?.sent ?? 0;
+                        const failedCount = stats?.failed ?? 0;
+                        const progress = stats ? Math.min(100, Math.max(0, Math.round(((sentCount + failedCount) / Math.max(c._count?.members || 1, 1)) * 100))) : 0;
+                        const progressStyle = { width: `${progress}%` };
                         return (
                             <div key={c.id} className="card flex flex-col gap-4">
                                 <div className="flex items-start justify-between">
@@ -107,7 +111,7 @@ export default function CampaignsPage() {
                                             <div className="w-full bg-border rounded-full h-2 mb-2">
                                                 <div
                                                     className="bg-primary h-2 rounded-full transition-all duration-500"
-                                                    style={{ width: `${Math.min(100, Math.round(((stats.sent + stats.failed) / (c._count?.members || 1)) * 100))}%` }}
+                                                    style={progressStyle}
                                                 ></div>
                                             </div>
                                         )}

@@ -488,7 +488,7 @@ export function KeywordAutomationsTab() {
 
     const { data, isLoading } = useQuery<KeywordAutomation[]>({
         queryKey: ['keyword-automations'],
-        queryFn: () => api.get('/keyword-automations').then(r => r.data ?? []),
+        queryFn: () => api.get('/keyword-automations').then(r => Array.isArray(r.data) ? r.data : (Array.isArray(r) ? r : [])),
     });
 
     const toggleMutation = useMutation({
@@ -505,7 +505,7 @@ export function KeywordAutomationsTab() {
         },
     });
 
-    const automations = data ?? [];
+    const automations = Array.isArray(data) ? data : [];
 
     const matchTypeStyles: Record<string, string> = {
         CONTAINS: 'bg-blue-500/15 text-blue-300',

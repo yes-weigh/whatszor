@@ -89,12 +89,36 @@ export async function createOrGetConversation(workspaceId: string, input: Create
 }
 
 
-export async function listConversations(workspaceId: string, sessionId?: string) {
+export async function listConversations(workspaceId: string, userRole: string, userId: string, sessionId?: string) {
     const where: Record<string, unknown> = { workspaceId, deletedAt: null };
     if (sessionId) {
         // Show conversations belonging to exactly this session
         where.sessionId = sessionId;
     }
+
+    // ── MEMBER session ownership guard ──────────────────────────────────────────
+    // MEMBERs may only list conversations for WhatsApp sessions they personally own.
+    // OWNER and ADMIN have full workspace-level visibility.
+    if (userRole === 'MEMBER') {
+        const sessions = await prisma.whatsAppAccount.findMany({
+            where: { workspaceId, userId, deletedAt: null },
+            select: { sessionId: true },
+        });
+        const sessionIds = sessions.map(s => s.sessionId);
+        
+        if (sessionIds.length === 0) {
+            return { items: [] }; // No sessions assigned
+        }
+
+        if (where.sessionId) {
+            if (!sessionIds.includes(where.sessionId as string)) {
+                return { items: [] }; // Prevent fetching an unassigned specific session
+            }
+        } else {
+            where.sessionId = { in: sessionIds }; // Limit all conversations to owned sessions
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
 
     const conversations = await (prisma.conversation as any).findMany({
         where,

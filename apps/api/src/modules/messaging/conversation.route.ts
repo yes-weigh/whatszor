@@ -79,7 +79,7 @@ export const conversationRoutes: FastifyPluginAsync = async (fastify: FastifyIns
 
     fastify.get('/', async (req, reply) => {
         const { sessionId } = req.query as { sessionId?: string };
-        const result = await conversationService.listConversations(req.user.workspaceId, sessionId);
+        const result = await conversationService.listConversations(req.user.workspaceId, req.user.role, req.user.sub, sessionId);
         return reply.sendSuccess(result);
     });
 

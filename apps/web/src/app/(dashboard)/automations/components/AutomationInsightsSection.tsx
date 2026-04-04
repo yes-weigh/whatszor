@@ -167,7 +167,7 @@ export function AutomationInsightsSection() {
 
     const { data, isLoading, isFetching } = useQuery<AutomationInsight[]>({
         queryKey: ['automation-insights'],
-        queryFn: () => api.get('/automation-insights').then(r => r.data ?? []),
+        queryFn: () => api.get('/automation-insights').then(r => Array.isArray(r.data) ? r.data : (Array.isArray(r) ? r : [])),
         staleTime: 5 * 60 * 1000,
     });
 
@@ -203,7 +203,7 @@ export function AutomationInsightsSection() {
         },
     });
 
-    const insights = data ?? [];
+    const insights = Array.isArray(data) ? data : [];
     const pendingCount = insights.length;
 
     if (!isLoading && pendingCount === 0 && !scanMutation.isPending && !isFetching) {
