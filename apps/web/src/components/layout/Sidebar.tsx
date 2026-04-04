@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-    MessageSquare, Users, Megaphone, Zap, LayoutDashboard,
+    MessageSquare, Users, Users2, Megaphone, Zap, LayoutDashboard,
     Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, Shield, MapPin
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -14,6 +14,7 @@ const navItems = [
     { href: '/inbox',         label: 'Inbox',         icon: MessageSquare,  requiredPermission: 'conversations:read' },
     { href: '/analytics',     label: 'Analytics',     icon: LayoutDashboard },
     { href: '/contacts',      label: 'Contacts',      icon: Users },
+    { href: '/audiences',     label: 'Audiences',     icon: Users2 },
     { href: '/campaigns',     label: 'Campaigns',     icon: Megaphone },
     { href: '/leads',         label: 'Lead Generation', icon: MapPin },
     { href: '/automations',   label: 'Automations',   icon: Zap },

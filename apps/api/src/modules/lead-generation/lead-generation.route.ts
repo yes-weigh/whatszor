@@ -135,6 +135,9 @@ export const leadGenerationRoutes: FastifyPluginAsync = async (fastify: FastifyI
         const body = req.body as {
             leadIds?: string[];
             skipExisting?: boolean;
+            // Audience integration
+            createAudience?: boolean;
+            audienceId?: string;
         } | undefined;
 
         if (body?.leadIds !== undefined && !Array.isArray(body.leadIds)) {
@@ -148,6 +151,8 @@ export const leadGenerationRoutes: FastifyPluginAsync = async (fastify: FastifyI
             const result = await leadService.convertLeads(workspaceId, id, {
                 leadIds: body?.leadIds,
                 skipExisting: body?.skipExisting ?? true,
+                createAudience: body?.createAudience,
+                audienceId: body?.audienceId,
             });
             return reply.sendSuccess(result);
         } catch (err: any) {

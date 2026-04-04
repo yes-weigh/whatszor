@@ -1,131 +1,96 @@
-/**
- * @file audience.route.ts
- * @description /crm/audiences — Audience segment management.
- *
- * An Audience is a named group of contacts used to target campaigns.
- * All responses follow the standard contract: { success: true, data: T }
- *
- * NOTE: This implementation uses the Prisma `Audience` model. If the model
- * does not exist yet, this stub returns empty paginated lists so the frontend
- * remains functional while the schema migration is pending.
- */
-
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import {
+    CreateAudienceSchema,
+    UpdateAudienceSchema,
+    AddAudienceMembersSchema,
+    RemoveAudienceMembersSchema,
+    ImportLeadListSchema,
+} from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
-import { prisma } from '../../prisma/client';
-import { ErrorCodes } from '@whatszor/shared';
+import { requireActiveWorkspace } from '../../middleware/requireActiveWorkspace';
+import * as audienceService from './audience.service';
 
 export const audienceRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
+    fastify.addHook('preHandler', requireActiveWorkspace);
 
-    /**
-     * GET /crm/audiences
-     * Returns { items: Audience[], total: number }
-     */
+    // ── List Audiences ─────────────────────────────────────────────────────────
     fastify.get('/', async (req, reply) => {
-        const workspaceId = req.user?.workspaceId;
-        if (!workspaceId) {
-            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
-        }
-
-        try {
-            const [items, total] = await Promise.all([
-                (prisma as any).audience.findMany({
-                    where: { workspaceId },
-                    include: { _count: { select: { contacts: true } } },
-                    orderBy: { createdAt: 'desc' },
-                }),
-                (prisma as any).audience.count({ where: { workspaceId } }),
-            ]);
-
-            // Normalize: expose contactCount at top level for the frontend
-            const normalizedItems = items.map((a: any) => ({
-                ...a,
-                contactCount: a._count?.contacts ?? 0,
-            }));
-
-            return reply.sendSuccess({ items: normalizedItems, total });
-        } catch (err: any) {
-            // Graceful degradation if Audience model is not yet migrated
-            if (err?.code === 'P2021' || err?.message?.includes('does not exist')) {
-                fastify.log.warn('audience.route: Audience table not found — returning empty list. Run prisma migrate to create the table.');
-                return reply.sendSuccess({ items: [], total: 0 });
-            }
-            throw err;
-        }
+        const { workspaceId } = req.user;
+        const skip = Number((req.query as any).skip) || 0;
+        const take = Number((req.query as any).take) || 50;
+        const data = await audienceService.getAudiences(workspaceId, skip, take);
+        return reply.sendSuccess(data);
     });
 
-    /**
-     * POST /crm/audiences
-     * Body: { name: string; description?: string }
-     */
-    fastify.post('/', { preHandler: requireRole('contacts:manage') }, async (req, reply) => {
-        const workspaceId = req.user?.workspaceId;
-        if (!workspaceId) {
-            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
-        }
-
-        const { name, description } = req.body as { name?: string; description?: string };
-        if (!name?.trim()) {
-            return reply.sendError({ code: 'BAD_REQUEST', message: 'Audience name is required' }, 400);
-        }
-
-        const audience = await (prisma as any).audience.create({
-            data: { workspaceId, name: name.trim(), description: description?.trim() || null },
-        });
-
-        return reply.sendSuccess({ ...audience, contactCount: 0 }, 201);
+    // ── Create Audience ────────────────────────────────────────────────────────
+    fastify.post('/', { preHandler: requireRole('contacts:create') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const input = CreateAudienceSchema.parse(req.body);
+        const data = await audienceService.createAudience(workspaceId, input);
+        return reply.code(201).sendSuccess(data);
     });
 
-    /**
-     * PATCH /crm/audiences/:id
-     * Body: { name?: string; description?: string }
-     */
-    fastify.patch('/:id', { preHandler: requireRole('contacts:manage') }, async (req, reply) => {
-        const workspaceId = req.user?.workspaceId;
+    // ── Get Single Audience ────────────────────────────────────────────────────
+    fastify.get('/:id', async (req, reply) => {
+        const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
-        if (!workspaceId) {
-            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
-        }
-
-        const { name, description } = req.body as { name?: string; description?: string };
-
-        const existing = await (prisma as any).audience.findUnique({ where: { id, workspaceId } });
-        if (!existing) {
-            return reply.sendError({ code: 'NOT_FOUND', message: 'Audience not found' }, 404);
-        }
-
-        const updated = await (prisma as any).audience.update({
-            where: { id },
-            data: {
-                ...(name !== undefined ? { name: name.trim() } : {}),
-                ...(description !== undefined ? { description: description?.trim() || null } : {}),
-            },
-            include: { _count: { select: { contacts: true } } },
-        });
-
-        return reply.sendSuccess({ ...updated, contactCount: updated._count?.contacts ?? 0 });
+        const data = await audienceService.getAudience(workspaceId, id);
+        return reply.sendSuccess(data);
     });
 
-    /**
-     * DELETE /crm/audiences/:id
-     * Deletes the audience group. Does NOT delete the underlying contacts.
-     */
-    fastify.delete('/:id', { preHandler: requireRole('contacts:manage') }, async (req, reply) => {
-        const workspaceId = req.user?.workspaceId;
+    // ── Update Audience (name / description) ───────────────────────────────────
+    fastify.patch('/:id', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
+        const { workspaceId } = req.user;
         const { id } = req.params as { id: string };
-        if (!workspaceId) {
-            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
-        }
+        const input = UpdateAudienceSchema.parse(req.body);
+        const data = await audienceService.updateAudience(workspaceId, id, input);
+        return reply.sendSuccess(data);
+    });
 
-        const existing = await (prisma as any).audience.findUnique({ where: { id, workspaceId } });
-        if (!existing) {
-            return reply.sendError({ code: 'NOT_FOUND', message: 'Audience not found' }, 404);
-        }
+    // ── Delete Audience ────────────────────────────────────────────────────────
+    fastify.delete('/:id', { preHandler: requireRole('contacts:delete') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        const data = await audienceService.deleteAudience(workspaceId, id);
+        return reply.sendSuccess(data);
+    });
 
-        await (prisma as any).audience.delete({ where: { id } });
+    // ── List Members ───────────────────────────────────────────────────────────
+    fastify.get('/:id/members', async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        const skip = Number((req.query as any).skip) || 0;
+        const take = Number((req.query as any).take) || 100;
+        const data = await audienceService.getAudienceMembers(workspaceId, id, skip, take);
+        return reply.sendSuccess(data);
+    });
 
-        return reply.status(204).send();
+    // ── Add Members ────────────────────────────────────────────────────────────
+    fastify.post('/:id/members', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        const input = AddAudienceMembersSchema.parse(req.body);
+        const data = await audienceService.addAudienceMembers(workspaceId, id, input);
+        return reply.code(201).sendSuccess(data);
+    });
+
+    // ── Remove Members ─────────────────────────────────────────────────────────
+    fastify.delete('/:id/members', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        const input = RemoveAudienceMembersSchema.parse(req.body);
+        const data = await audienceService.removeAudienceMembers(workspaceId, id, input);
+        return reply.sendSuccess(data);
+    });
+
+    // ── Sync / Import from Lead List ───────────────────────────────────────────
+    fastify.post('/:id/import-lead-list', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        const input = ImportLeadListSchema.parse(req.body);
+        const data = await audienceService.importFromLeadList(workspaceId, id, input);
+        return reply.sendSuccess(data);
     });
 };

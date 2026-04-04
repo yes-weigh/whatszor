@@ -89,7 +89,7 @@ export function useLeadGenerationDetail(id: string, filter?: 'all' | 'with_phone
     });
 
     const convertMutation = useMutation({
-        mutationFn: (params: { leadIds?: string[], skipExisting?: boolean }) => leadGenerationApi.convertLeads(id, params),
+        mutationFn: (params: { leadIds?: string[], skipExisting?: boolean, createAudience?: boolean, audienceId?: string }) => leadGenerationApi.convertLeads(id, params),
         onSuccess: (data: ConvertResult) => {
             toast.success(`Converted ${data.converted} contacts. Skipped ${data.skipped}.`);
             queryClient.invalidateQueries({ queryKey: ['leadList', id] });

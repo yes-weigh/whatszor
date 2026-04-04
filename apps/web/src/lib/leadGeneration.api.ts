@@ -42,6 +42,7 @@ export interface ConvertResult {
     skipped: number;
     failed: number;
     skippedReasons: Record<string, number>;
+    audienceId: string | null;
 }
 
 export const leadGenerationApi = {
@@ -65,7 +66,7 @@ export const leadGenerationApi = {
         return res.data;
     },
 
-    convertLeads: async (id: string, params: { leadIds?: string[], skipExisting?: boolean } = {}): Promise<ConvertResult> => {
+    convertLeads: async (id: string, params: { leadIds?: string[], skipExisting?: boolean, createAudience?: boolean, audienceId?: string } = {}): Promise<ConvertResult> => {
         const res = await api.post(`/lead-generation/${id}/convert`, params);
         return res.data;
     },

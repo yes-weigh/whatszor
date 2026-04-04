@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useFormContext, Controller, type ControllerProps, type FieldPath, type FieldValues } from 'react-hook-form';
+import { useFormContext, Controller, FormProvider, type ControllerProps, type FieldPath, type FieldValues } from 'react-hook-form';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -22,13 +22,18 @@ const FormField = <
 const useFormField = () => {
     const fieldContext = React.useContext(FormItemContext);
     const itemContext = React.useContext(FormItemContext);
-    const { getFieldState, formState } = useFormContext();
-
-    const fieldState = getFieldState(fieldContext.name, formState);
+    const formContext = useFormContext();
 
     if (!fieldContext) {
-        throw new Error("useFormField should be used within <FormField>");
+        throw new Error("useFormField should be used within <FormItem>");
     }
+    
+    if (!formContext) {
+        throw new Error("useFormField should be used within <Form>");
+    }
+
+    const { getFieldState, formState } = formContext;
+    const fieldState = getFieldState(fieldContext.name, formState);
 
     const { id } = itemContext;
 
@@ -101,7 +106,7 @@ const FormControl = React.forwardRef<
                     ? `${formDescriptionId}`
                     : `${formDescriptionId} ${formMessageId}`
             }
-            aria-invalid={error ? true : false}
+            aria-invalid={!!error}
             {...props}
         />
     );
@@ -167,8 +172,11 @@ const Input = React.forwardRef<
 });
 Input.displayName = "Input";
 
+const Form = FormProvider;
+
 export {
     useFormField,
+    Form,
     FormField,
     FormItem,
     FormLabel,

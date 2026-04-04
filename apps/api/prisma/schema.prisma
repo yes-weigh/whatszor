@@ -134,6 +134,8 @@ model ImpersonationLog {
 // ============================================================
 
 model Workspace {
+  audiences Audience[]
+
   id               String          @id @default(cuid())
   name             String
   slug             String          @unique
@@ -254,6 +256,8 @@ model RefreshToken {
 // ============================================================
 
 model Contact {
+  audienceMembers AudienceMember[]
+
   id          String @id @default(cuid())
   workspaceId String @map("workspace_id")
 
@@ -640,12 +644,15 @@ model Campaign {
 
   // Metrics for forecasting (optional)
   expectedReplyRate Float? @map("expected_reply_rate")
+  
+  audienceId  String?  @map("audience_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  audience  Audience?        @relation(fields: [audienceId], references: [id], onDelete: SetNull)
   members   CampaignMember[]
 
   @@index([workspaceId])
@@ -1106,6 +1113,8 @@ enum LeadStatus {
 }
 
 model LeadList {
+  audiences Audience[]
+
   id                  String         @id @default(cuid())
   workspaceId         String         @map("workspace_id")
 
@@ -1166,4 +1175,58 @@ model Lead {
   @@index([leadListId, hasPhone])
   @@index([workspaceId, status])
   @@map("leads")
+}
+
+// ============================================================
+// AUDIENCES — Contact Segmentation
+// Named, reusable groups of contacts that can be targeted in campaigns.
+// Members are snapshotted into CampaignMember at campaign population time.
+// ============================================================
+
+model Audience {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+
+  name        String
+  description String?
+
+  // "manual" | "lead_list"
+  sourceType  String   @default("manual") @map("source_type")
+
+  // If populated from a lead list, track the source for "Sync from Lead List"
+  leadListId  String?  @map("lead_list_id")
+
+  // Maintained by service layer (incremented/decremented on member changes)
+  memberCount Int      @default(0) @map("member_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadList  LeadList?       @relation(fields: [leadListId], references: [id], onDelete: SetNull)
+  members   AudienceMember[]
+  campaigns Campaign[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, sourceType])
+  @@map("audiences")
+}
+
+model AudienceMember {
+  id         String @id @default(cuid())
+  audienceId String @map("audience_id")
+  contactId  String @map("contact_id")
+
+  // "manual" | "lead_list"
+  sourceType String @default("manual") @map("source_type")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  audience Audience @relation(fields: [audienceId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([audienceId, contactId])
+  @@index([audienceId])
+  @@index([contactId])
+  @@map("audience_members")
 }

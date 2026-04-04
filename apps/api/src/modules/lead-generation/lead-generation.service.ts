@@ -267,11 +267,21 @@ export async function getLeadList(
  * - Checks contacts table for phone uniqueness before inserting.
  * - Marks converted/skipped leads accordingly.
  * - Updates LeadList.converted count.
+ *
+ * Optional audience integration:
+ *  - `createAudience: true` → auto-creates an Audience named after the lead list
+ *    (reuses existing if this leadListId is already linked).
+ *  - `audienceId` → adds newly converted contacts to an existing audience.
  */
 export async function convertLeads(
     workspaceId: string,
     leadListId: string,
-    input: { leadIds?: string[]; skipExisting?: boolean } = {},
+    input: {
+        leadIds?: string[];
+        skipExisting?: boolean;
+        createAudience?: boolean;
+        audienceId?: string;
+    } = {},
 ) {
     const list = await prisma.leadList.findFirst({
         where: { id: leadListId, workspaceId },
@@ -298,13 +308,14 @@ export async function convertLeads(
     const leads = await prisma.lead.findMany({ where: leadsWhere });
 
     if (leads.length === 0) {
-        return { converted: 0, skipped: 0, failed: 0, skippedReasons: {} };
+        return { converted: 0, skipped: 0, failed: 0, skippedReasons: {}, audienceId: input.audienceId ?? null };
     }
 
     let converted = 0;
     let skipped = 0;
     let failed = 0;
     const skippedReasons: Record<string, number> = {};
+    const newContactIds: string[] = [];
 
     for (const lead of leads) {
         if (!lead.phone) continue; // safety guard (hasPhone filter should prevent this)
@@ -323,6 +334,8 @@ export async function convertLeads(
                 });
                 skipped++;
                 skippedReasons['phone_exists'] = (skippedReasons['phone_exists'] ?? 0) + 1;
+                // Still add the existing contact to the audience if requested
+                newContactIds.push(existing.id);
                 continue;
             }
 
@@ -346,6 +359,7 @@ export async function convertLeads(
                 data: { status: 'CONVERTED', contactId: contact.id },
             });
 
+            newContactIds.push(contact.id);
             converted++;
         } catch (err: any) {
             // Handle unique constraint violation (race condition — phone added concurrently)
@@ -380,7 +394,61 @@ export async function convertLeads(
 
     log.info({ leadListId, converted, skipped, failed }, 'Lead conversion complete');
 
-    return { converted, skipped, failed, skippedReasons };
+    // ── Audience integration ──────────────────────────────────────────────────
+    let resolvedAudienceId: string | null = input.audienceId ?? null;
+
+    if ((input.createAudience || resolvedAudienceId) && newContactIds.length > 0) {
+        try {
+            if (input.createAudience && !resolvedAudienceId) {
+                // Dedup: reuse existing audience if this leadListId is already linked
+                const existing = await prisma.audience.findFirst({
+                    where: { workspaceId, leadListId },
+                    select: { id: true },
+                });
+
+                if (existing) {
+                    resolvedAudienceId = existing.id;
+                } else {
+                    // Create a new audience named after the lead list
+                    const audience = await prisma.audience.create({
+                        data: {
+                            workspaceId,
+                            name: list.name || list.query,
+                            sourceType: 'lead_list',
+                            leadListId,
+                            memberCount: 0,
+                        },
+                    });
+                    resolvedAudienceId = audience.id;
+                }
+            }
+
+            if (resolvedAudienceId) {
+                const result = await prisma.audienceMember.createMany({
+                    data: newContactIds.map(contactId => ({
+                        audienceId: resolvedAudienceId as string,
+                        contactId,
+                        sourceType: 'lead_list',
+                    })),
+                    skipDuplicates: true,
+                });
+
+                if (result.count > 0) {
+                    await prisma.audience.update({
+                        where: { id: resolvedAudienceId },
+                        data: { memberCount: { increment: result.count } },
+                    });
+                }
+
+                log.info({ audienceId: resolvedAudienceId, added: result.count }, 'Contacts added to audience after conversion');
+            }
+        } catch (audienceErr) {
+            // Non-fatal: log but don't fail the conversion
+            log.error({ audienceErr }, 'Failed to add converted contacts to audience — non-fatal');
+        }
+    }
+
+    return { converted, skipped, failed, skippedReasons, audienceId: resolvedAudienceId };
 }
 
 /**

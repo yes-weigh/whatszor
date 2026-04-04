@@ -16,10 +16,13 @@ export async function createCampaign(workspaceId: string, input: CreateCampaignI
             messageText: input.messageText || null,
             expectedReplyRate: input.expectedReplyRate || null,
             scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
+            audienceId: input.audienceId || null,
         },
     });
 
-    if (input.contactIds && input.contactIds.length > 0) {
+    if (input.audienceId) {
+        await populateFromAudience(workspaceId, campaign.id, input.audienceId);
+    } else if (input.contactIds && input.contactIds.length > 0) {
         const payload = input.contactIds.map(id => ({ contactId: id }));
         await addCampaignMembers(workspaceId, campaign.id, { members: payload });
     }
@@ -272,3 +275,75 @@ export async function deleteCampaign(workspaceId: string, campaignId: string) {
 
     return { deleted: true };
 }
+
+/**
+ * Snapshot all members of an Audience into the Campaign's CampaignMember list.
+ * Must be called before the campaign is started. Campaign worker only reads
+ * CampaignMember rows — the audience is NOT queried at send time.
+ *
+ * Guards:
+ *  - Campaign must be DRAFT or SCHEDULED
+ *  - Audience must have at least one member (prevents empty-blast)
+ *  - Campaign and Audience must belong to the same workspace
+ */
+export async function populateFromAudience(
+    workspaceId: string,
+    campaignId: string,
+    audienceId: string,
+) {
+    const campaign = await getCampaign(workspaceId, campaignId);
+
+    if (campaign.status !== 'DRAFT' && campaign.status !== 'SCHEDULED') {
+        throw {
+            statusCode: 400,
+            code: ErrorCodes.BAD_REQUEST,
+            message: 'Cannot populate members into a running or completed campaign',
+        };
+    }
+
+    // Verify audience belongs to workspace
+    const audience = await prisma.audience.findFirst({
+        where: { id: audienceId, workspaceId },
+        select: { id: true, memberCount: true },
+    });
+    if (!audience) {
+        throw { statusCode: 404, code: ErrorCodes.NOT_FOUND, message: 'Audience not found' };
+    }
+
+    if (audience.memberCount === 0) {
+        throw {
+            statusCode: 400,
+            code: ErrorCodes.BAD_REQUEST,
+            message: 'Audience has no members. Add contacts to the audience before running a campaign.',
+        };
+    }
+
+    // Snapshot: read all audience members at this moment
+    const members = await prisma.audienceMember.findMany({
+        where: { audienceId },
+        select: { contactId: true },
+    });
+
+    const contactIds = members.map(m => m.contactId);
+
+    // Bulk insert into campaign (skipping existing duplicates)
+    const created = await prisma.campaignMember.createMany({
+        data: contactIds.map(contactId => ({
+            campaignId,
+            contactId,
+            variables: {},
+            templateVersionId: campaign.templateVersionId,
+            status: 'PENDING',
+        })),
+        skipDuplicates: true,
+    });
+
+    // Track which audience sourced this campaign (informational)
+    await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { audienceId },
+    });
+
+    return { added: created.count, audienceId, memberCount: audience.memberCount };
+}
+

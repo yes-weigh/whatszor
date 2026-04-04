@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { useLeadGenerationDetail } from '@/hooks/useLeadGeneration';
 import type { Lead } from '@/lib/leadGeneration.api';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { 
     ArrowLeft,
     Phone,
@@ -14,7 +15,8 @@ import {
     XCircle,
     Loader2,
     AlertTriangle,
-    Database
+    Database,
+    Users2,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
@@ -25,6 +27,7 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
     const router = useRouter();
     const { id } = params;
     const [filter, setFilter] = React.useState<'all' | 'with_phone' | 'converted' | 'raw'>('all');
+    const [createdAudienceId, setCreatedAudienceId] = React.useState<string | null>(null);
 
     const { 
         list, 
@@ -34,9 +37,21 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
         isConverting 
     } = useLeadGenerationDetail(id, filter);
 
-    const handleConvertAll = async () => {
-        if (!confirm('Convert all available leads with phone numbers to CRM Contacts? existing phones will be skipped.')) return;
+    const handleConvertOnly = async () => {
+        if (!confirm('Convert all available leads with phone numbers to CRM Contacts? Existing phones will be skipped.')) return;
         await convertLeads({ skipExisting: true });
+        toast.success('Leads converted to contacts');
+    };
+
+    const handleConvertAndCreateAudience = async () => {
+        if (!confirm('Convert leads to Contacts AND create a named Audience from them? This is the recommended flow for running targeted campaigns.')) return;
+        const result = await convertLeads({ skipExisting: true, createAudience: true });
+        if ((result as any)?.audienceId) {
+            setCreatedAudienceId((result as any).audienceId);
+            toast.success(`Converted ${(result as any)?.converted ?? 0} leads — Audience created!`);
+        } else {
+            toast.success('Leads converted to contacts');
+        }
     };
 
     const columns: ColumnDef<Lead>[] = [
@@ -223,19 +238,56 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                                 </Button>
                             </div>
 
-                            <Button 
-                                variant="accent" 
-                                onClick={handleConvertAll} 
-                                disabled={list.withPhone === 0 || isConverting || list.withPhone === list.converted}
-                            >
-                                {isConverting ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Database className="mr-2 h-4 w-4" />
-                                )}
-                                {isConverting ? 'Converting...' : 'Convert to Contacts'}
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                {/* Secondary: convert to contacts only */}
+                                <Button
+                                    variant="secondary"
+                                    onClick={handleConvertOnly}
+                                    disabled={list.withPhone === 0 || isConverting || list.withPhone === list.converted}
+                                    className="gap-2 text-sm"
+                                >
+                                    {isConverting ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Database className="h-4 w-4" />
+                                    )}
+                                    Contacts Only
+                                </Button>
+
+                                {/* Primary: convert + create audience */}
+                                <Button
+                                    variant="accent"
+                                    onClick={handleConvertAndCreateAudience}
+                                    disabled={list.withPhone === 0 || isConverting || list.withPhone === list.converted}
+                                    className="gap-2"
+                                >
+                                    {isConverting ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Users2 className="h-4 w-4" />
+                                    )}
+                                    {isConverting ? 'Converting...' : 'Convert & Create Audience'}
+                                </Button>
+                            </div>
                         </div>
+
+                        {/* Audience created banner */}
+                        {createdAudienceId && (
+                            <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm animate-in fade-in">
+                                <div className="flex items-center gap-2">
+                                    <Users2 size={16} />
+                                    <span>Audience created from this lead list.</span>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-accent hover:text-accent/80 gap-1.5 text-xs"
+                                    onClick={() => router.push(`/audiences/${createdAudienceId}`)}
+                                >
+                                    View Audience →
+                                </Button>
+                            </div>
+                        )}
 
                         <div className="animate-in fade-in duration-500">
                             <DataTable 

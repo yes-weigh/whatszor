@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/Modal';
 import { 
     FormField, 
+    Form,
     FormItem, 
     FormLabel, 
     FormControl, 
@@ -229,6 +230,7 @@ export default function LeadGenerationPage() {
                                 </ModalHeader>
                                 
                                 {!previewData ? (
+                                    <Form {...form}>
                                     <form onSubmit={form.handleSubmit(onPreviewSubmit)} className="space-y-4 py-4">
                                         <div className="grid gap-4">
                                             <FormField
@@ -268,6 +270,7 @@ export default function LeadGenerationPage() {
                                             </Button>
                                         </ModalFooter>
                                     </form>
+                                    </Form>
                                 ) : (
                                     <div className="space-y-4 py-4">
                                         <div className="p-4 bg-accent/5 rounded-lg border border-accent/20 flex flex-col items-center justify-center text-center">

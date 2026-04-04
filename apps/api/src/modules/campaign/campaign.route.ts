@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import {
     CreateCampaignSchema,
     UpdateCampaignSchema,
-    AddCampaignMembersSchema
+    AddCampaignMembersSchema,
+    PopulateCampaignFromAudienceSchema,
 } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
@@ -85,6 +86,16 @@ export const campaignRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
 
         const data = await campaignService.cancelCampaign(workspaceId, id);
         return reply.sendSuccess(data);
+    });
+
+    // Populate Campaign Members from an Audience (snapshot at call time)
+    fastify.post('/:id/populate-from-audience', { preHandler: requireRole('campaigns:update') }, async (req, reply) => {
+        const { workspaceId } = req.user;
+        const { id } = req.params as { id: string };
+        const { audienceId } = PopulateCampaignFromAudienceSchema.parse(req.body);
+
+        const data = await campaignService.populateFromAudience(workspaceId, id, audienceId);
+        return reply.code(201).sendSuccess(data);
     });
 
     // Delete Campaign

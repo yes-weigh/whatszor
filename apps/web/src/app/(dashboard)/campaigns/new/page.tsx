@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { useAudiences } from '@/hooks/useAudiences';
 import { ArrowLeft, ArrowRight, Check, Megaphone, Users, Eye, Send, Calendar, Loader2, Search, X } from 'lucide-react';
 
 type Step = 'template' | 'contacts' | 'preview' | 'schedule';
@@ -29,11 +30,15 @@ export default function NewCampaignPage() {
     const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [contactSearch, setContactSearch] = useState('');
+    const [targetType, setTargetType] = useState<'contacts' | 'audience'>('audience');
+    const [selectedAudienceId, setSelectedAudienceId] = useState<string>('');
     const [name, setName] = useState('');
     const [whatsappAccountId, setWhatsappAccountId] = useState('');
     const [scheduleType, setScheduleType] = useState<'now' | 'later'>('now');
     const [scheduledAt, setScheduledAt] = useState('');
     const [isFastMode, setIsFastMode] = useState(false);
+    
+    const { audiences } = useAudiences();
 
     const { data: templates = [] } = useQuery({
         queryKey: ['templates'],
@@ -84,7 +89,10 @@ export default function NewCampaignPage() {
 
     const canNext = () => {
         if (step === 'template') return messageType === 'template' ? !!selectedTemplate : !!messageText.trim();
-        if (step === 'contacts') return selectedContacts.length > 0;
+        if (step === 'contacts') {
+            if (targetType === 'contacts') return selectedContacts.length > 0;
+            if (targetType === 'audience') return !!selectedAudienceId;
+        }
         if (step === 'preview') return !!name.trim();
         return true;
     };
@@ -94,7 +102,8 @@ export default function NewCampaignPage() {
             name,
             templateId: messageType === 'template' ? selectedTemplate?.id : undefined,
             messageText: messageType === 'free_text' ? messageText : undefined,
-            contactIds: selectedContacts,
+            contactIds: targetType === 'contacts' ? selectedContacts : [],
+            audienceId: targetType === 'audience' ? selectedAudienceId : undefined,
             whatsappAccountId: whatsappAccountId || undefined,
             status: 'DRAFT',
             scheduledAt: scheduleType === 'later' && scheduledAt ? new Date(scheduledAt).toISOString() : null,
@@ -216,50 +225,102 @@ export default function NewCampaignPage() {
                     </div>
                 )}
 
-                {/* STEP 2: Contacts */}
+                {/* STEP 2: Contacts / Audience */}
                 {step === 'contacts' && (
-                    <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-bold text-primary">Select Recipients</h2>
-                                <p className="text-xs text-muted">Choose who will receive this campaign. Filter by tags or last active if needed.</p>
+                    <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div>
+                            <h2 className="text-lg font-bold text-primary">Select Recipients</h2>
+                            <p className="text-sm text-muted">Choose who will receive this campaign.</p>
+                        </div>
+
+                        <div className="flex bg-elevated rounded-lg p-1 w-max border border-theme">
+                            <button 
+                                onClick={() => setTargetType('audience')}
+                                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${targetType === 'audience' ? 'bg-surface shadow text-primary border border-theme' : 'text-muted hover:text-primary'}`}
+                            >
+                                Audience Segment
+                            </button>
+                            <button 
+                                onClick={() => setTargetType('contacts')}
+                                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${targetType === 'contacts' ? 'bg-surface shadow text-primary border border-theme' : 'text-muted hover:text-primary'}`}
+                            >
+                                Individual Contacts
+                            </button>
+                        </div>
+
+                        {targetType === 'audience' ? (
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs font-medium text-secondary">Select an Audience</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {(audiences || []).map((a: any) => (
+                                        <button key={a.id}
+                                            onClick={() => setSelectedAudienceId(a.id)}
+                                            className={`card text-left transition-all ${
+                                                selectedAudienceId === a.id
+                                                    ? 'border-accent ring-1 ring-accent bg-accent/5'
+                                                    : 'hover:border-accent/40'
+                                            }`}>
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div>
+                                                    <p className="font-semibold text-sm text-primary">{a.name}</p>
+                                                    <p className="text-xs text-muted mt-0.5">{a.memberCount} members</p>
+                                                </div>
+                                                {selectedAudienceId === a.id && (
+                                                    <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center shrink-0">
+                                                        <Check size={11} className="text-white" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </button>
+                                    ))}
+                                    {(audiences?.length || 0) === 0 && (
+                                        <p className="text-sm text-muted col-span-2 py-8 text-center border border-dashed border-theme rounded-lg">
+                                            No audiences found. Create one in the Audiences tab.
+                                        </p>
+                                    )}
+                                </div>
                             </div>
-                            <div className="flex gap-2 text-xs">
-                                <button onClick={selectAll} className="text-accent hover:underline">Select all</button>
-                                <span className="text-muted">·</span>
-                                <button onClick={clearAll} className="text-muted hover:text-primary">Clear</button>
+                        ) : (
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme bg-elevated focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/50 transition-all w-64">
+                                        <Search size={13} className="text-muted" />
+                                        <input className="bg-transparent text-sm outline-none flex-1 text-primary placeholder:text-muted"
+                                            placeholder="Search contacts…"
+                                            autoFocus
+                                            value={contactSearch} onChange={e => setContactSearch(e.target.value)} />
+                                        {contactSearch && (
+                                            <button title="Clear search" aria-label="Clear contact search" onClick={() => setContactSearch('')}><X size={13} className="text-muted" /></button>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-2 text-xs">
+                                        <button onClick={selectAll} className="text-accent hover:underline">Select all</button>
+                                        <span className="text-muted">·</span>
+                                        <button onClick={clearAll} className="text-muted hover:text-primary">Clear</button>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between text-xs text-muted">
+                                    <span className="font-semibold text-primary">{selectedContacts.length} selected</span>
+                                    <span>{(contacts as any[]).length} total contacts</span>
+                                </div>
+                                <div className="card p-0 overflow-hidden max-h-96 overflow-y-auto">
+                                    {(contacts as any[]).map((c: any) => (
+                                        <button key={c.id} onClick={() => toggleContact(c.id)}
+                                            className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-theme hover:bg-hover transition-colors">
+                                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                                selectedContacts.includes(c.id) ? 'bg-accent border-accent' : 'border-theme'
+                                            }`}>
+                                                {selectedContacts.includes(c.id) && <Check size={11} className="text-white" />}
+                                            </div>
+                                            <div className="flex-1 text-left">
+                                                <p className="text-sm font-medium text-primary">{c.firstName} {c.lastName}</p>
+                                                <p className="text-xs text-muted">{c.phone || c.email || '—'}</p>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme bg-elevated focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/50 transition-all">
-                            <Search size={13} className="text-muted" />
-                            <input className="bg-transparent text-sm outline-none flex-1 text-primary placeholder:text-muted"
-                                placeholder="Search by name, tag, or phone…"
-                                autoFocus
-                                value={contactSearch} onChange={e => setContactSearch(e.target.value)} />
-                            {contactSearch && (
-                            <button title="Clear search" aria-label="Clear contact search" onClick={() => setContactSearch('')}><X size={13} className="text-muted" /></button>
-                            )}
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-muted">
-                            <span className="font-semibold text-primary">{selectedContacts.length} selected</span>
-                            <span>{(contacts as any[]).length} total contacts</span>
-                        </div>
-                        <div className="card p-0 overflow-hidden max-h-96 overflow-y-auto">
-                            {(contacts as any[]).map((c: any) => (
-                                <button key={c.id} onClick={() => toggleContact(c.id)}
-                                    className="w-full flex items-center gap-3 px-4 py-2.5 border-b border-theme hover:bg-hover transition-colors">
-                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                                        selectedContacts.includes(c.id) ? 'bg-accent border-accent' : 'border-theme'
-                                    }`}>
-                                        {selectedContacts.includes(c.id) && <Check size={11} className="text-white" />}
-                                    </div>
-                                    <div className="flex-1 text-left">
-                                        <p className="text-sm font-medium text-primary">{c.firstName} {c.lastName}</p>
-                                        <p className="text-xs text-muted">{c.phone || c.email || '—'}</p>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
+                        )}
                     </div>
                 )}
 
@@ -299,8 +360,10 @@ export default function NewCampaignPage() {
                             </div>
                             <div className="card bg-elevated/50">
                                 <p className="text-xs text-muted font-medium uppercase tracking-wide mb-3">Recipients</p>
-                                <p className="text-2xl font-bold text-primary">{selectedContacts.length}</p>
-                                <p className="text-xs text-muted mt-1">contacts selected</p>
+                                <p className="text-2xl font-bold text-primary">
+                                    {targetType === 'contacts' ? selectedContacts.length : (audiences.find(a => a.id === selectedAudienceId)?.memberCount || 0)}
+                                </p>
+                                <p className="text-xs text-muted mt-1">{targetType === 'contacts' ? 'contacts selected' : 'audience members'}</p>
                             </div>
                         </div>
                         {/* WhatsApp phone preview */}
@@ -362,18 +425,25 @@ export default function NewCampaignPage() {
                         <div className="card bg-accent/5 border-accent/20">
                             <p className="text-sm font-semibold text-primary mb-2">Campaign Impact</p>
                             <div className="flex flex-col gap-2 text-xs text-muted">
-                                <div className="flex justify-between">
-                                    <span className="text-secondary">Recipients:</span>
-                                    <span className="font-semibold text-primary">{selectedContacts.length}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-secondary">Est. Time to Finish:</span>
-                                    <span className="font-semibold text-primary">~{isFastMode ? Math.ceil(selectedContacts.length * 1.5 / 60) : Math.ceil(selectedContacts.length * 5 / 60)} mins</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-secondary">Expected Replies (15%):</span>
-                                    <span className="font-semibold text-primary">~{Math.round(selectedContacts.length * 0.15)}</span>
-                                </div>
+                                {(() => {
+                                    const recipientCount = targetType === 'contacts' ? selectedContacts.length : (audiences.find(a => a.id === selectedAudienceId)?.memberCount || 0);
+                                    return (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-secondary">Recipients:</span>
+                                                <span className="font-semibold text-primary">{recipientCount}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-secondary">Est. Time to Finish:</span>
+                                                <span className="font-semibold text-primary">~{isFastMode ? Math.ceil(recipientCount * 1.5 / 60) : Math.ceil(recipientCount * 5 / 60)} mins</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-secondary">Expected Replies (15%):</span>
+                                                <span className="font-semibold text-primary">~{Math.round(recipientCount * 0.15)}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>

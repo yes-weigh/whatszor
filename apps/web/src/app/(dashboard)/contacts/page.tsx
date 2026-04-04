@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/Modal';
 import { 
     FormField, 
+    Form,
     FormItem, 
     FormLabel, 
     FormControl, 
@@ -239,6 +240,7 @@ export default function ContactsPage() {
                                     <ModalHeader>
                                         <ModalTitle>Add New Contact</ModalTitle>
                                     </ModalHeader>
+                                    <Form {...form}>
                                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <FormField
@@ -303,6 +305,7 @@ export default function ContactsPage() {
                                             </Button>
                                         </ModalFooter>
                                     </form>
+                                    </Form>
                                 </ModalContent>
                             </Modal>
                         )}
