@@ -25,8 +25,8 @@ ADD COLUMN     "audience_id" TEXT;
 ALTER TABLE "keyword_automations" ADD COLUMN     "legacy_id" TEXT,
 ADD COLUMN     "priority" INTEGER NOT NULL DEFAULT 0,
 ADD COLUMN     "template_id" TEXT,
-DROP COLUMN "match_type",
-ADD COLUMN     "match_type" "MatchType" NOT NULL DEFAULT 'CONTAINS',
+ALTER COLUMN "match_type" TYPE "MatchType" USING UPPER("match_type"::text)::"MatchType",
+ALTER COLUMN "match_type" SET DEFAULT 'CONTAINS',
 ALTER COLUMN "reply_text" DROP NOT NULL,
 ALTER COLUMN "updated_at" DROP DEFAULT;
 
