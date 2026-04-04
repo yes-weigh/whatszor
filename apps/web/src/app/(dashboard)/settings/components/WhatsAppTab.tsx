@@ -231,6 +231,7 @@ function SessionCard({
     }[normalStatus] ?? { color: 'text-zinc-500', bg: 'bg-zinc-50 border-zinc-200', icon: <WifiOff size={14} />, label: session.status };
 
     return (
+        <div className={`relative ${showAssignMenu ? 'z-20' : 'z-0'}`}>
         <div className="card flex items-center gap-4 flex-wrap">
             {/* Avatar */}
             <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${session.status === 'CONNECTED' ? 'bg-green-100 text-green-600' : 'bg-surface-elevated text-muted'
@@ -318,7 +319,7 @@ function SessionCard({
             </button>
 
             {/* Actions */}
-            <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+            <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end ml-auto">
                 {/* Assign to Member — owner/admin only */}
                 {canAssign && (
                     <div className="relative">
@@ -340,7 +341,7 @@ function SessionCard({
                         </button>
                         {showAssignMenu && (
                             <div
-                                className="absolute right-0 top-9 z-30 bg-surface border border-theme rounded-xl shadow-xl w-56 overflow-hidden"
+                                className="absolute left-0 sm:right-0 sm:left-auto top-9 z-30 bg-surface border border-theme rounded-xl shadow-xl w-56 overflow-hidden"
                                 onMouseLeave={() => setShowAssignMenu(false)}
                             >
                                 <p className="px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wide border-b border-theme">Assign to member</p>
@@ -404,7 +405,7 @@ function SessionCard({
                             </button>
                             {showResyncMenu && (
                                 <div
-                                    className="absolute right-0 top-9 z-20 bg-surface border border-theme rounded-xl shadow-xl w-56 overflow-hidden"
+                                    className="absolute left-0 sm:right-0 sm:left-auto top-9 z-20 bg-surface border border-theme rounded-xl shadow-xl w-56 overflow-hidden"
                                     onMouseLeave={() => setShowResyncMenu(false)}
                                 >
                                     <button
@@ -481,6 +482,7 @@ function SessionCard({
                     </div>
                 </div>
             </div>
+        </div>
         </div>
     );
 }
