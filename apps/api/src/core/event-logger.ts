@@ -31,6 +31,7 @@ export type EventType =
     | 'workspace_activated'          // Admin reactivated a workspace
     | 'member_role_changed'          // OWNER changed a member's role
     | 'session_reassigned'           // Session ownership transferred between members
+    | 'session_unassigned'           // Session ownership cleared (no longer assigned)
     | 'qr_relay_triggered'           // Admin triggered QR regeneration for a member
     // ── Lead Generation Events ────────────────────────
     | 'lead_list_created'            // User queued a new lead list

@@ -397,8 +397,22 @@ class WhatsAppManager extends EventEmitter {
         status: string;
         qrCode?: string;
         isKnowledgeBot: boolean;
+        userId: string | null;
+        assignedUser: { name: string; email: string } | null;
     }>> {
-        const accounts = await import('../../core/database/repositories/WhatsAppAccountRepository').then(m => m.WhatsAppAccountRepository.list(ctx));
+        // Include the assigned user relation so we can show assignment in the UI
+        const accounts = await prisma.whatsAppAccount.findMany({
+            where: {
+                workspaceId: ctx.workspaceId,
+                deletedAt: null,
+                // MEMBERs only see their own sessions
+                ...(ctx.role === 'MEMBER' ? { userId: ctx.userId } : {}),
+            },
+            include: {
+                user: { select: { name: true, email: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
 
         return accounts.map(account => {
             const isSocketAlive = this.sockets.has(account.sessionId);
@@ -417,6 +431,8 @@ class WhatsAppManager extends EventEmitter {
                 status: liveStatus,
                 qrCode: qrCode || undefined,
                 isKnowledgeBot: !!account.botMode,
+                userId: account.userId ?? null,
+                assignedUser: (account as any).user ?? null,
             };
         });
     }

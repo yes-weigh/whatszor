@@ -473,7 +473,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
      *   - Emits session_reassigned audit event
      */
     fastify.post('/sessions/:sessionId/transfer', {
-        preHandler: requireRole('OWNER'),
+        preHandler: requireRole('members:manage'), // OWNER and ADMIN only
     }, async (req, reply) => {
         const { workspaceId, sub: actorId } = req.user;
         const { sessionId } = req.params as { sessionId: string };
@@ -492,6 +492,25 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         if (!account) {
             return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
         }
+
+        // ── Handle unassign (special sentinel value) ────────────────────────
+        if (targetUserId === '__unassign__') {
+            const previousOwners: string[] = Array.isArray(account.previousOwnerIds)
+                ? account.previousOwnerIds as string[]
+                : [];
+            if (account.userId && !previousOwners.includes(account.userId)) {
+                previousOwners.push(account.userId);
+            }
+            await prisma.whatsAppAccount.update({
+                where: { id: account.id },
+                data: { userId: null, previousOwnerIds: previousOwners },
+            });
+            await logEvent(workspaceId, 'session_unassigned', 'whatsapp_sessions', {
+                sessionId, previousOwnerId: account.userId, removedBy: actorId,
+            }).catch(() => {});
+            return reply.sendSuccess({ message: 'Session unassigned.', sessionId });
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         // 2. Validate target user is a member of this workspace
         const targetMember = await prisma.workspaceMember.findUnique({
@@ -521,7 +540,7 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             data: {
                 userId: targetUserId,
                 previousOwnerIds: previousOwners,
-                reauthRequiredAt: null,  // Clear any pending reauth — new owner starts fresh
+                reauthRequiredAt: null,
             },
         });
 

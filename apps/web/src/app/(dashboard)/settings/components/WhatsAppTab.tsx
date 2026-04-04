@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
 import api from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import {
     Smartphone, CheckCircle2, MonitorSmartphone, Unplug,
     Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain, Edit2,
-    AlertTriangle, RefreshCcw
+    AlertTriangle, RefreshCcw, UserCheck, UserX, ChevronDown
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -21,6 +22,8 @@ interface WASession {
     status: 'DISCONNECTED' | 'CONNECTING' | 'NEEDS_SCAN' | 'CONNECTED' | 'QR_PENDING';
     qrCode?: string;
     isKnowledgeBot: boolean;
+    userId: string | null;
+    assignedUser: { name: string; email: string } | null;
 }
 
 /** Normalise raw API session shape → WASession */
@@ -155,7 +158,15 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void, onCreate
 
 // ── Session Card ───────────────────────────────────────────────────────────
 
-function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; onReconnect: (s: WASession) => void; onOpenQR: (s: WASession) => void }) {
+function SessionCard({
+    session, onReconnect, onOpenQR, members, canAssign
+}: {
+    session: WASession;
+    onReconnect: (s: WASession) => void;
+    onOpenQR: (s: WASession) => void;
+    members: any[];
+    canAssign: boolean;
+}) {
     const qc = useQueryClient();
     const [isEditingName, setIsEditingName] = useState(false);
     const [editName, setEditName] = useState(session.name);
@@ -184,7 +195,21 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
         onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] }),
     });
 
+    const [showAssignMenu, setShowAssignMenu] = useState(false);
     const [showResyncMenu, setShowResyncMenu] = useState(false);
+
+    const assignMutation = useMutation({
+        mutationFn: (targetUserId: string | null) =>
+            api.post(`/whatsapp/sessions/${session.sessionId}/transfer`, { targetUserId }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['wa-accounts'] });
+            setShowAssignMenu(false);
+        },
+        onError: (e: any) => {
+            alert(e.response?.data?.message || 'Failed to assign session');
+            setShowAssignMenu(false);
+        },
+    });
 
     const deleteMutation = useMutation({
         mutationFn: () => api.delete(`/whatsapp/sessions/${session.sessionId}`),
@@ -265,6 +290,18 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
                     </div>
                 )}
                 <p className="text-xs text-secondary truncate w-full">{session.phoneNumber || 'No number yet'}</p>
+                {/* Assigned member badge */}
+                {session.assignedUser ? (
+                    <div className="flex items-center gap-1 mt-1">
+                        <UserCheck size={11} className="text-green-500 shrink-0" />
+                        <span className="text-xs text-green-600 font-medium truncate">{session.assignedUser.name}</span>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-1 mt-1">
+                        <UserX size={11} className="text-muted shrink-0" />
+                        <span className="text-xs text-muted">Unassigned</span>
+                    </div>
+                )}
             </div>
 
             {/* Status pill */}
@@ -281,7 +318,69 @@ function SessionCard({ session, onReconnect, onOpenQR }: { session: WASession; o
             </button>
 
             {/* Actions */}
-            <div className="flex items-center gap-1 flex-shrink-0">
+            <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+                {/* Assign to Member — owner/admin only */}
+                {canAssign && (
+                    <div className="relative">
+                        <button
+                            title="Assign to member"
+                            className={`btn btn-sm flex items-center gap-1.5 border ${
+                                session.assignedUser
+                                    ? 'border-green-500/40 text-green-600 bg-green-50 hover:bg-green-100'
+                                    : 'border-surface-elevated text-secondary bg-transparent hover:text-primary'
+                            }`}
+                            onClick={() => setShowAssignMenu(v => !v)}
+                            disabled={assignMutation.isPending}
+                        >
+                            {assignMutation.isPending
+                                ? <Loader2 size={13} className="animate-spin" />
+                                : <UserCheck size={13} />}
+                            <span className="text-xs">{session.assignedUser ? session.assignedUser.name : 'Assign'}</span>
+                            <ChevronDown size={11} />
+                        </button>
+                        {showAssignMenu && (
+                            <div
+                                className="absolute right-0 top-9 z-30 bg-surface border border-theme rounded-xl shadow-xl w-56 overflow-hidden"
+                                onMouseLeave={() => setShowAssignMenu(false)}
+                            >
+                                <p className="px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wide border-b border-theme">Assign to member</p>
+                                {members.filter((m: any) => m.role !== 'OWNER').map((m: any) => (
+                                    <button
+                                        key={m.id}
+                                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-hover transition-colors flex items-center gap-2 ${
+                                            session.userId === m.userId ? 'text-green-600 font-semibold' : 'text-primary'
+                                        }`}
+                                        onClick={() => assignMutation.mutate(m.userId)}
+                                    >
+                                        <div className="w-6 h-6 rounded-full bg-accent/20 text-accent flex items-center justify-center text-xs font-bold shrink-0">
+                                            {m.user?.name?.charAt(0)?.toUpperCase() ?? '?'}
+                                        </div>
+                                        <div className="flex flex-col min-w-0">
+                                            <span className="truncate">{m.user?.name}</span>
+                                            <span className="text-xs text-muted truncate">{m.role}</span>
+                                        </div>
+                                        {session.userId === m.userId && <CheckCircle2 size={13} className="ml-auto text-green-500 shrink-0" />}
+                                    </button>
+                                ))}
+                                {members.filter((m: any) => m.role !== 'OWNER').length === 0 && (
+                                    <p className="px-4 py-3 text-xs text-muted">No members to assign to</p>
+                                )}
+                                {session.userId && (
+                                    <>
+                                        <div className="border-t border-theme" />
+                                        <button
+                                            className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                                            onClick={() => assignMutation.mutate('__unassign__')}
+                                        >
+                                            <UserX size={13} /> Unassign
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {session.status === 'DISCONNECTED' && (
                     <button
                         title="Reconnect"
@@ -392,12 +491,21 @@ export function WhatsAppTab() {
     const qc = useQueryClient();
     const [showAddModal, setShowAddModal] = useState(false);
     const [connectingSession, setConnectingSession] = useState<WASession | null>(null);
+    const hasPermission = useAuthStore(s => s.hasPermission);
+    const canAssign = hasPermission('members:manage'); // owners and admins
 
     const { data: sessions = [], isLoading } = useQuery<WASession[]>({
         queryKey: ['wa-accounts'],
         // api.ts interceptor already unwraps → r.data IS the array
         queryFn: () => api.get('/whatsapp/sessions').then(r => (Array.isArray(r.data) ? r.data : []).map(mapSession)),
         refetchInterval: 4000,
+    });
+
+    // Fetch workspace members so we can populate the assign dropdown
+    const { data: members = [] } = useQuery({
+        queryKey: ['workspace-members'],
+        queryFn: () => api.get('/workspaces/me/members').then(r => r.data ?? []),
+        enabled: canAssign, // only fetch if the user can manage members
     });
 
     const handleReconnect = async (session: WASession) => {
@@ -521,6 +629,8 @@ export function WhatsAppTab() {
                             <SessionCard
                                 key={session.sessionId}
                                 session={session}
+                                members={members as any[]}
+                                canAssign={canAssign}
                                 onReconnect={(s) => {
                                     setConnectingSession(s);
                                     handleReconnect(s);

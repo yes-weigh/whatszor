@@ -69,6 +69,7 @@ export async function listMembers(workspaceId: string) {
 
     return members.map((m) => ({
         id: m.id,
+        userId: m.userId,  // the actual user ID needed for session assignment
         role: m.role,
         joinedAt: m.joinedAt,
         user: m.user,
