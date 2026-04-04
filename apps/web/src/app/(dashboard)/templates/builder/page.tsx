@@ -373,22 +373,61 @@ function TemplateBuilder() {
                                 <div className="bg-white rounded-lg rounded-tl-none p-1 shadow-sm max-w-[90%] relative break-words">
                                     
                                     {/* Media Attachment Preview */}
-                                    {selectedMedia && (
-                                        <div className="w-full h-32 bg-gray-100 rounded mb-1 overflow-hidden flex items-center justify-center relative">
-                                            {selectedMedia.type === 'video' || selectedMedia.type === 'document' ? (
-                                                <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
-                                                    <span className="text-xs font-bold text-gray-400">[{selectedMedia.type.toUpperCase()}]</span>
+                                    {selectedMedia && (() => {
+                                        const mediaUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/media-gallery/${selectedMedia.id}/file?token=${typeof window !== 'undefined' ? localStorage.getItem('accessToken') : ''}`;
+                                        if (selectedMedia.type === 'video') {
+                                            return (
+                                                <div className="w-full h-36 bg-black rounded mb-1 overflow-hidden relative">
+                                                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                                                    <video
+                                                        src={mediaUrl}
+                                                        preload="metadata"
+                                                        className="w-full h-full object-cover"
+                                                        onError={e => {
+                                                            (e.target as HTMLVideoElement).style.display = 'none';
+                                                            const fb = (e.target as HTMLVideoElement).parentElement?.querySelector('.video-fallback') as HTMLElement | null;
+                                                            if (fb) fb.style.display = 'flex';
+                                                        }}
+                                                    />
+                                                    <div className="video-fallback absolute inset-0 items-center justify-center bg-gray-800 hidden">
+                                                        <div className="text-center">
+                                                            <div className="text-3xl mb-1">🎬</div>
+                                                            <span className="text-xs text-gray-300 font-medium">{selectedMedia.name || 'Video'}</span>
+                                                        </div>
+                                                    </div>
+                                                    {/* Play overlay */}
+                                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                        <div className="w-10 h-10 bg-black/50 rounded-full flex items-center justify-center">
+                                                            <span className="text-white text-lg leading-none ml-0.5">▶</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            ) : (
-                                                /* eslint-disable-next-line @next/next/no-img-element */
-                                                <img 
-                                                    src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/media-gallery/${selectedMedia.id}/file?token=${typeof window !== 'undefined' ? localStorage.getItem('accessToken') : ''}`} 
-                                                    alt="" 
-                                                    className="w-full h-full object-cover" 
-                                                />
-                                            )}
-                                        </div>
-                                    )}
+                                            );
+                                        } else if (selectedMedia.type === 'document') {
+                                            return (
+                                                <div className="w-full rounded mb-1 bg-gray-50 border border-gray-200 flex items-center gap-3 p-3">
+                                                    <div className="w-10 h-12 bg-red-100 rounded flex items-center justify-center shrink-0 text-xl">
+                                                        📄
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-semibold text-gray-700 truncate">{selectedMedia.name || 'Document'}</p>
+                                                        <p className="text-[10px] text-gray-400 mt-0.5 uppercase">{selectedMedia.mimeType || 'PDF'}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        } else {
+                                            return (
+                                                <div className="w-full h-36 bg-gray-100 rounded mb-1 overflow-hidden">
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img
+                                                        src={mediaUrl}
+                                                        alt=""
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                </div>
+                                            );
+                                        }
+                                    })()}
 
                                     {/* Text Body */}
                                     <div className="px-2 py-1 text-sm text-gray-800 whitespace-pre-wrap">
