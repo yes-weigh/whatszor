@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UploadCloud, Image as ImageIcon, FileText, Video, Trash2, Loader2, Link as LinkIcon, Download } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, FileText, Trash2, Loader2, Link as LinkIcon, Download, Pencil, Check, X } from 'lucide-react';
 
 const formatBytes = (bytes: number = 0, decimals = 2) => {
     if (!+bytes) return '0 Bytes';
@@ -19,6 +19,8 @@ export default function MediaGalleryPage() {
     const qc = useQueryClient();
     const [uploading, setUploading] = useState(false);
     const [filterType, setFilterType] = useState<string>('all');
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editName, setEditName] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Fetch Media
@@ -40,6 +42,22 @@ export default function MediaGalleryPage() {
         mutationFn: (id: string) => api.delete(`/media-gallery/${id}`),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['media'] }),
     });
+
+    const updateNameMutation = useMutation({
+        mutationFn: ({ id, name }: { id: string, name: string }) => api.patch(`/media-gallery/${id}`, { name }),
+        onSuccess: () => {
+            setEditingId(null);
+            qc.invalidateQueries({ queryKey: ['media'] });
+        }
+    });
+
+    const handleSaveRename = (id: string) => {
+        if (editName.trim()) {
+            updateNameMutation.mutate({ id, name: editName.trim() });
+        } else {
+            setEditingId(null);
+        }
+    };
 
     // Upload Handle
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,10 +177,9 @@ export default function MediaGalleryPage() {
                                             /* eslint-disable-next-line @next/next/no-img-element */
                                             <img src={previewUrl} alt={media.name} className="w-full h-full object-cover" />
                                         ) : isVideo ? (
-                                            <div className="flex flex-col items-center text-muted">
-                                                <Video size={32} className="mb-2 opacity-50" />
-                                                <span className="text-xs font-medium uppercase text-muted/70 tracking-wider">Video</span>
-                                            </div>
+                                            <video src={`${previewUrl}#t=0.001`} preload="metadata" className="w-full h-full object-cover">
+                                                <track kind="captions" />
+                                            </video>
                                         ) : (
                                             <div className="flex flex-col items-center text-muted">
                                                 <FileText size={32} className="mb-2 opacity-50 text-red-400" />
@@ -200,9 +217,34 @@ export default function MediaGalleryPage() {
 
                                     {/* Info Panel */}
                                     <div className="p-3">
-                                        <h4 className="text-sm font-semibold text-primary truncate" title={media.name}>
-                                            {media.name}
-                                        </h4>
+                                        {editingId === media.id ? (
+                                            <div className="flex items-center gap-1 mb-1">
+                                                <input 
+                                                    autoFocus
+                                                    aria-label="Rename media"
+                                                    className="flex-1 bg-surface border border-theme rounded px-1.5 py-0.5 text-xs text-primary outline-none"
+                                                    value={editName}
+                                                    onChange={(e) => setEditName(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveRename(media.id)}
+                                                />
+                                                <button aria-label="Save" title="Save" onClick={() => handleSaveRename(media.id)} className="text-emerald-500 hover:text-emerald-400"><Check size={14} /></button>
+                                                <button aria-label="Cancel" title="Cancel" onClick={() => setEditingId(null)} className="text-red-500 hover:text-red-400"><X size={14} /></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-between gap-2 group/edit">
+                                                <h4 className="text-sm font-semibold text-primary truncate" title={media.name}>
+                                                    {media.name}
+                                                </h4>
+                                                <button 
+                                                    aria-label="Rename"
+                                                    title="Rename"
+                                                    onClick={() => { setEditingId(media.id); setEditName(media.name); }}
+                                                    className="opacity-0 xl:opacity-0 sm:opacity-100 group-hover/edit:opacity-100 text-muted hover:text-primary transition-opacity shrink-0"
+                                                >
+                                                    <Pencil size={12} />
+                                                </button>
+                                            </div>
+                                        )}
                                         <div className="flex items-center justify-between mt-1">
                                             <span className="text-xs text-muted uppercase tracking-wider">{formatBytes(media.size)}</span>
                                             <span className="text-[10px] uppercase font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">

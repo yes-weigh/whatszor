@@ -3,20 +3,23 @@
 import { Header } from '@/components/layout/Header';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
-import { Settings as SettingsIcon, MessageCircle, Bot, CreditCard, Users } from 'lucide-react';
+import { Settings as SettingsIcon, MessageCircle, Bot, CreditCard, Users, Shield } from 'lucide-react';
 import { WhatsAppTab } from './components/WhatsAppTab';
 import { MembersTab } from './components/MembersTab';
+import { KnowledgeBotTab } from './components/KnowledgeBotTab';
 import { useRouter } from 'next/navigation';
 
-type Tab = 'general' | 'whatsapp' | 'ai' | 'billing' | 'members';
+type Tab = 'general' | 'whatsapp' | 'ai' | 'billing' | 'members' | 'knowledgebot';
 
 const tabs: { id: Tab; label: string; icon: any; externalHref?: string }[] = [
-    { id: 'general', label: 'General', icon: SettingsIcon },
-    { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
-    { id: 'ai', label: 'AI Configuration', icon: Bot },
-    { id: 'members', label: 'Team Members', icon: Users },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
+    { id: 'general',      label: 'General',          icon: SettingsIcon },
+    { id: 'whatsapp',     label: 'WhatsApp',          icon: MessageCircle },
+    { id: 'ai',           label: 'AI Configuration',  icon: Bot },
+    { id: 'members',      label: 'Team Members',      icon: Users },
+    { id: 'knowledgebot', label: 'Knowledge Bot',     icon: Shield },
+    { id: 'billing',      label: 'Billing',           icon: CreditCard },
 ];
+
 
 export default function SettingsPage() {
     const hasPermission = useAuthStore(s => s.hasPermission);
@@ -28,9 +31,10 @@ export default function SettingsPage() {
     }, []);
 
     const filteredTabs = tabs.filter(tab => {
-        if (tab.id === 'whatsapp') return hasPermission('workspace:manage');
-        if (tab.id === 'billing') return hasPermission('billing:manage');
-        if (tab.id === 'members') return hasPermission('members:read');
+        if (tab.id === 'whatsapp')     return hasPermission('workspace:manage');
+        if (tab.id === 'billing')      return hasPermission('billing:manage');
+        if (tab.id === 'members')      return hasPermission('members:read');
+        if (tab.id === 'knowledgebot') return hasPermission('workspace:manage');
         return true;
     });
 
@@ -84,7 +88,8 @@ export default function SettingsPage() {
                         </div>
                     )}
 
-                    {activeTab === 'members' && <MembersTab />}
+                    {activeTab === 'members'      && <MembersTab />}
+                    {activeTab === 'knowledgebot' && <KnowledgeBotTab />}
                 </div>
             </div>
         </div>

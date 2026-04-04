@@ -28,7 +28,7 @@ function UnlockForm() {
             if (res.data) {
                 setSuccess(true);
                 setTimeout(() => {
-                    window.location.href = '/dashboard';
+                    window.location.href = '/inbox';
                 }, 2000);
             }
         } catch (err: any) {

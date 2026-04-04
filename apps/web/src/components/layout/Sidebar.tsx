@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Users2, Megaphone, Zap, LayoutDashboard,
-    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, Shield, MapPin
+    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, MapPin
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
@@ -20,7 +20,7 @@ const navItems = [
     { href: '/automations',   label: 'Automations',   icon: Zap },
     { href: '/media',         label: 'Media Gallery', icon: Image },
     { href: '/templates',     label: 'Templates',     icon: LayoutTemplate },
-    { href: '/dashboard/team',label: 'Team Access',   icon: Shield },
+
 ];
 
 export function Sidebar() {
