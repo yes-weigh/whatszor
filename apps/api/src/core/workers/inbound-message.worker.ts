@@ -26,6 +26,7 @@ import { emit as realtimeEmit } from '../realtime';
 import { getQueue, QueueName } from '../../queues';
 import { randomUUID } from 'crypto';
 import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } from '../idempotency';
+import { composeAndQueueMessage } from '../messaging/message-composer';
 // Keyword Automation Engine — PRIMARY layer that runs before QuickReply
 import {
     findMatchingKeywordAutomation,
@@ -389,38 +390,26 @@ export async function processInboundMessage(job: Job): Promise<void> {
                                 // Template Mode
                                 const latestVersion = automation.template.versions?.[0];
                                 if (latestVersion) {
-                                    const templatePayload = {
-                                        messageText: latestVersion.messageText,
-                                        footerText: latestVersion.footerText ?? undefined,
-                                        buttons: (latestVersion.buttons ?? []).map((b: any) => ({
-                                            type: b.type,
-                                            label: b.label,
-                                            payload: b.payload,
-                                        })),
-                                        headerMediaId: latestVersion.media?.id ?? undefined,
-                                        headerMediaType: latestVersion.media?.type?.toUpperCase() ?? undefined,
-                                        headerFileName: latestVersion.media?.name ?? undefined,
-                                    };
+                                    let contactData = {};
+                                    if (conversation.contactId) {
+                                        try {
+                                            const ct = await prisma.contact.findUnique({ where: { id: conversation.contactId } });
+                                            if (ct) contactData = { ...ct, ...(ct.customData as any || {}) };
+                                        } catch (err) {
+                                            log.warn({ err }, 'Failed to load contact for kw template variables');
+                                        }
+                                    }
 
-                                    const tplMsg = await prisma.message.create({
-                                        data: {
-                                            conversationId: conversation.id,
-                                            workspaceId,
-                                            direction: 'OUTBOUND',
-                                            type: 'TEMPLATE',
-                                            content: latestVersion.messageText,
-                                            mediaData: { templatePayload } as any,
-                                            status: 'QUEUED',
-                                        },
-                                    });
-                                    await getQueue(QueueName.OUTBOUND_MESSAGES).add(`kw-tpl-${tplMsg.id}`, {
+                                    await composeAndQueueMessage({
                                         workspaceId,
+                                        conversationId: conversation.id,
+                                        provider: 'WHATSAPP',
+                                        providerId,
                                         sessionId,
-                                        messageId: tplMsg.id,
-                                        toJid: providerId,
-                                        type: 'TEMPLATE',
-                                        content: latestVersion.messageText,
-                                        mediaData: { templatePayload },
+                                        templateVersionId: latestVersion.id,
+                                        templateVariables: {
+                                            contact: contactData as any
+                                        }
                                     });
                                 } else {
                                     log.warn({ templateId: automation.templateId }, 'Keyword automation template has no versions — skipping');
