@@ -159,7 +159,7 @@ export async function processAutomationJob(job: Job): Promise<void> {
                         },
                     });
 
-                    const targetSessionId = currentAction.sessionId || triggerPayload?.sessionId || execution.rule.workspaceId;
+                    const targetSessionId = currentAction.sessionId || triggerPayload?.sessionId || undefined;
                     await getQueue(QueueName.OUTBOUND_MESSAGES).add(`send-${msg.id}`, {
                         workspaceId: execution.rule.workspaceId,
                         sessionId: targetSessionId,
@@ -198,6 +198,7 @@ export async function processAutomationJob(job: Job): Promise<void> {
                     provider: 'WHATSAPP',
                     providerId: contact.phone,
                     templateVersionId,
+                    sessionId: currentAction.sessionId || triggerPayload?.sessionId || undefined,
                     templateVariables: {
                         contact: contact.customData as any,
                         event: execution.triggerEvent as any,

@@ -20,6 +20,7 @@ interface SuggestionData {
 export function AISuggestions({ activeConversation, messages, onSelectSuggestion }: AISuggestionsProps) {
   const [cache, setCache] = useState<Record<string, SuggestionData>>({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auto-fetch suggestions when conversation or messages change
@@ -41,6 +42,7 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
     if (cache[cacheKey]) return;
 
     setLoading(true);
+    setError(null);
 
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
@@ -66,8 +68,10 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
             [cacheKey]: newData
           }));
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to fetch AI suggestions", err);
+        const msg = err?.response?.data?.error || err?.message || 'AI suggestions unavailable';
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -146,6 +150,11 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
           
           {loading && !currentData ? (
              <div className="animate-pulse h-12 bg-[#2a3942] rounded mt-2"></div>
+          ) : error ? (
+             <div className="flex flex-col gap-1 mt-2 px-3 py-2 rounded bg-red-500/10 border border-red-500/20">
+               <span className="text-xs font-bold text-red-400 uppercase tracking-wider">AI Unavailable</span>
+               <span className="text-xs text-muted">{error}</span>
+             </div>
           ) : currentData ? (
              renderIntent(currentData.intent, currentData.confidence)
           ) : (

@@ -178,7 +178,23 @@ export async function processOutboundMessage(job: Job): Promise<void> {
 
         payload = buttonMessage;
     } else if (type === 'TEMPLATE') {
-        payload = { text: content };
+        const templateData = mediaData?.templatePayload;
+        if (templateData?.headerMediaId) {
+             const mediaType = templateData.headerMediaType?.toUpperCase();
+             const filePath = await resolveMediaPath(templateData.headerMediaId);
+             
+             if (mediaType === 'IMAGE') {
+                 payload = { image: { url: filePath }, caption: content };
+             } else if (mediaType === 'VIDEO') {
+                 payload = { video: { url: filePath }, caption: content };
+             } else if (mediaType === 'DOCUMENT') {
+                 payload = { document: { url: filePath }, caption: content, fileName: templateData.headerFileName || 'document.pdf' };
+             } else {
+                 payload = { text: content };
+             }
+        } else {
+             payload = { text: content };
+        }
     } else if (type === 'IMAGE' && mediaData?.mediaId) {
         payload = { 
             image: { url: await resolveMediaPath(mediaData.mediaId) }, 
@@ -263,6 +279,19 @@ export async function processOutboundMessage(job: Job): Promise<void> {
                 where: { messageId },
                 data: { status: 'FAILED', errorReason: err.message || 'Send failed' },
             });
+        }
+
+        const convRecord = await prisma.message.findUnique({
+            where: { id: messageId },
+            select: { conversationId: true },
+        });
+        if (convRecord) {
+            realtimeEmit(workspaceId, 'message.status', {
+                messageId,
+                conversationId: convRecord.conversationId,
+                status: 'FAILED',
+            });
+            realtimeEmit(workspaceId, 'conversation.updated', { conversationId: convRecord.conversationId });
         }
 
         throw err; // Triggers BullMQ retry

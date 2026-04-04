@@ -58,7 +58,7 @@ export default function CampaignsPage() {
         onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
     });
 
-    const campaigns: any[] = campaignsData?.campaigns ?? [];
+    const campaigns: any[] = Array.isArray(campaignsData?.campaigns) ? campaignsData.campaigns : [];
 
     if (!mounted) return null;
 
