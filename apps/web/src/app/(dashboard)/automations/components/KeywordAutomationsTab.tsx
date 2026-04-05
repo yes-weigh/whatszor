@@ -200,8 +200,8 @@ function AutomationModal({
                                             <MessageSquare size={12} /> Contains (Default)
                                         </div>
                                         <p className="text-[11px] text-zinc-400 leading-relaxed">
-                                            Triggers if the keyword is found <em>anywhere</em> within the lead's message. Best for general inquiries.
-                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">price</code> triggers on "What is the price?"</span>
+                                            Triggers if the keyword is found <em>anywhere</em> within the lead&apos;s message. Best for general inquiries.
+                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">price</code> triggers on &quot;What is the price?&quot;</span>
                                         </p>
                                     </div>
                                     <div>
@@ -209,8 +209,8 @@ function AutomationModal({
                                             <Check size={12} /> Exact
                                         </div>
                                         <p className="text-[11px] text-zinc-400 leading-relaxed">
-                                            Triggers ONLY if the lead's message matches your keyword with 100% precision.
-                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">STOP</code> triggers on "STOP" but not "Please stop"</span>
+                                            Triggers ONLY if the lead&apos;s message matches your keyword with 100% precision.
+                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">STOP</code> triggers on &quot;STOP&quot; but not &quot;Please stop&quot;</span>
                                         </p>
                                     </div>
                                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
@@ -223,11 +223,11 @@ function AutomationModal({
                                         <div className="text-[10px] text-zinc-500 space-y-2">
                                             <div className="bg-black/40 p-2 rounded border border-white/5">
                                                 <code className="text-amber-300 font-mono tracking-wider">\b(buy|purchase|order)\b</code>
-                                                <p className="mt-1 leading-relaxed">Matches any of those exact words, but ignores variations like "buying" or "preorder".</p>
+                                                <p className="mt-1 leading-relaxed">Matches any of those exact words, but ignores variations like &quot;buying&quot; or &quot;preorder&quot;.</p>
                                             </div>
                                             <div className="bg-black/40 p-2 rounded border border-white/5">
                                                 <code className="text-amber-300 font-mono tracking-wider">{"^start.*"}</code>
-                                                <p className="mt-1 leading-relaxed">Matches any message that <em>begins</em> with the word "start".</p>
+                                                <p className="mt-1 leading-relaxed">Matches any message that <em>begins</em> with the word &quot;start&quot;.</p>
                                             </div>
                                             <div className="bg-black/40 p-2 rounded border border-white/5">
                                                 <code className="text-amber-300 font-mono tracking-wider">{"\\d{5}"}</code>
@@ -241,7 +241,7 @@ function AutomationModal({
                                         </div>
                                         <p className="text-[11px] text-zinc-400 leading-relaxed">
                                             AI routes the message based on its <em>meaning</em>. Falls back to Contains if AI fails.
-                                            <br/><span className="text-zinc-500 mt-1 block">Ex: intent <code className="bg-white/10 px-1 rounded">support</code> triggers on "My app is crashing!"</span>
+                                            <br/><span className="text-zinc-500 mt-1 block">Ex: intent <code className="bg-white/10 px-1 rounded">support</code> triggers on &quot;My app is crashing!&quot;</span>
                                         </p>
                                     </div>
                                 </div>
