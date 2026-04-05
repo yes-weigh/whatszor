@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import { 
@@ -237,9 +239,9 @@ export function ChatWindow({
                 <h2 className="text-xl font-bold text-primary tracking-tight">WhatsApp Command Center</h2>
                 <p className="text-sm text-muted mt-2 max-w-sm">Select a conversation to start messaging, use AI suggestions, and manage leads in real-time.</p>
             </div>
-            <button className="mt-4 px-6 py-2.5 rounded-full bg-accent text-black font-bold text-sm shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] transition-all">
+            <Link href="/campaigns/new" className="mt-4 px-6 py-2.5 rounded-full bg-accent text-black font-bold text-sm shadow-[0_0_15px_rgba(16,185,129,0.4)] hover:shadow-[0_0_25px_rgba(16,185,129,0.6)] transition-all inline-block">
                Start New Campaign
-            </button>
+            </Link>
         </div>
     );
   }
