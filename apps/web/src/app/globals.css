@@ -54,6 +54,7 @@
   a { color: inherit; text-decoration: none; }
   button { cursor: pointer; font-family: inherit; }
   input, textarea, select { font-family: inherit; }
+  option { background-color: var(--bg-surface); color: var(--text-primary); }
 }
 
 @layer components {
