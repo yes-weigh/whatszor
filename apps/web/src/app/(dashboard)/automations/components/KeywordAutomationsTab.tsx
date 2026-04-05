@@ -6,7 +6,7 @@ import {
     Zap, Plus, Trash2, ToggleLeft, ToggleRight,
     Image as ImageIcon, Clock, TrendingUp,
     MessageSquare, X, Check, Loader2, ChevronDown, Pencil,
-    Layout, ArrowUpDown, Regex, Brain
+    Layout, ArrowUpDown, Regex, Brain, HelpCircle
 } from 'lucide-react';
 
 interface Media {
@@ -66,6 +66,7 @@ function AutomationModal({
     const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(editRule?.template || null);
     const [showMediaPicker, setShowMediaPicker] = useState(false);
     const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+    const [showMatchInfo, setShowMatchInfo] = useState(false);
 
     const qc = useQueryClient();
 
@@ -169,8 +170,84 @@ function AutomationModal({
                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
                     {/* Keyword + Match Type */}
-                    <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-2">Trigger Keyword</label>
+                    <div className="relative">
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-medium text-zinc-400">Trigger Keyword</label>
+                            <button 
+                                type="button" 
+                                onClick={() => setShowMatchInfo(!showMatchInfo)}
+                                className="text-zinc-500 hover:text-emerald-400 transition-colors flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider"
+                            >
+                                <HelpCircle size={12} />
+                                Match Types
+                            </button>
+                        </div>
+                        
+                        {/* The Info Popover */}
+                        {showMatchInfo && (
+                            <div className="absolute top-7 right-0 min-w-[340px] max-w-[420px] z-[60] bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl p-4 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
+                                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                                        <Zap size={14} className="text-emerald-400"/> Match Types Explained
+                                    </h3>
+                                    <button type="button" aria-label="Close" title="Close" onClick={() => setShowMatchInfo(false)} className="text-zinc-500 hover:text-white">
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+                                    <div>
+                                        <div className="flex items-center gap-1.5 text-blue-400 text-xs font-bold mb-1">
+                                            <MessageSquare size={12} /> Contains (Default)
+                                        </div>
+                                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                            Triggers if the keyword is found <em>anywhere</em> within the lead's message. Best for general inquiries.
+                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">price</code> triggers on "What is the price?"</span>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold mb-1">
+                                            <Check size={12} /> Exact
+                                        </div>
+                                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                            Triggers ONLY if the lead's message matches your keyword with 100% precision.
+                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">STOP</code> triggers on "STOP" but not "Please stop"</span>
+                                        </p>
+                                    </div>
+                                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                                        <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold mb-2">
+                                            <Regex size={12} /> Regex Reference
+                                        </div>
+                                        <p className="text-[11px] text-zinc-400 leading-relaxed mb-2.5">
+                                            Uses standard Regular Expression syntax for complex pattern matching. Do not include wrapping slashes (no <code className="text-zinc-300 tracking-wider bg-white/5 px-1 rounded">/</code>), just enter the raw pattern. All matches are case-insensitive by default.
+                                        </p>
+                                        <div className="text-[10px] text-zinc-500 space-y-2">
+                                            <div className="bg-black/40 p-2 rounded border border-white/5">
+                                                <code className="text-amber-300 font-mono tracking-wider">\b(buy|purchase|order)\b</code>
+                                                <p className="mt-1 leading-relaxed">Matches any of those exact words, but ignores variations like "buying" or "preorder".</p>
+                                            </div>
+                                            <div className="bg-black/40 p-2 rounded border border-white/5">
+                                                <code className="text-amber-300 font-mono tracking-wider">{"^start.*"}</code>
+                                                <p className="mt-1 leading-relaxed">Matches any message that <em>begins</em> with the word "start".</p>
+                                            </div>
+                                            <div className="bg-black/40 p-2 rounded border border-white/5">
+                                                <code className="text-amber-300 font-mono tracking-wider">{"\\d{5}"}</code>
+                                                <p className="mt-1 leading-relaxed">Matches if the message contains exactly a 5-digit number (e.g., zip codes).</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-1.5 text-pink-400 text-xs font-bold mb-1">
+                                            <Brain size={12} /> AI Intent
+                                        </div>
+                                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                            AI routes the message based on its <em>meaning</em>. Falls back to Contains if AI fails.
+                                            <br/><span className="text-zinc-500 mt-1 block">Ex: intent <code className="bg-white/10 px-1 rounded">support</code> triggers on "My app is crashing!"</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex gap-2">
                             <input
                                 id="kw-keyword"
