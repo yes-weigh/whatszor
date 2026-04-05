@@ -17,6 +17,11 @@ export default function TemplatesPage() {
         queryFn: () => api.get('/templates').then(r => r.data?.templates ?? []),
     });
 
+    const { data: mediaList = [] } = useQuery({
+        queryKey: ['media'],
+        queryFn: () => api.get('/media-gallery').then(r => r.data?.media || []),
+    });
+
     const deleteMutation = useMutation({
         mutationFn: (id: string) => api.delete(`/templates/${id}`),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['templates'] }),
@@ -73,6 +78,7 @@ export default function TemplatesPage() {
                         {templates.map((t: any) => {
                             const latestVersion = t.versions?.[0]; // backend only serves take: 1 for lists
                             const versionNum = latestVersion?.version || 1;
+                            const selectedMedia = latestVersion?.headerMediaId ? mediaList.find((m: any) => m.id === latestVersion.headerMediaId) : null;
 
                             return (
                                 <div key={t.id} className="card relative group flex flex-col gap-4 overflow-hidden border-theme hover:border-accent hover:shadow-md transition-all">
@@ -88,11 +94,71 @@ export default function TemplatesPage() {
                                     </div>
 
                                     {/* Preview Snippet */}
-                                    <div className="bg-elevated rounded-lg p-3 border border-theme text-sm text-secondary relative overflow-hidden">
-                                        <p className="line-clamp-3 leading-relaxed whitespace-pre-wrap">
-                                            {latestVersion?.messageText || 'Empty Template'}
-                                        </p>
-                                        <div className="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-elevated to-transparent"></div>
+                                    <div className="bg-[#EFEAE2] rounded-lg p-3 border border-theme text-sm relative overflow-hidden flex flex-col h-[260px]">
+                                        <div className="flex-1 overflow-hidden relative">
+                                            <div className="bg-white rounded-lg rounded-tl-none p-1 shadow-sm max-w-[90%] relative break-words">
+                                                {selectedMedia && (() => {
+                                                    const mediaUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/media-gallery/${selectedMedia.id}/file?token=${typeof window !== 'undefined' ? localStorage.getItem('accessToken') : ''}`;
+                                                    if (selectedMedia.type === 'video') {
+                                                        return (
+                                                            <div className="w-full h-24 bg-black rounded mb-1 overflow-hidden relative">
+                                                                <video src={mediaUrl} preload="metadata" className="w-full h-full object-cover" />
+                                                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                                    <div className="w-8 h-8 bg-black/50 rounded-full flex items-center justify-center">
+                                                                        <span className="text-white text-sm leading-none ml-0.5">▶</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    } else if (selectedMedia.type === 'document') {
+                                                        return (
+                                                            <div className="w-full rounded mb-1 bg-gray-50 border border-gray-200 flex items-center gap-2 p-2">
+                                                                <div className="w-8 h-10 bg-red-100 rounded flex items-center justify-center shrink-0 text-lg">📄</div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-[10px] font-semibold text-gray-700 truncate">{selectedMedia.name || 'Document'}</p>
+                                                                    <p className="text-[8px] text-gray-400 mt-0.5 uppercase">{selectedMedia.mimeType || 'PDF'}</p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    } else {
+                                                        return (
+                                                            <div className="w-full h-24 bg-gray-100 rounded mb-1 overflow-hidden">
+                                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                                <img src={mediaUrl} alt="" className="w-full h-full object-cover" />
+                                                            </div>
+                                                        );
+                                                    }
+                                                })()}
+                                                {!selectedMedia && latestVersion?.headerMediaId && (
+                                                    <div className="w-full h-24 bg-gray-100 rounded mb-1 flex items-center justify-center text-gray-400 border border-gray-200">
+                                                        <span className="text-xl">🖼️</span>
+                                                    </div>
+                                                )}
+                                                <div className="px-2 py-1 text-xs text-gray-800 whitespace-pre-wrap line-clamp-4 leading-relaxed">
+                                                    {latestVersion?.messageText || <span className="text-gray-400 italic">Empty Template</span>}
+                                                </div>
+                                                {latestVersion?.footerText && (
+                                                    <div className="px-2 pb-1 text-[10px] text-gray-400 mt-1 line-clamp-1">
+                                                        {latestVersion.footerText}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {latestVersion?.buttons?.length > 0 && (
+                                                <div className="flex flex-col gap-1 mt-1 max-w-[90%]">
+                                                    {latestVersion.buttons.slice(0, 2).map((b: any, i: number) => (
+                                                        <div key={i} className="bg-white rounded-lg shadow-sm py-1.5 px-3 text-center text-[#00A884] text-xs font-medium border-t-0 flex items-center justify-center gap-1 truncate">
+                                                            {b.type === 'url' ? '↗' : b.type === 'call' ? '📞' : ''} {b.label || 'Action'}
+                                                        </div>
+                                                    ))}
+                                                    {latestVersion.buttons.length > 2 && (
+                                                        <div className="bg-white rounded-lg shadow-sm py-1.5 px-3 text-center text-[#00A884] text-xs font-medium border-t-0 flex items-center justify-center gap-1 truncate">
+                                                            +{latestVersion.buttons.length - 2} more
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-[#EFEAE2] to-transparent pointer-events-none"></div>
                                     </div>
 
                                     {/* Counters */}
