@@ -79,10 +79,10 @@ jobs:
               sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
               sudo systemctl enable --now docker
               sudo usermod -aG docker $USER
-              echo "Docker installed. Note: Group changes may require a re-login or use of 'newgrp docker' in this session."
+              echo "Docker installed."
             fi
 
-            # ── 1.5 Ensure swap space exists to prevent OOM ────────────────
+            # ── 1.5 Ensure swap space exists to prevent OOM ────────────────────
             if [ -z "$(swapon --show)" ]; then
               echo "Creating 2GB swap file..."
               sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
@@ -111,49 +111,61 @@ jobs:
               cd "$PROJECT_DIR"
             fi
 
-            # ── 4. Write .env from the VPS_ENV secret (passed as envvar) ───────
+            # ── 4. Write .env from the VPS_ENV secret ──────────────────────────
             cd "$PROJECT_DIR"
             printf '%s\n' "$VPS_ENV" > .env
             echo ".env written ($(wc -l < .env) lines)"
 
-            # ── 5. Build & start services ────────────────────────────────────────
-            # Use 'sg docker' to ensure we have docker group permissions without logging out
-            sg docker -c "
-              docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
-              # ── Pre-deploy: resolve any failed migrations by bypassing the compose command
-              # We use --entrypoint sh to skip the service's "migrate deploy && node" command
-              # so we don't trigger the broken old SQL via the old image.
-              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle' || true
-              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260403034951_add_keyword_automations_and_insights' || true
-              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260403211729_add_lead_generation' || true
-              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260408_added_contact_product_source' || true
+            # ── 5. Build & start services ──────────────────────────────────────
+            # Write all docker commands to a temp script so sg docker -c has
+            # a simple one-liner with no quoting issues inside it.
+            cat > /tmp/whatszor_deploy.sh << 'DEPLOY_EOF'
+#!/bin/sh
+set -e
+cd ~/whatszor
 
-              # ── 5.5 Migrate media from old volume name to new ────────────────────
-              # api-uploads → api-media (one-time, safe to re-run)
-              OLD_MEDIA=\$(docker volume ls -q | grep api-uploads || true)
-              if [ -n \"\$OLD_MEDIA\" ]; then
-                echo \"Migrating media files from api-uploads to api-media volume...\"
-                docker run --rm \
-                  -v whatszor_api-uploads:/src \
-                  -v whatszor_api-media:/dst \
-                  alpine sh -c 'cp -rn /src/. /dst/ 2>/dev/null; echo \"Media migration done\"'
-              fi
+docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
 
-              if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
-                echo '❌ docker compose up failed! Fetching logs...'
-                docker compose -f docker-compose.prod.yml logs api worker || true
-                exit 1
-              fi
+# Resolve any failed/rolled-back migrations.
+# Uses --entrypoint sh to bypass the compose service command
+# (which would run prisma migrate deploy using the OLD image SQL first).
+docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
+  -c 'npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle' || true
+docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
+  -c 'npx prisma migrate resolve --rolled-back 20260403034951_add_keyword_automations_and_insights' || true
+docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
+  -c 'npx prisma migrate resolve --rolled-back 20260403211729_add_lead_generation' || true
+docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
+  -c 'npx prisma migrate resolve --rolled-back 20260408_added_contact_product_source' || true
 
-              # ── 6. Restart Caddy ─────────────────────────────────────────────────────────
-              docker compose -f docker-compose.prod.yml stop caddy
-              docker compose -f docker-compose.prod.yml up -d caddy
-              echo 'Caddy restarted'
+# Migrate media from old volume name (api-uploads -> api-media), one-time safe to re-run
+OLD_MEDIA=$(docker volume ls -q | grep api-uploads || true)
+if [ -n "$OLD_MEDIA" ]; then
+  echo "Migrating media files from api-uploads to api-media volume..."
+  docker run --rm \
+    -v whatszor_api-uploads:/src \
+    -v whatszor_api-media:/dst \
+    alpine sh -c 'cp -rn /src/. /dst/ 2>/dev/null; echo Migration done'
+fi
 
-              # ── 7. Show running containers ───────────────────────────────────────
-              docker compose -f docker-compose.prod.yml ps
+if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
+  echo 'docker compose up failed — fetching logs...'
+  docker compose -f docker-compose.prod.yml logs api worker || true
+  exit 1
+fi
 
-              # ── 8. Prune old images ──────────────────────────────────────────────
-              docker system prune -f
-            "
-            echo "✅ Deployment complete!"
+# Restart Caddy
+docker compose -f docker-compose.prod.yml stop caddy
+docker compose -f docker-compose.prod.yml up -d caddy
+echo 'Caddy restarted'
+
+# Show running containers
+docker compose -f docker-compose.prod.yml ps
+
+# Prune old images
+docker system prune -f
+DEPLOY_EOF
+
+            chmod +x /tmp/whatszor_deploy.sh
+            sg docker -c "bash /tmp/whatszor_deploy.sh"
+            echo "Deployment complete!"
