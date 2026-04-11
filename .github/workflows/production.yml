@@ -72,7 +72,7 @@ jobs:
           script: |
             set -e
 
-            # ── 1. Install Docker (if not present) ─────────────────────────────
+            # 1. Install Docker if not present
             if ! command -v docker &> /dev/null; then
               echo "Installing Docker..."
               sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
@@ -82,7 +82,7 @@ jobs:
               echo "Docker installed."
             fi
 
-            # ── 1.5 Ensure swap space exists to prevent OOM ────────────────────
+            # 1.5 Ensure swap space exists to prevent OOM
             if [ -z "$(swapon --show)" ]; then
               echo "Creating 2GB swap file..."
               sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
@@ -92,12 +92,12 @@ jobs:
               echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
             fi
 
-            # ── 2. Install Git (if not present) ────────────────────────────────
+            # 2. Install Git if not present
             if ! command -v git &> /dev/null; then
               sudo dnf install -y git
             fi
 
-            # ── 3. Clone or pull the repository ────────────────────────────────
+            # 3. Clone or pull the repository
             PROJECT_DIR="$HOME/whatszor"
             if [ -d "$PROJECT_DIR/.git" ]; then
               echo "Repo exists — resetting to latest..."
@@ -111,61 +111,37 @@ jobs:
               cd "$PROJECT_DIR"
             fi
 
-            # ── 4. Write .env from the VPS_ENV secret ──────────────────────────
+            # 4. Write .env from the VPS_ENV secret
             cd "$PROJECT_DIR"
             printf '%s\n' "$VPS_ENV" > .env
             echo ".env written ($(wc -l < .env) lines)"
 
-            # ── 5. Build & start services ──────────────────────────────────────
-            # Write all docker commands to a temp script so sg docker -c has
-            # a simple one-liner with no quoting issues inside it.
-            cat > /tmp/whatszor_deploy.sh << 'DEPLOY_EOF'
-#!/bin/sh
-set -e
-cd ~/whatszor
+            # 5. Build and start services via sg docker
+            sg docker -c "
+              docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
 
-docker compose -f docker-compose.prod.yml pull --ignore-pull-failures || true
+              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle' || true
+              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260403034951_add_keyword_automations_and_insights' || true
+              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260403211729_add_lead_generation' || true
+              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260408_added_contact_product_source' || true
 
-# Resolve any failed/rolled-back migrations.
-# Uses --entrypoint sh to bypass the compose service command
-# (which would run prisma migrate deploy using the OLD image SQL first).
-docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
-  -c 'npx prisma migrate resolve --rolled-back 20260330100131_p3_p4_p8_impersonation_storage_session_lifecycle' || true
-docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
-  -c 'npx prisma migrate resolve --rolled-back 20260403034951_add_keyword_automations_and_insights' || true
-docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
-  -c 'npx prisma migrate resolve --rolled-back 20260403211729_add_lead_generation' || true
-docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api \
-  -c 'npx prisma migrate resolve --rolled-back 20260408_added_contact_product_source' || true
+              OLD_MEDIA=\$(docker volume ls -q | grep api-uploads || true)
+              if [ -n \"\$OLD_MEDIA\" ]; then
+                echo \"Migrating media from api-uploads to api-media...\"
+                docker run --rm -v whatszor_api-uploads:/src -v whatszor_api-media:/dst alpine sh -c 'cp -rn /src/. /dst/ 2>/dev/null; echo done'
+              fi
 
-# Migrate media from old volume name (api-uploads -> api-media), one-time safe to re-run
-OLD_MEDIA=$(docker volume ls -q | grep api-uploads || true)
-if [ -n "$OLD_MEDIA" ]; then
-  echo "Migrating media files from api-uploads to api-media volume..."
-  docker run --rm \
-    -v whatszor_api-uploads:/src \
-    -v whatszor_api-media:/dst \
-    alpine sh -c 'cp -rn /src/. /dst/ 2>/dev/null; echo Migration done'
-fi
+              if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
+                echo 'docker compose up failed — fetching logs...'
+                docker compose -f docker-compose.prod.yml logs api worker || true
+                exit 1
+              fi
 
-if ! docker compose -f docker-compose.prod.yml up -d --build --force-recreate; then
-  echo 'docker compose up failed — fetching logs...'
-  docker compose -f docker-compose.prod.yml logs api worker || true
-  exit 1
-fi
+              docker compose -f docker-compose.prod.yml stop caddy
+              docker compose -f docker-compose.prod.yml up -d caddy
+              echo 'Caddy restarted'
 
-# Restart Caddy
-docker compose -f docker-compose.prod.yml stop caddy
-docker compose -f docker-compose.prod.yml up -d caddy
-echo 'Caddy restarted'
-
-# Show running containers
-docker compose -f docker-compose.prod.yml ps
-
-# Prune old images
-docker system prune -f
-DEPLOY_EOF
-
-            chmod +x /tmp/whatszor_deploy.sh
-            sg docker -c "bash /tmp/whatszor_deploy.sh"
+              docker compose -f docker-compose.prod.yml ps
+              docker system prune -f
+            "
             echo "Deployment complete!"
