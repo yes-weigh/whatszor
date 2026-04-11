@@ -3,7 +3,11 @@
  *
  * Translates external real-world events (message_received, etc.) into
  * Automation Rule executions via the AUTOMATION queue.
- * Concurrency: 3
+ *
+ * Performance optimizations:
+ *  - Caches automationRule.findMany() per (workspaceId) — 30s TTL
+ *  - Caches whatsAppAccount.findMany() per (workspaceId) — 60s TTL
+ *  - logEvent() is fire-and-forget (batched internally in event-logger)
  */
 import { Job } from 'bullmq';
 import { z } from 'zod';
@@ -23,6 +27,62 @@ const SystemEventSchema = z.object({
     payload: z.record(z.unknown()).optional(),
 });
 
+// ── Rule cache ────────────────────────────────────────────────────────────────
+// automationRule.findMany() is called for every system event.
+// At 100 sessions × 1 msg/s this was 100 DB scans/sec.
+// 30s TTL cache reduces it to ~2 DB reads/min per workspace.
+
+const RULE_CACHE_TTL_MS = 30_000;
+const ruleCache = new Map<string, { rules: any[]; expiresAt: number }>();
+
+const ACCOUNT_CACHE_TTL_MS = 60_000;
+const accountMapCache = new Map<string, { map: Map<string, string>; expiresAt: number }>();
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of ruleCache.entries()) {
+        if (val.expiresAt < now) ruleCache.delete(key);
+    }
+    for (const [key, val] of accountMapCache.entries()) {
+        if (val.expiresAt < now) accountMapCache.delete(key);
+    }
+}, 120_000);
+
+async function getActiveRules(workspaceId: string, eventType: string) {
+    const key = `${workspaceId}:${eventType}`;
+    const cached = ruleCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.rules;
+
+    const rules = await prisma.automationRule.findMany({
+        where: {
+            workspaceId,
+            status: 'ACTIVE',
+            OR: [
+                { eventType },
+                { eventType: null },
+            ],
+        },
+    });
+
+    ruleCache.set(key, { rules, expiresAt: Date.now() + RULE_CACHE_TTL_MS });
+    return rules;
+}
+
+async function getAccountIdToSessionId(workspaceId: string): Promise<Map<string, string>> {
+    const cached = accountMapCache.get(workspaceId);
+    if (cached && cached.expiresAt > Date.now()) return cached.map;
+
+    const accounts = await prisma.whatsAppAccount.findMany({
+        where: { workspaceId },
+        select: { id: true, sessionId: true },
+    });
+    const map = new Map(accounts.map(a => [a.id, a.sessionId]));
+    accountMapCache.set(workspaceId, { map, expiresAt: Date.now() + ACCOUNT_CACHE_TTL_MS });
+    return map;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function processSystemEvent(job: Job): Promise<void> {
     const rawJobData = job.data;
     const parsed = SystemEventSchema.safeParse(rawJobData);
@@ -35,26 +95,15 @@ export async function processSystemEvent(job: Job): Promise<void> {
     const event = parsed.data;
     log.info({ eventType: event.eventType, workspaceId: event.workspaceId }, 'Routing incoming system event');
 
-    const allMatchingRules = await prisma.automationRule.findMany({
-        where: {
-            workspaceId: event.workspaceId,
-            status: 'ACTIVE',
-            OR: [
-                { eventType: event.eventType },
-                { eventType: null },
-            ],
-        },
-    });
+    // Cache-first loads — no DB hit if cache is warm
+    const [allMatchingRules, accountIdToSessionId] = await Promise.all([
+        getActiveRules(event.workspaceId, event.eventType),
+        getAccountIdToSessionId(event.workspaceId),
+    ]);
 
     const eventPayload = event.payload as any;
     const incomingSessionId: string | undefined = eventPayload?.sessionId;
     const incomingContent: string = (eventPayload?.content || '').toLowerCase();
-
-    const waAccounts = await prisma.whatsAppAccount.findMany({
-        where: { workspaceId: event.workspaceId },
-        select: { id: true, sessionId: true },
-    });
-    const accountIdToSessionId = new Map(waAccounts.map(a => [a.id, a.sessionId]));
 
     const triggerRules = allMatchingRules.filter(rule => {
         const flowDef = rule.flowDefinition as any;
@@ -97,7 +146,8 @@ export async function processSystemEvent(job: Job): Promise<void> {
             },
         });
 
-        await logEvent(event.workspaceId, 'automation_triggered', 'automation_engine', {
+        // Fire-and-forget — event-logger uses an internal batch buffer
+        logEvent(event.workspaceId, 'automation_triggered', 'automation_engine', {
             executionId: execution.id,
             ruleId: rule.id,
             contactId,

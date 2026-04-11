@@ -65,7 +65,7 @@ export async function toggleWorkspaceStatus(id: string, suspended: boolean, admi
 
     // Audit log — non-blocking
     const eventType = suspended ? 'workspace_suspended' : 'workspace_activated';
-    await logEvent(id, eventType, 'admin_panel', { adminId, status }).catch(() => {});
+    logEvent(id, eventType, 'admin_panel', { adminId, status });
 
     return workspace;
 }
@@ -133,11 +133,11 @@ export async function impersonateWorkspace(
     });
 
     // 5. Audit event log (async, non-blocking)
-    await logEvent(workspaceId, 'admin_impersonation', 'admin_panel', {
+    logEvent(workspaceId, 'admin_impersonation', 'admin_panel', {
         adminId,
         logId: log.id,
         ipAddress,
-    }).catch(() => {});
+    });
 
     return { token, expiresAt, logId: log.id };
 }

@@ -159,11 +159,11 @@ export async function updateMemberRole(
     });
 
     // Audit: log role changes for compliance
-    await logEvent(workspaceId, 'member_role_changed', 'workspace_admin', {
+    logEvent(workspaceId, 'member_role_changed', 'workspace_admin', {
         memberId,
         oldRole,
         newRole,
-    }).catch(() => {}); // Non-blocking — audit failure must not block the operation
+    }); // Non-blocking — audit failure must not block the operation
     
     return { id: updated.id, role: updated.role, joinedAt: updated.joinedAt, user: updated.user };
 }

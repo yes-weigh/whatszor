@@ -5,6 +5,7 @@ import api from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { Settings, CheckCircle, AlertCircle, Clock, Activity, BarChart2 } from 'lucide-react';
 import Link from 'next/link';
+import { ProductAnalyticsFunnel } from './components/ProductAnalyticsFunnel';
 
 export default function KnowledgeBaseList() {
     const { data: q, isLoading } = useQuery({
@@ -40,6 +41,8 @@ export default function KnowledgeBaseList() {
             <Header title="Product Knowledge Base" subtitle="Manage scraped and AI-extracted data for your products." />
             <div className="flex flex-col gap-6 p-6">
                 
+                <ProductAnalyticsFunnel />
+
                 {/* ── Observability & Health Dashboards ── */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* System Health */}

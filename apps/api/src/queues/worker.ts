@@ -4,8 +4,12 @@ import { createLogger } from '../core/logger';
 import { QueueName, getAllQueues } from './index';
 import { requestContext } from '../core/context';
 import { getRedisClient } from '../core/redis';
-import { alertQueueBacklog } from '../core/alert';
+import { alertQueueBacklog, sendAlert } from '../core/alert';
 import { FatalError } from '../core/errors';
+import { startMonitor, stopMonitor, instrumentJobLatency } from '../core/monitor';
+import { jobProcessingCounter, jobLatencyHistogram } from '../core/prometheus';
+import { recordDequeue } from '../core/backpressure';
+import { prisma } from '../prisma/client';
 
 // ── Worker processors ─────────────────────────────────────────────────────────
 import { processInboundMessage } from '../core/workers/inbound-message.worker';
@@ -13,6 +17,7 @@ import { processHistorySync } from '../core/workers/history-sync.worker';
 import { processContactsSync } from '../core/workers/contacts-sync.worker';
 import { processOutboundMessage } from '../core/workers/outbound-message.worker';
 import { processSystemEvent } from '../core/workers/system-events.worker';
+import { processReceiptJob } from '../core/workers/receipt.worker';
 import { processAutomationJob } from '../modules/automation/automation-worker';
 import { processCampaignJob } from '../modules/campaign/campaign-worker';
 import { processAiJob } from '../modules/ai/ai-worker';
@@ -25,10 +30,14 @@ const log = createLogger({ module: 'workers', action: 'lifecycle' });
 
 function buildConnection() {
     const redisUrl = new URL(env.REDIS_URL);
+    const dbMatch = redisUrl.pathname.match(/\/(?<db>\d+)/);
+    const db = dbMatch ? parseInt(dbMatch.groups!.db, 10) : 0;
+    
     return {
         host: redisUrl.hostname,
         port: parseInt(redisUrl.port || '6379', 10),
         password: redisUrl.password || undefined,
+        db,
         maxRetriesPerRequest: null,
         retryStrategy: (times: number) => Math.min(times * 200, 30_000),
     };
@@ -57,10 +66,22 @@ function wrapProcessor(queueName: QueueName, processor: any) {
             try {
                 const result = await processor(job);
                 const duration = Date.now() - startTime;
+                // Track queue wait latency (time from enqueue → start processing)
+                if (job.timestamp && job.processedOn) {
+                    instrumentJobLatency(queueName, job.timestamp, job.processedOn);
+                }
                 jobLog.info(
                     { jobId: job.id, queueName, duration },
                     'Job processing succeeded'
                 );
+                
+                // Prometheus metrics
+                jobProcessingCounter.inc({ queue_name: queueName, status: 'success' });
+                jobLatencyHistogram.observe({ queue_name: queueName }, duration / 1000);
+
+                // Dequeue rate counter — feeds the backpressure ratio signal
+                recordDequeue(queueName).catch(() => {});
+
                 return result;
             } catch (err: any) {
                 const duration = Date.now() - startTime;
@@ -84,6 +105,7 @@ function wrapProcessor(queueName: QueueName, processor: any) {
                         { jobId: job.id, queueName, attempt: job.attemptsMade + 1, maxAttempts: job.opts?.attempts, duration, err: err.message },
                         'Job processor threw terminal exception after all standard retries'
                     );
+                    jobProcessingCounter.inc({ queue_name: queueName, status: 'failed' });
                 }
                 throw err;
             }
@@ -91,10 +113,11 @@ function wrapProcessor(queueName: QueueName, processor: any) {
     };
 }
 
-function createWorker(queueName: QueueName, processor: any, concurrency: number): Worker {
+function createWorker(queueName: QueueName, processor: any, concurrency: number, additionalOpts: Record<string, any> = {}): Worker {
     const worker = new Worker(queueName, wrapProcessor(queueName, processor), {
         connection: buildConnection(),
         concurrency,
+        ...additionalOpts,
     });
 
     worker.on('failed', (job, err) => {
@@ -123,6 +146,38 @@ function createWorker(queueName: QueueName, processor: any, concurrency: number)
                 },
                 'Job exhausted all retries — entering DLQ state'
             );
+
+            // ── Persist to Postgres DLQ ───────────────────────────────────────
+            // This is the authoritative record. BullMQ's failed set is ephemeral
+            // (capped by removeOnFail). Postgres record survives indefinitely and
+            // can be replayed via the /admin/dlq API.
+            prisma.deadLetterJob.create({
+                data: {
+                    jobId:        job.id ?? 'unknown',
+                    queueName,
+                    jobName:      job.name,
+                    payload:      job.data ?? {},
+                    failReason:   err.message,
+                    stackTrace:   err.stack?.slice(0, 4000) ?? null,
+                    failedAt:     new Date(),
+                    attemptsMade: job.attemptsMade,
+                    workspaceId:  job.data?.workspaceId ?? null,
+                    status:       'PENDING_REVIEW',
+                },
+            }).catch((dbErr: unknown) => terminalLog.error({ dbErr }, 'Failed to persist job to DLQ table'));
+
+            // Send webhook alert to development team
+            sendAlert({
+                title: 'Background Job Dead Lettered',
+                level: 'error',
+                message: `Job ${job.id} in queue [${queueName}] permanently failed after ${job.attemptsMade} attempts. Error: "${err.message}"`,
+                context: {
+                    jobId: job.id,
+                    queueName,
+                    traceId: job.data?.traceId,
+                    workspaceId: job.data?.workspaceId,
+                }
+            }).catch(() => {});
         }
     });
 
@@ -195,23 +250,31 @@ async function startBacklogMonitor() {
 
 export function startApiNodeWorkers(): void {
     workers.push(
-        createWorker(QueueName.INBOUND_MESSAGES, processInboundMessage, 5),
-        createWorker(QueueName.OUTBOUND_MESSAGES, processOutboundMessage, 5),
-        createWorker(QueueName.HISTORY_SYNC, processHistorySync, 1),
-        createWorker(QueueName.CONTACTS_SYNC, processContactsSync, 2),
+        // INBOUND: avg job time drops to ~15ms after conversation.update merge
+        // and account cache — safe to run 10 concurrent without saturating DB.
+        createWorker(QueueName.INBOUND_MESSAGES, processInboundMessage, 10),
+        // OUTBOUND: rate-limited per session by AntiBan; limit overall burst to 50/sec.
+        createWorker(QueueName.OUTBOUND_MESSAGES, processOutboundMessage, 8, { limiter: { max: 50, duration: 1000 } }),
+        // HISTORY_SYNC: 100-session startup creates 100-job burst; 3 slots handle it.
+        createWorker(QueueName.HISTORY_SYNC, processHistorySync, 3),
+        createWorker(QueueName.CONTACTS_SYNC, processContactsSync, 3),
     );
 
     startHeartbeat();
     startBacklogMonitor();
+    startMonitor();
     log.info('API-bound WhatsApp workers started');
 }
 
 export function startBackgroundWorkers(): void {
     workers.push(
-        createWorker(QueueName.SYSTEM_EVENTS, processSystemEvent, 3),
-        createWorker(QueueName.CAMPAIGN, processCampaignJob, 2),
-        createWorker(QueueName.AUTOMATION, processAutomationJob, 5),
-        createWorker(QueueName.AI, processAiJob, 3),
+        createWorker(QueueName.SYSTEM_EVENTS, processSystemEvent, 5),
+        createWorker(QueueName.CAMPAIGN, processCampaignJob, 3),
+        // AUTOMATION: after caching, each job is ~5ms; 10 handles burst webhook + AI replies
+        createWorker(QueueName.AUTOMATION, processAutomationJob, 10),
+        createWorker(QueueName.AI, processAiJob, 5),
+        // RECEIPTS: new dedicated queue — replaces the inline socket handler
+        createWorker(QueueName.RECEIPTS, processReceiptJob, 5),
         createWorker(QueueName.KNOWLEDGE_OUTREACH, processKnowledgeOutreachJob, 2),
         createWorker(QueueName.KNOWLEDGE_INGESTION, processIncomingKnowledgeJob, 2),
         createWorker(QueueName.LEAD_GENERATION, processLeadGenerationJob, 3),
@@ -220,6 +283,7 @@ export function startBackgroundWorkers(): void {
     startHeartbeat();
     startBacklogMonitor();
     startZombieSweeper();
+    startMonitor();
     log.info('Background workers started');
 }
 
@@ -230,10 +294,27 @@ export function startWorkers(): void {
 }
 
 export async function stopWorkers(): Promise<void> {
+    const DRAIN_TIMEOUT_MS = 25_000;
+
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     if (backlogMonitorTimer) clearInterval(backlogMonitorTimer);
     stopZombieSweeper();
-    await Promise.all(workers.map(w => w.close()));
+    stopMonitor();
+
+    // Use allSettled + timeout so one stuck worker never prevents others closing.
+    // Without the timeout, Promise.all hangs forever if a worker has an active
+    // job that never resolves (e.g. a deadlocked DB transaction).
+    log.info({ count: workers.length, timeoutMs: DRAIN_TIMEOUT_MS }, 'Draining workers...');
+    await Promise.allSettled(
+        workers.map(w =>
+            Promise.race([
+                w.close(),
+                new Promise<void>(resolve => setTimeout(resolve, DRAIN_TIMEOUT_MS))
+                    .then(() => log.warn({ queue: (w as any).name }, 'Worker drain timed out — forcing close')),
+            ])
+        )
+    );
+    workers = [];
     log.info('All workers stopped');
 }
 

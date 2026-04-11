@@ -9,8 +9,6 @@ import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { env } from '../env';
 import { createLogger } from './logger';
 import { getRedisClient } from './redis';
-import { prisma } from '../prisma/client';
-import { getQueue, QueueName } from '../queues';
 import { requestContext } from './context';
 import { registerResponseDecorators } from './response-decorators';
 import { healthRoutes } from '../modules/health/health.route';
@@ -42,6 +40,7 @@ import { licenseRoutes } from '../modules/license/license.routes';
 import { keywordAutomationRoutes } from '../modules/automation/keyword-automation.route';
 import { automationInsightRoutes } from '../modules/automation/automation-insights.route';
 import { leadGenerationRoutes } from '../modules/lead-generation/lead-generation.route';
+import { startMonitor, getMonitorSnapshot } from './monitor';
 
 /**
  * Creates and configures the Fastify server instance.
@@ -160,27 +159,41 @@ export async function createServer(): Promise<FastifyInstance> {
     
     server.get('/system/health', async (_req, reply) => {
         try {
-            const queue = getQueue(QueueName.KNOWLEDGE_INGESTION);
-            const queueBacklog = (await queue.getWaitingCount()) + (await queue.getActiveCount());
-            const failedJobs = await queue.getFailedCount();
-            
-            const successCount = await prisma.productKnowledgeSource.count({
-                where: { status: { in: ['APPLIED', 'CONFLICT'] } }
-            });
-            const totalAITries = await prisma.productKnowledgeSource.count({
-                where: { status: { in: ['APPLIED', 'CONFLICT', 'FAILED_VALIDATION'] } }
-            });
-            
-            const aiSuccessRate = totalAITries === 0 ? 100 : Math.round((successCount / totalAITries) * 100);
+            const snapshot = getMonitorSnapshot();
+
+            // Derive a simple status string for quick dashboarding
+            const elP95 = snapshot.eventLoop?.p95Ms ?? 0;
+            const dbWriteRate = snapshot.db?.writesPerSec ?? 0;
+            const heapMb = snapshot.process?.heapUsedMb ?? 0;
+
+            const status =
+                elP95 > 200 || dbWriteRate > 100 || heapMb > 4096 ? 'degraded'
+                : elP95 > 50  || dbWriteRate > 60  || heapMb > 3072 ? 'warning'
+                : 'healthy';
 
             return reply.status(200).send({
-                queueBacklog,
-                failedJobs,
-                aiSuccessRate,
-                avgProcessingTimeMs: 1450
+                status,
+                ...snapshot,
             });
-        } catch(e) {
+        } catch (e) {
             return reply.status(500).send({ error: 'Failed to retrieve system health' });
+        }
+    });
+
+    server.get('/metrics', async (_req, reply) => {
+        try {
+            const { register, collectQueueMetrics } = await import('./prometheus');
+            const { getAllQueues } = await import('../queues');
+            
+            const queuesMap = getAllQueues();
+            const queues = Array.from(queuesMap.values());
+            
+            await collectQueueMetrics(queues);
+            
+            reply.header('Content-Type', register.contentType);
+            return reply.send(await register.metrics());
+        } catch (e) {
+            return reply.status(500).send({ error: 'Failed to generate metrics' });
         }
     });
 
@@ -273,5 +286,9 @@ export async function createServer(): Promise<FastifyInstance> {
     });
 
     createLogger({ module: 'system', action: 'startup' }).info('Fastify server configured');
+
+    // Start the performance monitor so /system/health has live data immediately
+    startMonitor();
+
     return server;
 }

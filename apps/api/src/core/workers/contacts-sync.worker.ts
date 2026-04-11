@@ -12,7 +12,7 @@ import { createLogger } from '../logger';
 const log = createLogger({ module: 'worker:contacts-sync' });
 
 export async function processContactsSync(job: Job): Promise<void> {
-    const { workspaceId, contacts } = job.data;
+    const { workspaceId, sessionId, contacts } = job.data;
 
     const CHUNK_SIZE = 50;
     const allContacts = (contacts ?? []);
@@ -20,76 +20,135 @@ export async function processContactsSync(job: Job): Promise<void> {
     for (let i = 0; i < allContacts.length; i += CHUNK_SIZE) {
         const chunk = allContacts.slice(i, i + CHUNK_SIZE);
         
-        await Promise.all(chunk.map(async (contact: any) => {
-            const jid: string = contact.id;
-            const lid: string | undefined = contact.lid;
+        // 1. Bulk Update Contact Names
+        const jids: string[] = [];
+        for (const contact of chunk) {
+            if (contact.id && contact.notify && !contact.id.endsWith('@g.us') && !contact.id.endsWith('@newsletter')) {
+                jids.push(contact.id);
+                if (contact.lid) jids.push(contact.lid);
+            }
+        }
+
+        if (jids.length > 0) {
+            // Because names vary per contact, we can't do one big updateMany for all names easily.
+            // But we can batch the updates sequentially instead of Promise.all to prevent DB storms.
+            for (const contact of chunk) {
+                const jid = contact.id;
+                const name = contact.notify || contact.name;
+                if (!name || !jid) continue;
+                if (jid.endsWith('@g.us') || jid.endsWith('@newsletter')) continue;
+
+                await prisma.conversation.updateMany({
+                    where: { workspaceId, providerId: { in: [jid, contact.lid].filter(Boolean) as string[] } },
+                    data: { waContactName: name },
+                });
+            }
+        }
+
+        // 2. Safely Process LID Migrations Sequentially
+        for (const contact of chunk) {
+            let jid: string = contact.id;
+            let lid: string | undefined = contact.lid;
             const name: string = contact.notify || contact.name;
-            if (!jid || !name) return;
-            if (jid.endsWith('@g.us') || jid.endsWith('@newsletter')) return;
+            const phoneNumber: string | undefined = contact.phoneNumber;
+            const remoteJidAlt: string | undefined = contact.remoteJidAlt ?? (contact.key as any)?.remoteJidAlt;
 
-            const jidsToUpdate = [jid, lid].filter(Boolean) as string[];
-            await prisma.conversation.updateMany({
-                where: { workspaceId, providerId: { in: jidsToUpdate } },
-                data: { waContactName: name },
-            });
+            // Handle objects where 'id' is the lid, but we have 'phoneNumber' or 'remoteJidAlt'
+            if (jid && jid.endsWith('@lid') && phoneNumber && phoneNumber.endsWith('@s.whatsapp.net')) {
+                lid = jid;
+                jid = phoneNumber;
+            } else if (jid && jid.endsWith('@lid') && remoteJidAlt && remoteJidAlt.endsWith('@s.whatsapp.net')) {
+                lid = jid;
+                jid = remoteJidAlt;
+            } else if (lid && lid.endsWith('@lid') && remoteJidAlt && remoteJidAlt.endsWith('@s.whatsapp.net')) {
+                jid = remoteJidAlt;
+            }
 
-            if (lid) {
+            if (!jid || !lid || jid.endsWith('@g.us')) continue;
+
+            try {
                 const phoneStr = jid.replace('@s.whatsapp.net', '').replace('@c.us', '');
                 const lidPhone = lid.replace('@lid', '');
 
-                // Fix Contact.phone stuck with @lid value
+                // A. Heal Contact
                 const stuckContact = await prisma.contact.findFirst({
                     where: { workspaceId, phone: { in: [lidPhone, lid] } },
-                    select: { id: true, phone: true },
+                    select: { id: true }
                 });
 
                 if (stuckContact) {
-                    const realPhoneContact = await prisma.contact.findFirst({
-                        where: { workspaceId, phone: phoneStr },
-                        select: { id: true },
-                    });
-
-                    if (!realPhoneContact) {
+                    const realContact = await prisma.contact.findFirst({ where: { workspaceId, phone: phoneStr } });
+                    if (!realContact) {
                         await prisma.contact.update({
                             where: { id: stuckContact.id },
                             data: { phone: phoneStr, firstName: name || undefined },
                         });
-                        log.warn({ workspaceId, lid, jid, phone: phoneStr }, 'Fixed Contact.phone from @lid to real phone');
+                    } else {
+                        // Merge conversations attached to the stuck contact to the real contact
+                        await prisma.conversation.updateMany({
+                            where: { contactId: stuckContact.id },
+                            data: { contactId: realContact.id },
+                        });
+                        // Delete the stuck contact
+                        await prisma.contact.delete({ where: { id: stuckContact.id } });
                     }
                 }
 
-                // LID conversation migration
+                // B. Heal Conversation
+                // Scope by sessionId to avoid cross-session collisions in multi-session setups
+                const sessionFilter = sessionId ? { sessionId } : {};
                 const lidConv = await prisma.conversation.findFirst({
-                    where: { workspaceId, providerId: lid },
-                    select: { id: true },
+                    where: { workspaceId, providerId: lid, ...sessionFilter },
+                    select: { id: true, sessionId: true, contactId: true },
                 });
 
                 if (lidConv) {
                     const realConv = await prisma.conversation.findFirst({
-                        where: { workspaceId, providerId: jid },
-                        select: { id: true, lastMessageAt: true },
+                        where: { workspaceId, providerId: jid, ...(lidConv.sessionId ? { sessionId: lidConv.sessionId } : {}) },
+                        select: { id: true, contactId: true },
                     });
 
                     if (!realConv) {
-                        await prisma.conversation.update({
+                        // Safe rename — no collision possible
+                        await prisma.conversation.updateMany({
                             where: { id: lidConv.id },
-                            data: { providerId: jid, waContactName: name },
+                            data: { providerId: jid, waContactName: name || undefined },
                         });
-                        log.warn({ workspaceId, lid, jid, name }, 'Migrated LID conversation to real phone JID');
                     } else {
-                        try {
-                            await prisma.message.updateMany({
-                                where: { conversationId: lidConv.id },
-                                data: { conversationId: realConv.id },
-                            });
-                            await prisma.conversation.delete({ where: { id: lidConv.id } });
-                            log.warn({ workspaceId, lid, jid }, 'Merged LID conv into real-JID conv and deleted duplicate');
-                        } catch (mergeErr) {
-                            log.error({ mergeErr, workspaceId, lid, jid }, 'Failed to merge LID conversation — leaving as-is');
+                        // Both exist — drain messages from ghost then delete it
+                        const lidMessages = await prisma.message.findMany({
+                            where: { conversationId: lidConv.id },
+                            select: { id: true }
+                        });
+                        
+                        for (const msg of lidMessages) {
+                            try {
+                                await prisma.message.update({
+                                    where: { id: msg.id },
+                                    data: { conversationId: realConv.id }
+                                });
+                            } catch (mergeErr: any) {
+                                if (mergeErr.code === 'P2002') {
+                                    // Exact duplicate in realConv — drop ghost copy
+                                    await prisma.message.delete({ where: { id: msg.id } }).catch(() => {});
+                                }
+                            }
                         }
+
+                        // Forward contactId if realConv has none
+                        if (!realConv.contactId && lidConv.contactId) {
+                            await prisma.conversation.update({
+                                where: { id: realConv.id },
+                                data: { contactId: lidConv.contactId },
+                            }).catch(() => {});
+                        }
+
+                        await prisma.conversation.delete({ where: { id: lidConv.id } });
                     }
                 }
+            } catch (err) {
+                log.error({ err, jid, lid }, 'Error migrating LID in contacts-sync');
             }
-        }));
+        }
     }
 }

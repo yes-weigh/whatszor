@@ -3,6 +3,7 @@ import type { CreateConversationInput, UpdateConversationInput, SendMessageInput
 import { ErrorCodes, createError } from '@whatszor/shared';
 import { getQueue, QueueName } from '../../queues';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
+import { getAllowedSessions } from '../whatsapp/account-access.service';
 
 // ── JID Utilities ──────────────────────────────────────────
 
@@ -89,22 +90,23 @@ export async function createOrGetConversation(workspaceId: string, input: Create
 }
 
 
-export async function listConversations(workspaceId: string, userRole: string, userId: string, sessionId?: string) {
+export async function listConversations(workspaceId: string, userRole: string, userId: string, sessionId?: string, productId?: string) {
     const where: Record<string, unknown> = { workspaceId, deletedAt: null };
     if (sessionId) {
         // Show conversations belonging to exactly this session
         where.sessionId = sessionId;
+    }
+    if (productId) {
+        where.contact = {
+            contactProducts: { some: { productId } }
+        };
     }
 
     // ── MEMBER session ownership guard ──────────────────────────────────────────
     // MEMBERs may only list conversations for WhatsApp sessions they personally own.
     // OWNER and ADMIN have full workspace-level visibility.
     if (userRole === 'MEMBER') {
-        const sessions = await prisma.whatsAppAccount.findMany({
-            where: { workspaceId, userId, deletedAt: null },
-            select: { sessionId: true },
-        });
-        const sessionIds = sessions.map(s => s.sessionId);
+        const sessionIds = await getAllowedSessions(workspaceId, userId);
         
         if (sessionIds.length === 0) {
             return { items: [] }; // No sessions assigned
@@ -123,7 +125,7 @@ export async function listConversations(workspaceId: string, userRole: string, u
     const conversations = await (prisma.conversation as any).findMany({
         where,
         include: {
-            contact: { select: { id: true, firstName: true, lastName: true, phone: true } },
+            contact: { select: { id: true, firstName: true, lastName: true, phone: true, contactProducts: { select: { relationType: true, product: { select: { id: true, name: true } } } } } },
             messages: {
                 orderBy: { createdAt: 'desc' },
                 take: 1,
@@ -283,17 +285,11 @@ export async function sendMessage(
     // MEMBERs may only send messages through WhatsApp sessions they personally own.
     // OWNER and ADMIN have full workspace-level session access.
     if (userRole === 'MEMBER' && sessionId !== workspaceId) {
-        const session = await prisma.whatsAppAccount.findFirst({
-            where: { sessionId, workspaceId, deletedAt: null },
-            select: { userId: true },
-        });
-        if (!session) {
-            const err = Object.assign(new Error('Session not found'), { code: 'NOT_FOUND', statusCode: 404 });
-            throw err;
-        }
-        if (session.userId !== userId) {
+        const allowedSessions = await getAllowedSessions(workspaceId, userId);
+
+        if (!allowedSessions.includes(sessionId)) {
             const err = Object.assign(
-                new Error('Access denied: you can only send messages through sessions you own'),
+                new Error('Access denied: you can only send messages through sessions you have access to'),
                 { code: 'FORBIDDEN', statusCode: 403 },
             );
             throw err;

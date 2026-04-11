@@ -116,14 +116,107 @@ export const healthRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
      * Returns aggregate stats for WhatsApp connections.
      */
     fastify.get('/whatsapp', async (_req, reply) => {
-        const stats = waManager.getGlobalStats();
+        // Determine active sessions across the manager instance
+        const activeSessions = Object.keys((waManager as any).sessions || {}).length;
 
         return reply.status(200).send({
             success: true,
             data: {
                 timestamp: new Date().toISOString(),
-                ...stats,
+                activeSessions,
+                status: 'operational'
             },
         });
+    });
+
+    /**
+     * GET /health/lid-status
+     * Reports how many LID→phone mappings are currently in Baileys' in-memory store.
+     * Call this first to verify contacts have synced before running heal-lids.
+     */
+    fastify.get('/lid-status', async (_req, reply) => {
+        const sessions: Array<{ sessionId: string; storeSize: number; lidMappings: number }> = [];
+        let totalLids = 0;
+
+        for (const sessionId of Array.from((waManager as any).sockets.keys() as Iterable<string>)) {
+            const store = waManager.getContactsStore(sessionId);
+            let lidCount = 0;
+            for (const [key, val] of store.entries()) {
+                if (key.endsWith('@lid') && !val.jid.endsWith('@lid')) lidCount++;
+            }
+            sessions.push({ sessionId, storeSize: store.size, lidMappings: lidCount });
+            totalLids += lidCount;
+        }
+
+        const dbLidCount = await prisma.conversation.count({
+            where: { providerId: { endsWith: '@lid' } }
+        });
+
+        return reply.send({ 
+            success: true, 
+            data: { sessions, totalLidMappings: totalLids, dbLidConversations: dbLidCount },
+        });
+    });
+
+    /**
+     * POST /health/heal-lids
+     * Retroactively sweeps the database for conversations stuck with @lid identifiers
+     * and maps them back to real phone number JIDs using Baileys in-memory cache.
+     */
+    fastify.post('/heal-lids', async (_req, reply) => {
+        let healed = 0;
+        let checked = 0;
+        let notResolved = 0;
+        const globalLidMap = new Map<string, string>(); // lid → real JID
+
+        // Build global LID map from all active sessions
+        for (const sessionId of Array.from((waManager as any).sockets.keys() as Iterable<string>)) {
+            const store = waManager.getContactsStore(sessionId);
+            for (const [key, val] of store.entries()) {
+                if (key.endsWith('@lid') && val.jid && !val.jid.endsWith('@lid')) {
+                    globalLidMap.set(key, val.jid);
+                }
+            }
+        }
+
+        if (globalLidMap.size === 0) {
+            return reply.send({ 
+                success: false, 
+                error: 'Contact store is empty. WhatsApp may still be syncing. Wait 2-3 minutes after startup and try again.',
+                healed: 0,
+            });
+        }
+
+        // Find all restricted @lid conversations
+        const lidConvs = await prisma.conversation.findMany({
+            where: { providerId: { endsWith: '@lid' } },
+            select: { id: true, providerId: true, workspaceId: true },
+        });
+
+        checked = lidConvs.length;
+
+        for (const conv of lidConvs) {
+            const resolvedJid = globalLidMap.get(conv.providerId);
+            if (!resolvedJid) { notResolved++; continue; }
+
+            const realPhone = resolvedJid.replace('@s.whatsapp.net', '').replace('@c.us', '');
+            const oldLidNum = conv.providerId.replace('@lid', '');
+
+            // Update conversation providerId
+            await prisma.conversation.update({
+                where: { id: conv.id },
+                data: { providerId: resolvedJid }
+            });
+
+            // Also heal any CRM contact stuck with the lid number as their phone
+            await prisma.contact.updateMany({
+                where: { workspaceId: conv.workspaceId, phone: oldLidNum },
+                data: { phone: realPhone },
+            }).catch(() => {}); // non-fatal
+
+            healed++;
+        }
+
+        return reply.send({ success: true, checked, healed, notResolved, lidMappingsInMemory: globalLidMap.size });
     });
 };

@@ -26,6 +26,7 @@ import { emit as realtimeEmit } from '../realtime';
 import { getQueue, QueueName } from '../../queues';
 import { randomUUID } from 'crypto';
 import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } from '../idempotency';
+import { bufferMessage } from '../message-buffer';
 import { composeAndQueueMessage } from '../messaging/message-composer';
 // Keyword Automation Engine — PRIMARY layer that runs before QuickReply
 import {
@@ -38,14 +39,41 @@ import { BatchProcessingError } from '../errors';
 
 const log = createLogger({ module: 'worker:inbound-messages' });
 
+// ── WhatsApp account TTL cache (per-worker, in-process) ────────────────────
+// whatsAppAccount is fetched once per job at the top of processInboundMessage.
+// At 100 sessions × 1 msg/s this was 100 DB reads/sec. A 60-second TTL
+// collapses that to ~2 reads/min per session (on first message + on miss).
+
+const ACCOUNT_CACHE_TTL_MS = 60_000;
+const accountCache = new Map<string, { data: any; expiresAt: number }>();
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of accountCache.entries()) {
+        if (val.expiresAt < now) {
+            accountCache.delete(key);
+        }
+    }
+}, 120_000);
+
+async function getCachedAccount(sessionId: string) {
+    const cached = accountCache.get(sessionId);
+    if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+    const data = await prisma.whatsAppAccount.findUnique({
+        where: { sessionId },
+        select: { botMode: true, name: true, phoneNumber: true },
+    });
+    accountCache.set(sessionId, { data, expiresAt: Date.now() + ACCOUNT_CACHE_TTL_MS });
+    return data;
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 export async function processInboundMessage(job: Job): Promise<void> {
     const { workspaceId, sessionId, messages } = job.data;
     const errors: Error[] = [];
 
-    const account = await prisma.whatsAppAccount.findUnique({
-        where: { sessionId },
-        select: { botMode: true, name: true, phoneNumber: true },
-    });
+    const account = await getCachedAccount(sessionId);
 
     for (const msg of messages) {
         try {
@@ -77,6 +105,61 @@ export async function processInboundMessage(job: Job): Promise<void> {
                 if (resolvedJid) {
                     providerId = resolvedJid;
                     log.debug({ lid: rawJid, resolved: providerId }, 'Resolved @lid JID');
+
+                    // ── Pre-emptive Conversation Merge ────────────────────────────
+                    // Must run BEFORE createOrGetConversation so the new message always
+                    // lands in the real-JID conversation — never in the @lid ghost.
+                    //
+                    // Cases:
+                    //  A only  → upgrade A.providerId = resolvedJid (simple rename)
+                    //  B only  → nothing; createOrGetConversation reuses B
+                    //  A + B   → drain messages A→B then delete A
+                    //  neither → nothing; createOrGetConversation creates B
+                    try {
+                        const [lidConv, realConv] = await Promise.all([
+                            prisma.conversation.findUnique({
+                                where: { workspaceId_provider_providerId_sessionId: { workspaceId, provider: 'WHATSAPP', providerId: rawJid, sessionId: sessionId ?? '' } },
+                                select: { id: true, contactId: true },
+                            }),
+                            prisma.conversation.findUnique({
+                                where: { workspaceId_provider_providerId_sessionId: { workspaceId, provider: 'WHATSAPP', providerId: resolvedJid, sessionId: sessionId ?? '' } },
+                                select: { id: true, contactId: true },
+                            }),
+                        ]);
+
+                        if (lidConv && realConv) {
+                            // Both rows exist — drain messages from ghost then delete it
+                            const lidMessages = await prisma.message.findMany({
+                                where: { conversationId: lidConv.id },
+                                select: { id: true },
+                            });
+                            for (const m of lidMessages) {
+                                try {
+                                    await prisma.message.update({ where: { id: m.id }, data: { conversationId: realConv.id } });
+                                } catch (moveErr: any) {
+                                    if (moveErr.code === 'P2002') {
+                                        // Exact duplicate already in realConv — drop the ghost copy
+                                        await prisma.message.delete({ where: { id: m.id } }).catch(() => {});
+                                    }
+                                }
+                            }
+                            // Forward contactId if realConv has none
+                            if (!realConv.contactId && lidConv.contactId) {
+                                await prisma.conversation.update({ where: { id: realConv.id }, data: { contactId: lidConv.contactId } }).catch(() => {});
+                            }
+                            await prisma.conversation.delete({ where: { id: lidConv.id } }).catch(() => {});
+                            log.info({ lidConvId: lidConv.id, realConvId: realConv.id, lid: rawJid, real: resolvedJid }, 'Merged @lid ghost into real conversation');
+
+                        } else if (lidConv && !realConv) {
+                            // Only @lid row — safe rename, no collision possible
+                            await prisma.conversation.update({ where: { id: lidConv.id }, data: { providerId: resolvedJid } });
+                            log.info({ lidConvId: lidConv.id, lid: rawJid, real: resolvedJid }, 'Upgraded @lid conversation to real phone number');
+                        }
+                    } catch (mergeErr) {
+                        log.warn({ err: mergeErr, rawJid, resolvedJid }, 'Pre-emptive @lid merge failed — continuing with resolved JID');
+                    }
+                    // ─────────────────────────────────────────────────────────────
+
                 } else if (job.attemptsMade < 4) {
                     // Defer — contacts.upsert may not have fired yet.
                     // BullMQ exponential backoff will retry automatically.
@@ -163,6 +246,9 @@ export async function processInboundMessage(job: Job): Promise<void> {
 
             const pushName: string | undefined = (msg as any).pushName;
 
+            // Track all conversation field mutations here — flushed in ONE update below.
+            const convPatch: Record<string, any> = {};
+
             const conversation = await createOrGetConversation(workspaceId, {
                 provider: 'WHATSAPP',
                 providerId,
@@ -199,10 +285,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
                             throw upsertErr;
                         }
                     }
-                    await prisma.conversation.update({
-                        where: { id: conversation.id },
-                        data: { contactId: contact.id },
-                    });
+                    if (contact) convPatch.contactId = contact.id;
                     conversation.contactId = contact.id;
                 } catch (contactErr) {
                     log.warn({ err: contactErr, providerId }, 'Failed to auto-create CRM contact');
@@ -221,11 +304,24 @@ export async function processInboundMessage(job: Job): Promise<void> {
                         select: { id: true },
                     });
                     if (stuckContact) {
-                        await prisma.contact.update({
-                            where: { id: stuckContact.id },
-                            data: { phone: realPhoneStr, firstName: pushName || undefined },
+                        const existingContact = await prisma.contact.findFirst({
+                            where: { workspaceId, phone: realPhoneStr }
                         });
-                        log.warn({ lid: rawJid, phone: realPhoneStr }, 'Healed Contact.phone from @lid');
+                        if (existingContact) {
+                            await prisma.conversation.updateMany({
+                                where: { contactId: stuckContact.id },
+                                data: { contactId: existingContact.id }
+                            });
+                            convPatch.contactId = existingContact.id;
+                            await prisma.contact.delete({ where: { id: stuckContact.id } });
+                            log.warn({ lid: rawJid, phone: realPhoneStr }, 'Merged @lid contact into existing real contact');
+                        } else {
+                            await prisma.contact.update({
+                                where: { id: stuckContact.id },
+                                data: { phone: realPhoneStr, firstName: pushName || undefined },
+                            });
+                            log.warn({ lid: rawJid, phone: realPhoneStr }, 'Healed Contact.phone from @lid');
+                        }
                     }
                 } catch (healErr) {
                     log.warn({ err: healErr }, 'Failed to heal @lid contact phone');
@@ -235,10 +331,7 @@ export async function processInboundMessage(job: Job): Promise<void> {
 
             // Refresh waContactName
             if (pushName && !msg.key.fromMe) {
-                await prisma.conversation.update({
-                    where: { id: conversation.id },
-                    data: { waContactName: pushName },
-                });
+                convPatch.waContactName = pushName;
                 Object.assign(conversation, { waContactName: pushName });
             }
 
@@ -290,17 +383,15 @@ export async function processInboundMessage(job: Job): Promise<void> {
             // ──────────────────────────────────────────────────────────────────
 
             // ── Persist Message ─────────────────────────────────────────────
-                const createdMsg = await prisma.message.create({
-                    data: {
-                        conversationId: conversation.id,
-                        workspaceId,
-                        remoteId: msg.key.id,
-                        direction: msg.key.fromMe ? 'OUTBOUND' : 'INBOUND',
-                        type: type as MessageType,
-                        content: finalContent,
-                        mediaData: mediaData as Prisma.InputJsonValue,
-                        status: msg.key.fromMe ? 'SENT' : 'RECEIVED',
-                    },
+                const createdMsg = await bufferMessage({
+                    conversationId: conversation.id,
+                    workspaceId,
+                    remoteId: msg.key.id,
+                    direction: msg.key.fromMe ? 'OUTBOUND' : 'INBOUND',
+                    type: type as MessageType,
+                    content: finalContent,
+                    mediaData: mediaData as Prisma.InputJsonValue,
+                    status: msg.key.fromMe ? 'SENT' : 'RECEIVED',
                 });
             // ──────────────────────────────────────────────────────────────────
 
@@ -347,9 +438,12 @@ export async function processInboundMessage(job: Job): Promise<void> {
             }
             // ──────────────────────────────────────────────────────────────────
 
+            // ONE merged conversation update — covers contactId, waContactName,
+            // lastMessageAt, lastMessage, and unreadCount in a single round-trip.
             await prisma.conversation.update({
                 where: { id: conversation.id },
                 data: {
+                    ...convPatch,
                     lastMessageAt: new Date(),
                     lastMessage: finalContent ? finalContent.substring(0, 50) : 'Media attachment',
                     ...(msg.key.fromMe ? {} : { unreadCount: { increment: 1 } }),
@@ -456,15 +550,15 @@ export async function processInboundMessage(job: Job): Promise<void> {
 
                             setCooldown(workspaceId, contactIdentifier, matchedKeyword);
 
-                            const execTime = Date.now() - startTime;
-                            await logAutomationTrigger({
+                            // Fire-and-forget — logAutomationTrigger uses an internal batch buffer
+                            logAutomationTrigger({
                                 workspaceId,
                                 automationId: automation.id,
                                 keyword: matchedKeyword,
                                 matchType: automation.matchType,
                                 replyType: automation.template ? 'TEMPLATE' : 'STANDARD',
                                 priority: automation.priority,
-                                executionTimeMs: execTime,
+                                executionTimeMs: Date.now() - startTime,
                                 contactId: conversation.contactId ?? null,
                                 messageId: msg.key.id,
                             });
@@ -506,7 +600,8 @@ export async function processInboundMessage(job: Job): Promise<void> {
                     },
                 });
 
-                await logEvent(workspaceId, 'message_received', 'whatsapp_webhook', {
+                // Fire-and-forget — event-logger uses an internal batch buffer
+                logEvent(workspaceId, 'message_received', 'whatsapp_webhook', {
                     messageId: msg.key.id,
                     contactId: conversation.contactId,
                     messageType: type,

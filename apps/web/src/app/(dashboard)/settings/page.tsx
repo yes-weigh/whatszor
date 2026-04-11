@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { Settings as SettingsIcon, MessageCircle, Bot, CreditCard, Users, Shield } from 'lucide-react';
+import { GeneralTab } from './components/GeneralTab';
 import { WhatsAppTab } from './components/WhatsAppTab';
 import { MembersTab } from './components/MembersTab';
 import { KnowledgeBotTab } from './components/KnowledgeBotTab';
@@ -69,11 +70,7 @@ export default function SettingsPage() {
 
                 {/* Content Area */}
                 <div className="flex-1 bg-surface border border-theme rounded-xl p-6 overflow-y-auto shadow-sm">
-                    {activeTab === 'general' && (
-                        <div className="flex items-center justify-center h-full text-muted">
-                            General settings form coming soon...
-                        </div>
-                    )}
+                    {activeTab === 'general' && <GeneralTab />}
                     
                     {activeTab === 'whatsapp' && <WhatsAppTab />}
                     {activeTab === 'ai' && (

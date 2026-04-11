@@ -14,6 +14,7 @@ const log = createLogger({ module: 'worker:history-sync' });
 
 const isGroup = (jid: string) =>
     jid.endsWith('@g.us') || jid.endsWith('@newsletter') || jid.endsWith('@broadcast') || jid === 'status@broadcast';
+import { waManager } from '../../modules/whatsapp/whatsapp.service';
 
 export async function processHistorySync(job: Job): Promise<void> {
     const { workspaceId, sessionId, chats, messages, contacts } = job.data;
@@ -22,6 +23,17 @@ export async function processHistorySync(job: Job): Promise<void> {
     // ── 1. Build contact name lookup + LID→JID reverse map ────────────────────
     const contactNameMap: Record<string, string> = {};
     const lid2jid = new Map<string, string>();
+
+    // Seed from global contactsStore (so later history chunks know the LID mappings from chunk 1)
+    if (sessionId) {
+        const globalStore = waManager.getContactsStore(sessionId);
+        for (const [key, val] of globalStore.entries()) {
+            if (key.endsWith('@lid') && val.jid && !val.jid.endsWith('@lid')) {
+                lid2jid.set(key, val.jid);
+                if (val.name) contactNameMap[val.jid] = val.name;
+            }
+        }
+    }
 
     for (const c of (contacts ?? [])) {
         const name = c.notify || c.name;
@@ -32,9 +44,48 @@ export async function processHistorySync(job: Job): Promise<void> {
         if (c.id && c.lid && !c.id.endsWith('@lid')) {
             lid2jid.set(c.lid, c.id);
         }
+        if (c.id && c.phoneNumber && c.phoneNumber.endsWith('@s.whatsapp.net')) {
+            lid2jid.set(c.id, c.phoneNumber);
+        }
+        const remoteJidAlt = c.remoteJidAlt ?? c.key?.remoteJidAlt;
+        if (c.id && c.id.endsWith('@lid') && remoteJidAlt && remoteJidAlt.endsWith('@s.whatsapp.net')) {
+            lid2jid.set(c.id, remoteJidAlt);
+        }
+        if (c.lid && c.lid.endsWith('@lid') && remoteJidAlt && remoteJidAlt.endsWith('@s.whatsapp.net')) {
+            lid2jid.set(c.lid, remoteJidAlt);
+        }
     }
 
     const resolveJid = (jid: string): string => lid2jid.get(jid) ?? jid;
+
+    // ── 1b. Extract pnJid mappings from chats (authoritative LID→phone from WA) ─
+    // pnJid is the most reliable source — it's set per-chat by WhatsApp itself.
+    // Must be done BEFORE jidSet is built so resolveJid() works during dedup.
+    for (const chat of (chats ?? [])) {
+        if (chat.id?.endsWith('@lid') && chat.pnJid && !chat.pnJid.endsWith('@lid')) {
+            lid2jid.set(chat.id, chat.pnJid);
+            if (sessionId) {
+                // Share this discovery back to the global singleton so future chunks/messages have it!
+                waManager.getContactsStore(sessionId).set(chat.id, { jid: chat.pnJid, name: chat.name || '' });
+            }
+            log.debug({ lid: chat.id, pnJid: chat.pnJid }, 'pnJid mapping from chat');
+        }
+        // Also extract from accountLid field (some chats store it differently)
+        if (chat.accountLid?.endsWith('@lid') && chat.pnJid && !chat.pnJid.endsWith('@lid')) {
+            lid2jid.set(chat.accountLid, chat.pnJid);
+        }
+    }
+    // Extract from message payloads as last resort
+    for (const msg of (messages ?? [])) {
+        const raw = msg.key?.remoteJid;
+        if (raw?.endsWith('@lid')) {
+            if ((msg.key as any).remoteJidAlt && !(msg.key as any).remoteJidAlt.endsWith('@lid')) {
+                lid2jid.set(raw, (msg.key as any).remoteJidAlt);
+            } else if (msg.key?.participant && !msg.key.participant.endsWith('@lid')) {
+                lid2jid.set(raw, msg.key.participant);
+            }
+        }
+    }
 
     // ── 2. Collect all unique individual JIDs ─────────────────────────────────
     const jidSet = new Set<string>();
@@ -42,8 +93,25 @@ export async function processHistorySync(job: Job): Promise<void> {
         if (chat.id && !isGroup(chat.id)) jidSet.add(resolveJid(chat.id));
     }
     for (const msg of (messages ?? [])) {
-        const jid = msg.key?.remoteJid;
-        if (jid && !isGroup(jid)) jidSet.add(resolveJid(jid));
+        const rawRaw = msg.key?.remoteJid;
+        if (rawRaw && !isGroup(rawRaw)) jidSet.add(resolveJid(rawRaw));
+    }
+
+    // ── Second resolution pass ────────────────────────────────────────────────
+    // The lid2jid map is now fully populated from all three sources (contacts,
+    // chats, messages). Any @lid that slipped into jidSet before its mapping
+    // arrived gets swapped to the real phone JID here.
+    for (const jid of Array.from(jidSet)) {
+        if (jid.endsWith('@lid')) {
+            const real = lid2jid.get(jid);
+            if (real && !real.endsWith('@lid')) {
+                jidSet.delete(jid);
+                jidSet.add(real);
+                if (!contactNameMap[real] && contactNameMap[jid]) {
+                    contactNameMap[real] = contactNameMap[jid];
+                }
+            }
+        }
     }
 
     const jids = Array.from(jidSet);
@@ -53,7 +121,7 @@ export async function processHistorySync(job: Job): Promise<void> {
     }
 
     // ── 3. Bulk upsert conversations ──────────────────────────────────────────
-    const CONV_BATCH_SIZE = 1000;
+    const CONV_BATCH_SIZE = 100;
     for (let i = 0; i < jids.length; i += CONV_BATCH_SIZE) {
         const batch = jids.slice(i, i + CONV_BATCH_SIZE);
         await prisma.conversation.createMany({
@@ -65,6 +133,7 @@ export async function processHistorySync(job: Job): Promise<void> {
             })),
             skipDuplicates: true,
         });
+        await new Promise(r => setTimeout(r, 100)); // Pace loop strictly to protect Rust engine
     }
 
     const convRows = await prisma.conversation.findMany({
@@ -145,35 +214,36 @@ export async function processHistorySync(job: Job): Promise<void> {
     }
 
     // Apply contact names (after messages loop so pushNames are captured)
-    const CHUNK_SIZE = 50;
     const contactEntries = Object.entries(contactNameMap);
-    for (let i = 0; i < contactEntries.length; i += CHUNK_SIZE) {
-        const chunk = contactEntries.slice(i, i + CHUNK_SIZE);
-        await Promise.all(chunk.map(async ([jid, name]) => {
-            const conv = convMap.get(jid);
-            if (conv) {
-                await prisma.conversation.update({
-                    where: { id: conv.id },
-                    data: { waContactName: name },
-                });
-            }
-        }));
+    let contactUpdateCounter = 0;
+    for (const [jid, name] of contactEntries) {
+        const conv = convMap.get(jid);
+        if (conv) {
+            await prisma.conversation.updateMany({
+                where: { id: conv.id },
+                data: { waContactName: name },
+            });
+            if (++contactUpdateCounter % 20 === 0) await new Promise(r => setTimeout(r, 100));
+        }
     }
 
     if (msgRecords.length > 0) {
-        const MSG_BATCH_SIZE = 500;
+        const MSG_BATCH_SIZE = 100;
         for (let i = 0; i < msgRecords.length; i += MSG_BATCH_SIZE) {
             await prisma.message.createMany({
                 data: msgRecords.slice(i, i + MSG_BATCH_SIZE),
                 skipDuplicates: true,
             });
+            await new Promise(r => setTimeout(r, 100)); // Pace loop strictly
         }
     }
 
     // ── 5. Update lastMessage/lastMessageAt ───────────────────────────────────
     for (const chat of (chats ?? [])) {
         if (!chat.id || isGroup(chat.id)) continue;
-        const conv = convMap.get(chat.id);
+        // IMPORTANT: resolve the chat.id (may be @lid) to find the correct convMap entry
+        const resolvedChatId = resolveJid(chat.id);
+        const conv = convMap.get(resolvedChatId);
         if (!conv || !chat.conversationTimestamp) continue;
         const tsNum = Number(chat.conversationTimestamp);
         if (!tsNum || !isFinite(tsNum)) continue; // skip invalid/zero timestamps
@@ -191,14 +261,13 @@ export async function processHistorySync(job: Job): Promise<void> {
     };
 
     const convUpdates = Array.from(latestMsgPerConv.entries());
-    const BATCH = 50;
-    for (let i = 0; i < convUpdates.length; i += BATCH) {
-        await Promise.all(convUpdates.slice(i, i + BATCH).map(([convId, { at, content, type }]) =>
-            prisma.conversation.update({
-                where: { id: convId },
-                data: { lastMessageAt: at, lastMessage: content ? content.substring(0, 50) : (TYPE_EMOJI[type] ?? null) },
-            })
-        ));
+    let convUpdateCounter = 0;
+    for (const [convId, { at, content, type }] of convUpdates) {
+        await prisma.conversation.updateMany({
+            where: { id: convId },
+            data: { lastMessageAt: at, lastMessage: content ? content.substring(0, 50) : (TYPE_EMOJI[type] ?? null) },
+        });
+        if (++convUpdateCounter % 20 === 0) await new Promise(r => setTimeout(r, 100));
     }
 
     log.info({ workspaceId, sessionId, convs: jids.length, msgs: msgRecords.length }, 'History sync complete');

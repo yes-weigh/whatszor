@@ -246,8 +246,36 @@ export async function getMetrics(workspaceId: string) {
         orphanedRatio: Math.round((orphaned / totalSources) * 100),
         failedValidationRatio: Math.round((failed / totalSources) * 100),
         conflictRatio: Math.round((conflict / totalSources) * 100),
-        appliedRatio: Math.round((applied / totalSources) * 100)
     };
+}
+
+export async function getProductAnalytics(workspaceId: string) {
+    // Analytics: track product interest counts via groupBy
+    const groupings = await prisma.contactProduct.groupBy({
+        by: ['productId', 'relationType'],
+        where: { workspaceId },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } }
+    });
+
+    // Decorate with product name mapping to avoid empty ID arrays
+    const productIds = Array.from(new Set(groupings.map((g: any) => g.productId)));
+    
+    const productsInfo = await prisma.productKnowledge.findMany({
+        where: { id: { in: productIds as string[] } },
+        select: { id: true, name: true, sku: true }
+    });
+
+    const productMap = new Map(productsInfo.map((p: any) => [p.id, p]));
+
+    const decorated = groupings.map((g: any) => ({
+        productId: g.productId,
+        product: productMap.get(g.productId) || { name: 'Unknown' },
+        relationType: g.relationType,
+        count: g._count.id
+    }));
+
+    return decorated;
 }
 
 export async function reprocessSource(workspaceId: string, sourceId: string) {

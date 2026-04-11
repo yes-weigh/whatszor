@@ -112,13 +112,13 @@ model LicenseKey {
 
 model ImpersonationLog {
   id           String    @id @default(cuid())
-  globalUserId String    @map("global_user_id")   // GlobalUser who performed the action
-  workspaceId  String    @map("workspace_id")      // Target workspace
-  targetRole   String    @default("OWNER")         // Impersonated role (always OWNER)
+  globalUserId String    @map("global_user_id") // GlobalUser who performed the action
+  workspaceId  String    @map("workspace_id") // Target workspace
+  targetRole   String    @default("OWNER") // Impersonated role (always OWNER)
   tokenJti     String    @unique @map("token_jti") // JWT jti — used for revocation checks
   issuedAt     DateTime  @default(now()) @map("issued_at")
   expiresAt    DateTime  @map("expires_at")
-  revokedAt    DateTime? @map("revoked_at")         // Set to instantly invalidate token
+  revokedAt    DateTime? @map("revoked_at") // Set to instantly invalidate token
   ipAddress    String?   @map("ip_address")
   userAgent    String?   @map("user_agent")
 
@@ -136,48 +136,51 @@ model ImpersonationLog {
 model Workspace {
   audiences Audience[]
 
-  id               String          @id @default(cuid())
-  name             String
-  slug             String          @unique
-  status           WorkspaceStatus @default(TRIAL)
-  plan             String          @default("free")
-  planTier         PlanTier        @default(FREE) @map("plan_tier")
-  expiresAt        DateTime?       @map("expires_at")
-  settings         Json            @default("{}")
+  id                String          @id @default(cuid())
+  name              String
+  slug              String          @unique
+  status            WorkspaceStatus @default(TRIAL)
+  plan              String          @default("free")
+  planTier          PlanTier        @default(FREE) @map("plan_tier")
+  expiresAt         DateTime?       @map("expires_at")
+  settings          Json            @default("{}")
   // ── Storage Governance (P4) ───────────────────────────────────────────────────────
   // Bytes used by all uploaded media files in this workspace.
   // Incremented on upload, decremented (with negative guard) on deletion.
-  storageUsedBytes BigInt          @default(0) @map("storage_used_bytes")
+  storageUsedBytes  BigInt          @default(0) @map("storage_used_bytes")
   // 0 = use plan-tier default from StorageLimits config (src/core/config/storage.ts)
-  storageLimitBytes BigInt         @default(0) @map("storage_limit_bytes")
+  storageLimitBytes BigInt          @default(0) @map("storage_limit_bytes")
   // ───────────────────────────────────────────────────────────────────────
-  createdAt        DateTime        @default(now()) @map("created_at")
-  updatedAt        DateTime        @updatedAt @map("updated_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
 
   // Relations
-  licenses         LicenseKey[]
-  members          WorkspaceMember[]
-  contacts         Contact[]
-  organizations    Organization[]
-  pipelines        Pipeline[]
-  records          Record[]
-  conversations    Conversation[]
-  messages         Message[]
-  whatsAppSessions WhatsAppSession[]
-  whatsAppAccounts WhatsAppAccount[]
-  campaigns        Campaign[]
-  automationRules  AutomationRule[]
-  eventLogs        EventLog[]
-  media            Media[]
-  templates        Template[]
-  QuickReply          QuickReply[]
-  productKnowledge    ProductKnowledge[]
-  allowedNumbers      AllowedNumber[]
-  keywordAutomations  KeywordAutomation[]
-  automationLogs      AutomationLog[]
-  automationInsights  AutomationInsight[]
-  leadLists           LeadList[]
-  leads               Lead[]
+  licenses           LicenseKey[]
+  members            WorkspaceMember[]
+  contacts           Contact[]
+  organizations      Organization[]
+  pipelines          Pipeline[]
+  records            Record[]
+  conversations      Conversation[]
+  messages           Message[]
+  whatsAppSessions   WhatsAppSession[]
+  whatsAppAccounts   WhatsAppAccount[]
+  campaigns          Campaign[]
+  automationRules    AutomationRule[]
+  eventLogs          EventLog[]
+  media              Media[]
+  templates          Template[]
+  QuickReply         QuickReply[]
+  productKnowledge   ProductKnowledge[]
+  allowedNumbers     AllowedNumber[]
+  keywordAutomations KeywordAutomation[]
+  automationLogs     AutomationLog[]
+  automationInsights AutomationInsight[]
+  leadLists          LeadList[]
+  leads              Lead[]
+  ContactProduct     ContactProduct[]
+  AccountAccess      AccountAccess[]
+  deadLetterJobs     DeadLetterJob[]
 
   @@map("workspaces")
 }
@@ -201,6 +204,7 @@ model User {
   memberships      WorkspaceMember[]
   refreshTokens    RefreshToken[]
   whatsAppAccounts WhatsAppAccount[]
+  accountAccesses  AccountAccess[]
 
   @@map("users")
 }
@@ -281,6 +285,7 @@ model Contact {
   campaigns            CampaignMember[]
   automationExecutions AutomationExecution[]
   leads                Lead[]
+  contactProducts      ContactProduct[]
 
   @@unique([workspaceId, email])
   @@unique([workspaceId, phone])
@@ -401,7 +406,7 @@ model Conversation {
   providerId String @map("provider_id")
 
   // Which WhatsApp session (account) owns this conversation
-  sessionId String? @map("session_id")
+  sessionId       String?          @map("session_id")
   whatsAppAccount WhatsAppAccount? @relation(fields: [sessionId], references: [sessionId])
 
   assignedToUserId String? @map("assigned_to_user_id")
@@ -470,8 +475,8 @@ model Message {
   status MessageStatus @default(PENDING)
 
   deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   // Relationships
   workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -528,12 +533,12 @@ enum MessageStatus {
 model QuickReply {
   id          String   @id @default(cuid())
   workspaceId String   @map("workspace_id")
-  shortcut    String   // e.g., "/pricing" — used for quick-reply slash commands
+  shortcut    String // e.g., "/pricing" — used for quick-reply slash commands
   content     String
   mediaId     String?  @map("media_id")
   templateId  String?  @map("template_id") // If set, sends this template instead of text/media
   isAutoReply Boolean  @default(false) @map("is_auto_reply")
-  keyword     String?  // trigger phrase for auto-reply (case-insensitive match)
+  keyword     String? // trigger phrase for auto-reply (case-insensitive match)
   createdAt   DateTime @default(now()) @map("created_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -568,30 +573,31 @@ model WhatsAppSession {
 
 // Registry of named WhatsApp accounts connected to a workspace
 model WhatsAppAccount {
-  id           String        @id @default(cuid())
-  workspaceId  String        @map("workspace_id")
-  sessionId    String        @unique @map("session_id") // Stable ID used by Baileys auth & socket manager
-  name         String        // Human label e.g. "Sales Team North"
-  label        String?
-  phoneNumber  String?       @map("phone_number") // Populated after successful connection
-  status       SessionStatus @default(CONNECTING)
-  botMode      BotMode?      @map("bot_mode")
-  userId       String?       @map("user_id")
-  lastActiveAt DateTime?     @map("last_active_at")
-  deletedAt    DateTime?     @map("deleted_at")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id               String        @id @default(cuid())
+  workspaceId      String        @map("workspace_id")
+  sessionId        String        @unique @map("session_id") // Stable ID used by Baileys auth & socket manager
+  name             String // Human label e.g. "Sales Team North"
+  label            String?
+  phoneNumber      String?       @map("phone_number") // Populated after successful connection
+  status           SessionStatus @default(CONNECTING)
+  botMode          BotMode?      @map("bot_mode")
+  userId           String?       @map("user_id")
+  lastActiveAt     DateTime?     @map("last_active_at")
+  deletedAt        DateTime?     @map("deleted_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
   // ── Session Lifecycle (P8) ──────────────────────────────────────────────────
   // Ordered list of previous userId owners (audit trail for session transfers).
-  previousOwnerIds  String[]  @default([]) @map("previous_owner_ids")
+  previousOwnerIds String[]      @default([]) @map("previous_owner_ids")
   // Set when a session drops unexpectedly — used by admin QR relay flow (P5).
-  reauthRequiredAt  DateTime? @map("reauth_required_at")
+  reauthRequiredAt DateTime?     @map("reauth_required_at")
   // ──────────────────────────────────────────────────────────────────────────
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  conversations Conversation[]
+  conversations   Conversation[]
+  accountAccesses AccountAccess[]
 
   @@index([workspaceId, userId, status])
   @@index([workspaceId])
@@ -631,7 +637,7 @@ model Campaign {
   templateLanguage  String? @map("template_language")
 
   // Optional plain text message content (used if no template)
-  messageText       String? @map("message_text")
+  messageText String? @map("message_text")
 
   // Timing
   scheduledAt DateTime? @map("scheduled_at")
@@ -644,8 +650,8 @@ model Campaign {
 
   // Metrics for forecasting (optional)
   expectedReplyRate Float? @map("expected_reply_rate")
-  
-  audienceId  String?  @map("audience_id")
+
+  audienceId String? @map("audience_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -859,9 +865,9 @@ model Media {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  templateVersions TemplateVersion[]
-  quickReplies     QuickReply[]
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  templateVersions   TemplateVersion[]
+  quickReplies       QuickReply[]
   keywordAutomations KeywordAutomation[]
 
   @@index([workspaceId, type])
@@ -884,10 +890,10 @@ model Template {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  versions     TemplateVersion[]
-  autoReplies  QuickReply[]
-  keywordAutomations  KeywordAutomation[]
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions           TemplateVersion[]
+  autoReplies        QuickReply[]
+  keywordAutomations KeywordAutomation[]
 
   @@index([workspaceId])
   @@map("templates")
@@ -945,35 +951,36 @@ enum KnowledgeDataType {
 }
 
 enum KnowledgeSourceStatus {
-  APPLIED            // Extracted data successfully updated the main product
-  DISCARDED          // Admin rejected this specific extraction
-  CONFLICT           // Automatic merge failed due to low confidence or contradiction; needs review
-  FAILED_VALIDATION  // AI returned unusable/malformed data
-  ORPHANED           // Context resolution failed (couldn't map message to a product)
-  BLOCKED            // Phone number was not in the AllowedNumber list
+  APPLIED // Extracted data successfully updated the main product
+  DISCARDED // Admin rejected this specific extraction
+  CONFLICT // Automatic merge failed due to low confidence or contradiction; needs review
+  FAILED_VALIDATION // AI returned unusable/malformed data
+  ORPHANED // Context resolution failed (couldn't map message to a product)
+  BLOCKED // Phone number was not in the AllowedNumber list
 }
 
 model ProductKnowledge {
-  id                 String        @id @default(cuid())
-  workspaceId        String        @map("workspace_id")
-  sku                String?       // Optional initial identifier
-  name               String
-  description        String?
-  price              Float?
-  category           String?
-  specifications     Json?         @default("{}") // Structured key-value pairs
-  mediaUrls          String[]      @map("media_urls") 
-  status             ProductStatus @default(INCOMPLETE)
-  
-  missingFieldsCount Int           @default(0) @map("missing_fields_count")
-  lastOutreachAt     DateTime?     @map("last_outreach_at")
-  
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
+  id             String        @id @default(cuid())
+  workspaceId    String        @map("workspace_id")
+  sku            String? // Optional initial identifier
+  name           String
+  description    String?
+  price          Float?
+  category       String?
+  specifications Json?         @default("{}") // Structured key-value pairs
+  mediaUrls      String[]      @map("media_urls")
+  status         ProductStatus @default(INCOMPLETE)
+
+  missingFieldsCount Int       @default(0) @map("missing_fields_count")
+  lastOutreachAt     DateTime? @map("last_outreach_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  workspace          Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sources            ProductKnowledgeSource[]
+  workspace       Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sources         ProductKnowledgeSource[]
+  contactProducts ContactProduct[]
 
   @@index([workspaceId, status])
   @@index([missingFieldsCount, lastOutreachAt]) // For anti-spam outreach queries
@@ -981,26 +988,26 @@ model ProductKnowledge {
 }
 
 model ProductKnowledgeSource {
-  id                 String                @id @default(cuid())
-  productId          String?               @map("product_id")
-  senderUserId       String?               @map("sender_user_id") // Which team member sent this (if known)
-  messageId          String?               @unique @map("message_id") // Link to original WhatsApp Message ID for traceability
-  
-  dataType           KnowledgeDataType     @map("data_type")
-  rawContentUrl      String?               @map("raw_content_url") // S3 link to the raw audio/image/pdf
-  rawText            String?               @map("raw_text") // Initial text or transcribed text
-  
-  extractedData      Json?                 // Zod-validated JSON payload
-  fieldConfidence    Json?                 // Map of field keys to integer confidence scores { "weight": 92 }
-  globalConfidence   Int?                  @map("global_confidence") // Averaged final score
-  status             KnowledgeSourceStatus @default(CONFLICT)
-  isTrustedSource    Boolean               @default(true) @map("is_trusted_source")
-  
-  createdAt          DateTime      @default(now()) @map("created_at")
+  id           String  @id @default(cuid())
+  productId    String? @map("product_id")
+  senderUserId String? @map("sender_user_id") // Which team member sent this (if known)
+  messageId    String? @unique @map("message_id") // Link to original WhatsApp Message ID for traceability
+
+  dataType      KnowledgeDataType @map("data_type")
+  rawContentUrl String?           @map("raw_content_url") // S3 link to the raw audio/image/pdf
+  rawText       String?           @map("raw_text") // Initial text or transcribed text
+
+  extractedData    Json? // Zod-validated JSON payload
+  fieldConfidence  Json? // Map of field keys to integer confidence scores { "weight": 92 }
+  globalConfidence Int?                  @map("global_confidence") // Averaged final score
+  status           KnowledgeSourceStatus @default(CONFLICT)
+  isTrustedSource  Boolean               @default(true) @map("is_trusted_source")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  product            ProductKnowledge? @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
+  product ProductKnowledge? @relation(fields: [productId], references: [id], onDelete: Cascade)
+
   @@index([productId])
   @@map("product_knowledge_sources")
 }
@@ -1010,27 +1017,27 @@ model ProductKnowledgeSource {
 // ============================================================
 
 model KeywordAutomation {
-  id          String   @id @default(cuid())
-  workspaceId String   @map("workspace_id")
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
 
-  keyword     String
-  matchType   MatchType @default(CONTAINS) @map("match_type")
-  priority    Int       @default(0)
-  replyText   String?   @map("reply_text")
-  mediaId     String?   @map("media_id")
-  templateId  String?   @map("template_id")
-  intent      String?
+  keyword    String
+  matchType  MatchType @default(CONTAINS) @map("match_type")
+  priority   Int       @default(0)
+  replyText  String?   @map("reply_text")
+  mediaId    String?   @map("media_id")
+  templateId String?   @map("template_id")
+  intent     String?
 
-  isActive    Boolean  @default(true) @map("is_active")
-  cooldownSec Int      @default(30) @map("cooldown_sec")
-  legacyId    String?  @unique @map("legacy_id")
+  isActive    Boolean @default(true) @map("is_active")
+  cooldownSec Int     @default(30) @map("cooldown_sec")
+  legacyId    String? @unique @map("legacy_id")
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  media     Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
-  template  Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  media     Media?          @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  template  Template?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
   logs      AutomationLog[]
 
   @@index([workspaceId, isActive, priority])
@@ -1041,21 +1048,21 @@ model KeywordAutomation {
 // Audit log for every keyword automation trigger.
 // Powers analytics dashboard and pricing justification.
 model AutomationLog {
-  id           String   @id @default(cuid())
-  workspaceId  String   @map("workspace_id")
-  automationId String   @map("automation_id")
+  id           String @id @default(cuid())
+  workspaceId  String @map("workspace_id")
+  automationId String @map("automation_id")
 
-  keyword      String
-  contactId    String?  @map("contact_id")
-  messageId    String?  @map("message_id")
-  matchType    String   @map("match_type")
-  replyType    String?  @map("reply_type")
-  priority     Int?     @default(0)
-  executionTimeMs Int?  @map("execution_time_ms")
+  keyword         String
+  contactId       String? @map("contact_id")
+  messageId       String? @map("message_id")
+  matchType       String  @map("match_type")
+  replyType       String? @map("reply_type")
+  priority        Int?    @default(0)
+  executionTimeMs Int?    @map("execution_time_ms")
 
-  triggeredAt  DateTime @default(now()) @map("triggered_at")
+  triggeredAt DateTime @default(now()) @map("triggered_at")
 
-  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   automation KeywordAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, triggeredAt])
@@ -1070,22 +1077,22 @@ model AutomationLog {
 // Suggested automations surfaced by pattern analysis.
 // Status lifecycle: pending → accepted (creates KeywordAutomation) | dismissed
 model AutomationInsight {
-  id             String    @id @default(cuid())
-  workspaceId    String    @map("workspace_id")
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
 
   keyword        String
-  intent         String               // e.g. "pricing", "support", "demo"
-  frequency      Int                  // number of times seen in scan window
-  suggestedReply String    @map("suggested_reply") @db.Text
+  intent         String // e.g. "pricing", "support", "demo"
+  frequency      Int // number of times seen in scan window
+  suggestedReply String @map("suggested_reply") @db.Text
 
   // Top example messages that triggered this insight (JSON array of strings)
-  exampleMessages Json     @default("[]") @map("example_messages")
+  exampleMessages Json @default("[]") @map("example_messages")
 
   // pending | accepted | dismissed
-  status         String    @default("pending")
+  status String @default("pending")
 
-  scannedAt      DateTime  @default(now()) @map("scanned_at")
-  resolvedAt     DateTime? @map("resolved_at")
+  scannedAt  DateTime  @default(now()) @map("scanned_at")
+  resolvedAt DateTime? @map("resolved_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -1115,30 +1122,30 @@ enum LeadStatus {
 model LeadList {
   audiences Audience[]
 
-  id                  String         @id @default(cuid())
-  workspaceId         String         @map("workspace_id")
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
 
-  query               String
-  name                String?
+  query String
+  name  String?
 
-  status              LeadListStatus @default(PENDING)
+  status LeadListStatus @default(PENDING)
 
-  totalFound          Int            @default(0) @map("total_found")
-  withPhone           Int            @default(0) @map("with_phone")
-  converted           Int            @default(0)
+  totalFound Int @default(0) @map("total_found")
+  withPhone  Int @default(0) @map("with_phone")
+  converted  Int @default(0)
 
-  jobId               String?        @map("job_id")
-  processingStartedAt DateTime?      @map("processing_started_at")
-  completedAt         DateTime?      @map("completed_at")
+  jobId               String?   @map("job_id")
+  processingStartedAt DateTime? @map("processing_started_at")
+  completedAt         DateTime? @map("completed_at")
 
-  source              String         @default("google_places")
-  errorReason         String?        @map("error_reason")
+  source      String  @default("google_places")
+  errorReason String? @map("error_reason")
 
-  createdAt           DateTime       @default(now()) @map("created_at")
-  updatedAt           DateTime       @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  leads      Lead[]
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leads     Lead[]
 
   @@index([workspaceId, status])
   @@index([workspaceId, createdAt])
@@ -1146,25 +1153,25 @@ model LeadList {
 }
 
 model Lead {
-  id              String     @id @default(cuid())
-  workspaceId     String     @map("workspace_id")
-  leadListId      String     @map("lead_list_id")
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+  leadListId  String @map("lead_list_id")
 
-  name            String
-  phone           String?
-  hasPhone        Boolean    @default(false) @map("has_phone")
-  address         String?
-  website         String?
-  googlePlaceId   String?    @map("google_place_id")
+  name          String
+  phone         String?
+  hasPhone      Boolean @default(false) @map("has_phone")
+  address       String?
+  website       String?
+  googlePlaceId String? @map("google_place_id")
 
-  rawData         Json?      @map("raw_data")
+  rawData Json? @map("raw_data")
 
-  status          LeadStatus @default(RAW)
+  status LeadStatus @default(RAW)
 
-  contactId       String?    @map("contact_id")
+  contactId String? @map("contact_id")
 
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   leadList  LeadList  @relation(fields: [leadListId], references: [id], onDelete: Cascade)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -1184,26 +1191,26 @@ model Lead {
 // ============================================================
 
 model Audience {
-  id          String   @id @default(cuid())
-  workspaceId String   @map("workspace_id")
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
 
   name        String
   description String?
 
   // "manual" | "lead_list"
-  sourceType  String   @default("manual") @map("source_type")
+  sourceType String @default("manual") @map("source_type")
 
   // If populated from a lead list, track the source for "Sync from Lead List"
-  leadListId  String?  @map("lead_list_id")
+  leadListId String? @map("lead_list_id")
 
   // Maintained by service layer (incremented/decremented on member changes)
-  memberCount Int      @default(0) @map("member_count")
+  memberCount Int @default(0) @map("member_count")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  leadList  LeadList?       @relation(fields: [leadListId], references: [id], onDelete: SetNull)
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadList  LeadList?        @relation(fields: [leadListId], references: [id], onDelete: SetNull)
   members   AudienceMember[]
   campaigns Campaign[]
 
@@ -1230,3 +1237,96 @@ model AudienceMember {
   @@index([contactId])
   @@map("audience_members")
 }
+
+// ============================================================
+// PHASE 2 CUSTOMIZATION: Contact-to-Product Extensibility
+// ============================================================
+
+enum ContactProductSource {
+  AI
+  MANUAL
+}
+
+model ContactProduct {
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+  contactId   String @map("contact_id")
+  productId   String @map("product_id")
+
+  // Context around the relationship
+  relationType String               @default("INTERESTED") // INTERESTED | OWNED | CART
+  source       ContactProductSource @default(MANUAL)
+  addedByAiAt  DateTime?            @map("added_by_ai_at")
+  addedAt      DateTime             @default(now()) @map("added_at")
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact   Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  product   ProductKnowledge @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, contactId, productId, relationType])
+  @@index([workspaceId, contactId])
+  @@index([productId])
+  @@map("contact_products")
+}
+
+// ============================================================
+// PHASE 2 CUSTOMIZATION: Granular Access Control
+// ============================================================
+
+model AccountAccess {
+  id          String   @id @default(cuid())
+  workspaceId String   @map("workspace_id")
+  sessionId   String   @map("session_id")
+  userId      String   @map("user_id")
+  grantedAt   DateTime @default(now()) @map("granted_at")
+
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsAppAccount @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+  @@index([workspaceId, userId]) // For rapid mapping query
+  @@map("account_access")
+}
+
+// ============================================================
+// DEAD LETTER QUEUE — Persistent storage for exhausted BullMQ jobs
+// Jobs that exhaust all BullMQ retries are captured here for
+// operator review and selective replay.
+// ============================================================
+
+enum DlqStatus {
+  PENDING_REVIEW
+  REPLAYED
+  DISCARDED
+}
+
+model DeadLetterJob {
+  id          String    @id @default(cuid())
+  workspaceId String?   @map("workspace_id") // null for system-level jobs (e.g. insight-scan)
+  jobId       String    @map("job_id")       // BullMQ-assigned job ID
+  queueName   String    @map("queue_name")
+  jobName     String    @map("job_name")     // BullMQ job name (e.g. "outbound:msg_123")
+  payload     Json                           // Full job.data — do NOT log PII in production
+  failReason  String    @map("fail_reason") @db.Text
+  stackTrace  String?   @map("stack_trace") @db.Text
+  failedAt    DateTime  @map("failed_at")
+  attemptsMade Int      @map("attempts_made")
+  status      DlqStatus @default(PENDING_REVIEW)
+
+  // Replay tracking
+  replayedAt    DateTime? @map("replayed_at")
+  replayedJobId String?   @map("replayed_job_id") // New BullMQ jobId after replay
+  replayedBy    String?   @map("replayed_by")      // userId who triggered the replay
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([queueName, status])
+  @@index([failedAt])
+  @@map("dead_letter_jobs")
+}
+

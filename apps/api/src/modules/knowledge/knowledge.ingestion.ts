@@ -162,10 +162,10 @@ export async function processIncomingKnowledgeJob(job: Job) {
                 });
             }).catch(err => log.error({ err }, 'Failed enqueueing orphan fallback'));
             
-            await logEvent(workspaceId, 'knowledge_response_orphaned', 'knowledge_ingestion', {
+            logEvent(workspaceId, 'knowledge_response_orphaned', 'knowledge_ingestion', {
                 messageId,
                 senderPhone
-            }).catch(() => {});
+            });
         }
 
         // ── 4. Database Write (Pre-AI initial state) ────────────────────────
@@ -182,12 +182,12 @@ export async function processIncomingKnowledgeJob(job: Job) {
 
         log.info({ sourceId: sourceData.id, resolvedProductId, status }, 'Successfully mapped & persisted the incoming content payload');
         
-        await logEvent(workspaceId, 'knowledge_response_received', 'knowledge_ingestion', {
+        logEvent(workspaceId, 'knowledge_response_received', 'knowledge_ingestion', {
             sourceId: sourceData.id,
             productId: resolvedProductId,
             messageId,
             matchTier
-        }).catch(() => {});
+        });
 
         // ── 5. AI Extraction Pipeline & Merge Engine ────────────────────────
         await executeAIAndMerge(sourceData, matchTier, workspaceId, sessionId, messageId, msgKey?.remoteJid);
@@ -222,10 +222,10 @@ async function executeAIAndMerge(sourceData: any, matchTier: number, workspaceId
                 });
             }).catch(err => log.error({ err }, 'Failed enqueueing failed validation fallback'));
             
-            await logEvent(workspaceId, 'knowledge_update_failed', 'knowledge_ingestion', {
+            logEvent(workspaceId, 'knowledge_update_failed', 'knowledge_ingestion', {
                 sourceId: sourceData.id,
                 messageId
-            }).catch(() => {});
+            });
         }
         return;
     }
@@ -307,11 +307,11 @@ async function executeAIAndMerge(sourceData: any, matchTier: number, workspaceId
                 log.info({ productId: sourceData.productId, hasConflictAny }, 'Auto-Merge Engine successfully applied payload to core product data');
                 
                 if (workspaceId) {
-                    await logEvent(workspaceId, 'knowledge_update_applied', 'knowledge_ingestion', {
+                    logEvent(workspaceId, 'knowledge_update_applied', 'knowledge_ingestion', {
                         sourceId: sourceData.id,
                         productId: sourceData.productId,
                         hasConflictAny
-                    }).catch(() => {});
+                    });
                 }
             }
         }

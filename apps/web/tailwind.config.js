@@ -44,7 +44,7 @@ module.exports = {
                 strong: 'var(--border-strong)',
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', 'sans-serif'],
+                sans: ['var(--font-outfit)', 'Inter', 'system-ui', 'sans-serif'],
             },
         },
     },

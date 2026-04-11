@@ -19,7 +19,6 @@
 import { createLogger } from './logger';
 import { prisma } from '../prisma/client';
 import { waManager } from '../modules/whatsapp/whatsapp.service';
-import { emit as realtimeEmit } from './realtime';
 import { getQueue, QueueName } from '../queues';
 import crypto from 'node:crypto';
 
@@ -85,68 +84,22 @@ export function initializeWorkers(): void {
         }
     });
 
-    // ── Message receipts (lightweight, handled inline — no queue needed) ──────
-    waManager.on('receipt', async ({ workspaceId, updates }) => {
-        try {
-            for (const update of updates) {
-                const { key, receipt } = update;
-                if (!key.fromMe || !key.id) continue;
-
-                const status = receipt.readTimestamp ? 'READ'
-                    : receipt.playedTimestamp ? 'PLAYED'
-                    : 'DELIVERED';
-
-                const msg = await (prisma.message as any).findFirst({
-                    where: { remoteId: key.id, conversation: { workspaceId } },
-                    select: { id: true, status: true, conversationId: true },
-                });
-                if (!msg) continue;
-
-                const rank: Record<string, number> = { SENT: 0, DELIVERED: 1, PLAYED: 2, READ: 3 };
-                if ((rank[status] ?? 0) <= (rank[msg.status] ?? 0)) continue;
-
-                await (prisma.message as any).update({ where: { id: msg.id }, data: { status } });
-
-                const updatedMembers = await (prisma.campaignMember as any).findMany({
-                    where: { messageId: msg.id },
-                    select: { id: true, campaignId: true, status: true },
-                });
-
-                if (updatedMembers.length > 0) {
-                    await (prisma.campaignMember as any).updateMany({ where: { messageId: msg.id }, data: { status } });
-
-                    for (const member of updatedMembers) {
-                        if (member.status === status) continue;
-                        const campaign = await prisma.campaign.findUnique({ where: { id: member.campaignId } });
-                        if (campaign) {
-                            const stats = (campaign.stats as Record<string, number>) || {};
-                            stats.delivered = stats.delivered || 0;
-                            stats.read = stats.read || 0;
-                            if (status === 'DELIVERED' && member.status !== 'DELIVERED' && member.status !== 'READ' && member.status !== 'PLAYED') {
-                                stats.delivered += 1;
-                            } else if ((status === 'READ' || status === 'PLAYED') && member.status !== 'READ' && member.status !== 'PLAYED') {
-                                stats.read += 1;
-                            }
-                            await prisma.campaign.update({ where: { id: campaign.id }, data: { stats: stats as any } });
-                        }
-                    }
-                }
-
-                realtimeEmit(workspaceId, 'message.status', {
-                    messageId: msg.id,
-                    conversationId: msg.conversationId,
-                    status,
-                });
-            }
-        } catch (error) {
-            log.error({ error }, 'Failed to process message receipts');
-        }
+    // ── Message receipts → RECEIPTS queue ────────────────────────────────────
+    // IMPORTANT: Processing receipts inline blocked the WhatsApp socket event
+    // emitter, causing delays and potential disconnects under burst campaign load.
+    // All receipt processing is now handled by receipt.worker.ts via the queue.
+    waManager.on('receipt', ({ workspaceId, updates }) => {
+        if (!updates?.length) return;
+        getQueue(QueueName.RECEIPTS).add(
+            `receipt-${workspaceId}-${Date.now()}`,
+            { workspaceId, updates },
+        ).catch(err => log.error({ err, workspaceId }, 'Failed to enqueue receipts'));
     });
 
     // ── Contact name backfill after history sync settles ─────────────────────
-    waManager.on('refresh-contacts', async ({ sessionId, workspaceId, sock }) => {
+    waManager.on('refresh-contacts', async ({ sessionId, workspaceId }) => {
         try {
-            const sockContacts: Record<string, any> = (sock as any).contacts ?? {};
+            const contactsMap = waManager.getContactsStore(sessionId);
             const emptyConvs = await (prisma.conversation as any).findMany({
                 where: { workspaceId, sessionId, waContactName: null, provider: 'WHATSAPP' },
                 select: { id: true, providerId: true },
@@ -157,8 +110,10 @@ export function initializeWorkers(): void {
             for (const conv of emptyConvs) {
                 const jid: string = conv.providerId;
                 if (jid.endsWith('@g.us') || jid.endsWith('@newsletter')) continue;
-                const contact = sockContacts[jid];
-                const name = contact?.notify || contact?.name;
+                
+                const entry = contactsMap.get(jid);
+                const name = entry?.name;
+                
                 if (!name) continue;
                 await (prisma.conversation as any).update({ where: { id: conv.id }, data: { waContactName: name } });
                 fixed++;

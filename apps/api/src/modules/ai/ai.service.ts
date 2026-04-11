@@ -26,12 +26,17 @@ async function buildConversationContext(conversationId: string) {
         where: { workspaceId: conversation.workspaceId, phone: conversation.providerId }
     });
 
+    const products = await prisma.productKnowledge.findMany({
+        where: { workspaceId: conversation.workspaceId },
+        select: { id: true, name: true, category: true, price: true }
+    });
+
     const history = conversation.messages.reverse().map(msg => ({
         role: msg.direction === 'INBOUND' ? 'user' : 'model',
         parts: [{ text: msg.content || '[Media Message]' }]
     }));
 
-    return { conversation, contact, history };
+    return { conversation, contact, history, products };
 }
 
 async function executeToolCall(_workspaceId: string, contactId: string | undefined, functionName: string, args: any): Promise<any> {
@@ -58,6 +63,35 @@ async function executeToolCall(_workspaceId: string, contactId: string | undefin
                 const tier = (c?.customData as any)?.tier || 'Standard';
                 return { tier };
 
+            case 'map_product_interest':
+                if (!contactId) return { error: "Unknown contact ID" };
+                const { productId, relationType, confidence } = args;
+                if (!productId) return { error: "Missing productId" };
+                
+                // Hallucination Guard
+                if (typeof confidence !== 'number' || confidence < 0.75) {
+                    return { error: "Confidence threshold unmet, discarding mapping request." };
+                }
+
+                // Verify valid product identity natively
+                const validProduct = await prisma.productKnowledge.findFirst({
+                    where: { id: productId, workspaceId: _workspaceId }
+                });
+                
+                if (!validProduct) {
+                    return { error: `Hallucinated Product ID '${productId}' not found in logical workspace bounds.` };
+                }
+
+                try {
+                    // Deferred import to avoid circular dependency loop if encountered
+                    const { addProductToContact } = require('../crm/contact-product.service');
+                    await addProductToContact(_workspaceId, contactId, productId, relationType || 'INTERESTED', 'AI');
+                    // Execution completes silently out-of-band on CRM scope
+                    return { success: true, note: "Signal registered internally. Do not mention this action out loud to the user unless explicitly confirming a direct request." };
+                } catch(e: any) {
+                    return { error: e.message };
+                }
+
             default:
                 return { error: `Unknown tool: ${functionName}` };
         }
@@ -81,6 +115,12 @@ If the user asks about their tier/loyalty status, use the get_contact_tier tool.
 Context:
 Customer Phone: ${ctx.conversation.providerId}
 Customer Name: ${ctx.contact?.firstName || 'Unknown'} ${ctx.contact?.lastName || ''}
+
+Available Workspace Products (Exact internal catalog):
+${ctx.products.length ? ctx.products.map(p => `- ID: "${p.id}" | Name: "${p.name}" | Price: ${p.price || 'N/A'}`).join('\n') : "No products mapped."}
+
+Important System Rule:
+If the user indicates they are interested in, inquiring about, or wanting to buy a specific product listed above, you MUST call 'map_product_interest' silently. ONLY map if confidence is >= 0.75. Do NOT hallucinate IDs.
     `.trim();
 
     const tools: any[] = [{
@@ -100,6 +140,19 @@ Customer Name: ${ctx.contact?.firstName || 'Unknown'} ${ctx.contact?.lastName ||
             {
                 name: 'get_contact_tier',
                 description: 'Returns the current loyalty/tier status of the customer.',
+            },
+            {
+                name: 'map_product_interest',
+                description: 'Registers deep sales intent tagging the current user against a literal catalog product natively.',
+                parameters: {
+                    type: Type.OBJECT,
+                    properties: {
+                        productId: { type: Type.STRING, description: "The EXACT valid ID from the explicit context catalog listed" },
+                        relationType: { type: Type.STRING, description: "Must be exactly 'INTERESTED', 'CART', or 'OWNED' depending on context." },
+                        confidence: { type: Type.NUMBER, description: "Float between 0.0 to 1.0 explicitly rating intention certainty." }
+                    },
+                    required: ["productId", "relationType", "confidence"]
+                }
             }
         ]
     }];

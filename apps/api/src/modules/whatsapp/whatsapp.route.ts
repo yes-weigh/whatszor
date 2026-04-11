@@ -505,9 +505,9 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
                 where: { id: account.id },
                 data: { userId: null, previousOwnerIds: previousOwners },
             });
-            await logEvent(workspaceId, 'session_unassigned', 'whatsapp_sessions', {
+            logEvent(workspaceId, 'session_unassigned', 'whatsapp_sessions', {
                 sessionId, previousOwnerId: account.userId, removedBy: actorId,
-            }).catch(() => {});
+            });
             return reply.sendSuccess({ message: 'Session unassigned.', sessionId });
         }
         // ────────────────────────────────────────────────────────────────────
@@ -545,12 +545,12 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
         });
 
         // 5. Audit log (non-blocking)
-        await logEvent(workspaceId, 'session_reassigned', 'whatsapp_sessions', {
+        logEvent(workspaceId, 'session_reassigned', 'whatsapp_sessions', {
             sessionId,
             previousOwnerId: account.userId,
             newOwnerId: targetUserId,
             transferredBy: actorId,
-        }).catch(() => {});
+        });
 
         return reply.sendSuccess({
             message: 'Session ownership transferred successfully.',

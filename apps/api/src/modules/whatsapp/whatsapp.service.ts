@@ -1,7 +1,7 @@
 import makeWASocket, { DisconnectReason, Browsers } from '@itsukichan/baileys';
 import { Boom } from '@hapi/boom';
 import { wrapSocket } from 'baileys-antiban';
-import { usePrismaAuthState, deleteSessionAuthData } from './auth.adapter';
+import { usePrismaAuthState, deleteSessionAuthData, flushAllPendingCreds } from './auth.adapter';
 import { createLogger } from '../../core/logger';
 import { alertSessionDrop } from '../../core/alert';
 import { EventEmitter } from 'events';
@@ -218,6 +218,9 @@ class WhatsAppManager extends EventEmitter {
 
         sock.ev.on('messages.upsert', async (m: any) => {
             log.debug({ sessionId, count: m.messages.length }, 'Received message batch');
+            
+
+
             this.emit('messages', { sessionId, workspaceId, messages: m.messages });
         });
 
@@ -231,6 +234,9 @@ class WhatsAppManager extends EventEmitter {
         sock.ev.on('messaging-history.set', async (history: any) => {
             const { chats = [], messages = [], contacts = [] } = history;
             log.debug({ sessionId, chats: chats.length, messages: messages.length }, 'History chunk received');
+            
+
+
             // Store contacts in our LID→JID map
             if (contacts.length > 0) this.storeContacts(sessionId, contacts);
             this.emit('history', { sessionId, workspaceId, chats, messages, contacts });
@@ -240,6 +246,9 @@ class WhatsAppManager extends EventEmitter {
         sock.ev.on('contacts.upsert', async (contacts: any[]) => {
             if (contacts.length > 0) {
                 log.debug({ sessionId, count: contacts.length }, 'Contacts upserted');
+                
+
+
                 // Store in our LID→JID map for the refresh-contacts endpoint
                 this.storeContacts(sessionId, contacts);
                 this.emit('contacts', { sessionId, workspaceId, contacts });
@@ -251,6 +260,9 @@ class WhatsAppManager extends EventEmitter {
         sock.ev.on('contacts.update', async (updates: any[]) => {
             if (updates.length > 0) {
                 log.debug({ sessionId, count: updates.length }, 'Contacts updated');
+                
+
+
                 this.storeContacts(sessionId, updates);
                 // Also re-emit so the contacts-sync worker can backfill waContactName
                 this.emit('contacts', { sessionId, workspaceId, contacts: updates });
@@ -294,6 +306,8 @@ class WhatsAppManager extends EventEmitter {
      * Graceful shutdown of all connections.
      */
     async closeAll() {
+        await flushAllPendingCreds();
+        
         for (const sessionId of this.sockets.keys()) {
             await persistWarmUpState(sessionId);
         }
@@ -363,6 +377,7 @@ class WhatsAppManager extends EventEmitter {
         for (const contact of contacts) {
             const jid: string = contact.id;
             const lid: string | undefined = contact.lid;
+            const phoneNumber: string | undefined = contact.phoneNumber;
             // Baileys also exposes remoteJidAlt in some contact events — same phone but alt addressing
             const remoteJidAlt: string | undefined = contact.remoteJidAlt ?? (contact.key as any)?.remoteJidAlt;
             const name: string = contact.notify || contact.name || '';
@@ -378,6 +393,11 @@ class WhatsAppManager extends EventEmitter {
                 // The lid (or jid) itself keys to the alt real JID
                 if (jid.endsWith('@lid')) store.set(jid, { jid: remoteJidAlt, name });
                 if (lid) store.set(lid, { jid: remoteJidAlt, name });
+            }
+            // If there's a phoneNumber property mapping the LID to a phone number
+            if (phoneNumber && phoneNumber.endsWith('@s.whatsapp.net')) {
+                if (jid.endsWith('@lid')) store.set(jid, { jid: phoneNumber, name });
+                if (lid) store.set(lid, { jid: phoneNumber, name });
             }
         }
     }
@@ -440,12 +460,37 @@ class WhatsAppManager extends EventEmitter {
     /**
      * Get global connection statistics
      */
-    getGlobalStats() {
-        return {
-            totalSockets: this.sockets.size,
-            totalSafeSockets: this.safeSockets.size,
-            qrCodesPending: this.qrCodes.size,
+    /**
+     * Helper for load tests to inject a dummy socket that "succeeds" instantly.
+     * Prevents "Baileys socket not connected" errors without needing a real QR scan.
+     */
+    setupMockSession(sessionId: string) {
+        if (process.env.NODE_ENV !== 'test') {
+            throw new Error('setupMockSession allowed only in test environment');
+        }
+        
+        const mockSafeSock = {
+            sendMessage: async (jid: string, _content: any, _options?: any) => {
+                // Simulate success
+                return { key: { id: 'mock-' + Date.now(), remoteJid: jid, fromMe: true } };
+            },
+            logout: async () => {},
+            end: (_err: any) => {},
+            ev: { on: () => {}, off: () => {}, emit: () => {} },
+            authState: { creds: { me: { id: '12345' } } },
+            // Add a barebones antiban instance cast to any
+            antiban: {
+                onDisconnect: () => {},
+                onReconnect: () => {},
+                rateLimiter: {} as any,
+                warmUp: {} as any,
+                health: {} as any,
+                logging: {} as any,
+            } as any
         };
+
+        this.safeSockets.set(sessionId, mockSafeSock as any);
+        log.info({ sessionId }, '[MOCK] Safe socket injected for load testing');
     }
 }
 

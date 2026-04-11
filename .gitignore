@@ -46,3 +46,7 @@ apps/api/output.json
 apps/api/baileys_error.txt
 git_status_full.txt
 git_status_utf8.txt
+
+# Debug
+debug-dumps/
+apps/api/.env.test

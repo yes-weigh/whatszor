@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import { 
   Send, CheckCheck, Check, Sparkles, Loader2, 
-  Download, FileText, Paperclip, Search, MessageSquare
+  Download, FileText, Paperclip, Search, MessageSquare, X
 } from 'lucide-react';
 import { Conversation, Message } from '@/hooks/useConversations';
 import { ContactAvatar, getDisplayName } from './ConversationsList';
@@ -82,7 +82,7 @@ function StatusIcon({ status }: { status: string }) {
   return null;
 }
 
-function MessageBubble({ msg }: { msg: Message }) {
+function MessageBubble({ msg, onUseSuggestion }: { msg: Message, onUseSuggestion?: (content: string) => void }) {
   const isOut = msg.direction === 'OUTBOUND';
   const isMediaType = ['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT', 'STICKER'].includes(msg.type);
   const hasLocalPath = !!msg.mediaData?.localPath;
@@ -134,12 +134,34 @@ function MessageBubble({ msg }: { msg: Message }) {
   return (
       <div className={`flex ${isOut ? 'justify-end' : 'justify-start'} group w-full mb-2`}>
           <div className={`max-w-[75%] flex flex-col gap-1 ${isOut ? 'items-end' : 'items-start'}`}>
-              <div className={`px-4 py-2.5 text-[15px] leading-relaxed shadow-sm relative ${
-                  isOut
-                      ? 'bg-accent text-white rounded-[20px_4px_20px_20px] font-medium'
-                      : 'bg-[#202c33] text-[#e9edef] rounded-[4px_20px_20px_20px]'
-              }`}>
+              <div className={`px-4 py-2.5 text-[15px] leading-relaxed shadow-sm relative transition-all ${
+                  msg.status === 'SUGGESTED'
+                      ? 'bg-accent/10 hover:bg-accent/20 border border-accent/40 border-dashed text-[#e9edef] rounded-[20px_4px_20px_20px] cursor-pointer group/suggestion'
+                      : isOut
+                          ? 'bg-accent text-white rounded-[20px_4px_20px_20px] font-medium'
+                          : 'bg-[#202c33] text-[#e9edef] rounded-[4px_20px_20px_20px]'
+              }`}
+               onClick={() => {
+                   if (msg.status === 'SUGGESTED' && msg.content && onUseSuggestion) {
+                       onUseSuggestion(msg.content);
+                   }
+               }}
+              >
                   {renderContent()}
+
+                  {msg.status === 'SUGGESTED' && (
+                      <div className="absolute -top-2.5 right-4 bg-accent text-[9px] text-black font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow">
+                          Suggestion
+                      </div>
+                  )}
+
+                  {msg.status === 'SUGGESTED' && (
+                      <div className="mt-2 pt-2 border-t border-accent/20 flex justify-end opacity-60 group-hover/suggestion:opacity-100 transition-opacity">
+                          <span className="text-[10px] font-bold text-accent uppercase tracking-wider flex items-center gap-1">
+                              Click to use <Sparkles size={10} />
+                          </span>
+                      </div>
+                  )}
                   
                   {/* Inline Time & Tick */}
                   <div className={`flex items-center gap-1 justify-end ml-4 -mb-1 mt-1 float-right ${isOut ? 'text-white/70' : 'text-white/60'}`}>
@@ -259,9 +281,41 @@ export function ChatWindow({
                   <h2 className="font-semibold text-base text-primary">
                       {getDisplayName(activeConversation)}
                   </h2>
-                  <p className="text-[13px] text-accent font-medium mt-0.5">
-                      Last seen 12 min ago
-                  </p>
+                  
+                  <div className="flex items-center mt-0.5 gap-1.5 overflow-x-auto hide-scrollbar max-w-[240px] sm:max-w-sm pb-0.5">
+                      {activeConversation.contact?.contactProducts?.length ? (
+                          activeConversation.contact.contactProducts.map((cp, idx) => (
+                              <div key={idx} className={`shrink-0 flex items-center gap-1.5 text-[9px] uppercase font-bold pl-1.5 pr-1 py-0.5 rounded border whitespace-nowrap group ${
+                                  cp.relationType === 'OWNED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                                  cp.relationType === 'CART' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
+                                  'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              }`}>
+                                  {cp.source === 'AI' && (
+                                      <span title="Tagged autonomously by AI. Manually changing relations will drop this identifier.">
+                                          <Sparkles size={10} className="text-accent" />
+                                      </span>
+                                  )}
+                                  <span>{cp.relationType}: {cp.product.name}</span>
+                                  <button
+                                      onClick={() => {
+                                          if (confirm(`Remove '${cp.relationType}' association with '${cp.product.name}'?`)) {
+                                              api.delete(`/contacts/${activeConversation.contact?.id}/products/${cp.product.id}?relationType=${cp.relationType}`)
+                                                 .then(() => fetchNextPage?.()); // Naively force re-fetch
+                                          }
+                                      }}
+                                      title="Remove mapped state"
+                                      className="ml-1 opacity-0 group-hover:opacity-100 hover:text-white transition-opacity"
+                                  >
+                                      <X size={10} />
+                                  </button>
+                              </div>
+                          ))
+                      ) : (
+                          <p className="text-[13px] text-muted font-medium">
+                              Last seen 12 min ago
+                          </p>
+                      )}
+                  </div>
               </div>
           </div>
           <div className="flex items-center gap-3">
@@ -308,6 +362,10 @@ export function ChatWindow({
               <MessageBubble 
                   key={msg.id} 
                   msg={msg} 
+                  onUseSuggestion={(content) => {
+                      setInputValue(content);
+                      setTimeout(() => textareaRef.current?.focus(), 50);
+                  }}
               />
           ))}
           <div ref={messagesEndRef} className="h-4" />

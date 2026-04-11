@@ -82,6 +82,12 @@ export const knowledgeRoutes: FastifyPluginAsync = async (fastify: FastifyInstan
         return reply.sendSuccess(metrics);
     });
 
+    fastify.get('/analytics/products', async (req, reply) => {
+        const { workspaceId } = (req as any).user;
+        const metrics = await knowledgeService.getProductAnalytics(workspaceId);
+        return reply.sendSuccess(metrics);
+    });
+
     // Dedicated endpoint for reprocessing ORPHANED triggers easily.
     fastify.post('/sources/:sourceId/reprocess', async (req, reply) => {
         const { workspaceId } = (req as any).user;

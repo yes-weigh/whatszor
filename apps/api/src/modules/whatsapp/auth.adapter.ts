@@ -8,6 +8,57 @@ import { prisma } from '../../prisma/client';
 import { Prisma } from '@prisma/client';
 import { createLogger } from '../../core/logger';
 
+// ── saveCreds debounce ────────────────────────────────────────────────────────
+// Baileys fires creds.update on every heartbeat, handshake, and key exchange.
+// Without debouncing, this creates 500–1,000+ upserts/min at 100 sessions.
+// A 2-second window collapses those bursts into a single write per session.
+
+const SAVE_CREDS_DEBOUNCE_MS = 2_000;
+const pendingCredsSave = new Map<string, { timer: NodeJS.Timeout; saveFn: () => Promise<void> }>();
+let isShuttingDownCreds = false;
+
+export function setCredsShuttingDown(): void {
+    isShuttingDownCreds = true;
+}
+
+export async function flushAllPendingCreds(): Promise<void> {
+    setCredsShuttingDown();
+    const tasks: Promise<void>[] = [];
+    for (const [sessionId, { timer, saveFn }] of pendingCredsSave.entries()) {
+        clearTimeout(timer);
+        tasks.push(saveFn().catch(err => {
+            createLogger({ module: 'whatsapp', action: 'auth-flush' })
+                .error({ err, sessionId }, 'Debounced saveCreds flush failed');
+        }));
+    }
+    pendingCredsSave.clear();
+    await Promise.all(tasks);
+}
+
+function debouncedSaveCreds(sessionId: string, saveFn: () => Promise<void>): void {
+    if (isShuttingDownCreds) {
+        saveFn().catch(err => {
+            createLogger({ module: 'whatsapp', action: 'auth-save-shutdown' })
+                .error({ err, sessionId }, 'Synchronous saveCreds during shutdown failed');
+        });
+        return;
+    }
+
+    const existing = pendingCredsSave.get(sessionId);
+    if (existing) clearTimeout(existing.timer);
+
+    const timer = setTimeout(() => {
+        pendingCredsSave.delete(sessionId);
+        saveFn().catch(err => {
+            createLogger({ module: 'whatsapp', action: 'auth-save' })
+                .error({ err, sessionId }, 'Debounced saveCreds failed');
+        });
+    }, SAVE_CREDS_DEBOUNCE_MS);
+
+    pendingCredsSave.set(sessionId, { timer, saveFn });
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 /**
  * A custom Baileys authentication state adapter backed by Prisma.
  * Each session (WhatsApp account) is isolated by its own `sessionId`,
@@ -119,7 +170,9 @@ export async function usePrismaAuthState(
             },
         },
         saveCreds: () => {
-            return writeData(creds, 'creds');
+            // Debounced — collapses burst updates into a single DB write per 2s window.
+            debouncedSaveCreds(sessionId, () => writeData(creds, 'creds'));
+            return Promise.resolve();
         },
     };
 }

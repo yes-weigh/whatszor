@@ -7,8 +7,11 @@ import api from '@/lib/api';
 import { Header } from '@/components/layout/Header';
 import { useAuthStore } from '@/store/auth';
 import {
-    ArrowLeft, Phone, Mail, Tag, Pencil, Trash2, Save, X, Loader2, User
+    ArrowLeft, Phone, Mail, Tag, Pencil, Trash2, Save, X, Loader2, User, PackagePlus, Box
 } from 'lucide-react';
+import {
+    Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription
+} from '@/components/ui/Modal';
 
 export default function ContactDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -18,8 +21,11 @@ export default function ContactDetailPage() {
 
     const [editing, setEditing] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [productModalOpen, setProductModalOpen] = useState(false);
     const [form, setForm] = useState({ firstName: '', lastName: '', phone: '', email: '' });
+    const [productForm, setProductForm] = useState({ productId: '', relationType: 'INTERESTED' });
 
+    // Contact queries
     const { data: contact, isLoading } = useQuery({
         queryKey: ['contact', id],
         queryFn: () => api.get(`/crm/contacts/${id}`).then(r => {
@@ -45,6 +51,32 @@ export default function ContactDetailPage() {
             qc.invalidateQueries({ queryKey: ['contacts'] });
             router.push('/contacts');
         },
+    });
+
+    const { data: linkedProducts } = useQuery({
+        queryKey: ['contact-products', id],
+        queryFn: () => api.get(`/crm/contacts/${id}/products`).then(r => r.data?.items ?? []),
+        enabled: !!id,
+    });
+
+    const { data: workspaceProducts } = useQuery({
+        queryKey: ['workspace-products'],
+        queryFn: () => api.get('/knowledge/products').then(r => r.data?.items ?? []),
+    });
+
+    const mapProductMutation = useMutation({
+        mutationFn: (payload: { productId: string, relationType: string }) => api.post(`/crm/contacts/${id}/products`, payload),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['contact-products', id] });
+            setProductForm({ productId: '', relationType: 'INTERESTED' });
+            setProductModalOpen(false);
+        }
+    });
+
+    const unmapProductMutation = useMutation({
+        mutationFn: ({ productId, relationType }: { productId: string, relationType: string }) => 
+            api.delete(`/crm/contacts/${id}/products/${productId}?relationType=${relationType}`),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['contact-products', id] })
     });
 
     if (isLoading) {
@@ -139,6 +171,41 @@ export default function ContactDetailPage() {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Product Relations View */}
+                            <div className="flex flex-col gap-2 col-span-2 mt-4 pt-4 border-t border-theme/50">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-muted font-medium uppercase tracking-wide flex items-center gap-1.5"><Box size={14}/> Mapped Products</span>
+                                    <button onClick={() => setProductModalOpen(true)} className="text-xs font-semibold text-accent hover:text-accent/80 flex items-center gap-1 transition-colors">
+                                        <PackagePlus size={14} /> Map Product
+                                    </button>
+                                </div>
+                                
+                                {linkedProducts?.length ? (
+                                    <div className="grid grid-cols-1 gap-2 mt-1">
+                                        {linkedProducts.map((p: any) => (
+                                            <div key={p.product.id} className="flex items-center justify-between p-3 rounded-xl border border-theme bg-surface">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-primary">{p.product.name}</p>
+                                                    <div className="flex gap-1 mt-1.5">
+                                                        {p.relationTypes.map((rt: string) => (
+                                                            <span key={rt} className={`text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border ${
+                                                                rt === 'OWNED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                                                                rt === 'CART' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 
+                                                                'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                            }`}>
+                                                                {rt} &nbsp; <X size={10} className="inline cursor-pointer hover:text-white" onClick={() => unmapProductMutation.mutate({ productId: p.product.id, relationType: rt })} />
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted italic">No products mapped yet.</p>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -203,6 +270,64 @@ export default function ContactDetailPage() {
                         </div>
                     </div>
                 )}
+                
+                {/* Product Mapping Modal */}
+                <Modal open={productModalOpen} onOpenChange={setProductModalOpen}>
+                    <ModalContent>
+                        <ModalHeader>
+                            <ModalTitle>Map Product Relationship</ModalTitle>
+                            <ModalDescription>Target explicit SaaS items against this lead natively.</ModalDescription>
+                        </ModalHeader>
+                        
+                        <div className="flex flex-col gap-4 py-4">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-xs font-medium text-secondary">Target Product</label>
+                                <select 
+                                    className="input bg-surface"
+                                    title="Target Product"
+                                    aria-label="Target Product"
+                                    value={productForm.productId}
+                                    onChange={e => setProductForm(f => ({ ...f, productId: e.target.value }))}
+                                >
+                                    <option value="" disabled>Select a product...</option>
+                                    {workspaceProducts?.map((wp: any) => (
+                                        <option key={wp.id} value={wp.id}>{wp.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5 mt-2">
+                                <label className="text-xs font-medium text-secondary">Relation State</label>
+                                <div className="flex gap-2">
+                                    {['INTERESTED', 'CART', 'OWNED'].map(rt => (
+                                        <button 
+                                            key={rt}
+                                            onClick={() => setProductForm(f => ({ ...f, relationType: rt }))}
+                                            className={`flex-1 py-2 text-xs font-bold rounded-lg border uppercase tracking-wider transition-all ${
+                                                productForm.relationType === rt 
+                                                    ? 'bg-accent/10 border-accent text-accent' 
+                                                    : 'bg-surface border-theme text-muted hover:border-theme/80'
+                                            }`}
+                                        >
+                                            {rt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 mt-4">
+                            <button className="btn bg-elevated text-secondary" onClick={() => setProductModalOpen(false)}>Cancel</button>
+                            <button 
+                                className="btn btn-primary"
+                                disabled={!productForm.productId || mapProductMutation.isPending}
+                                onClick={() => mapProductMutation.mutate(productForm)}
+                            >
+                                {mapProductMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : 'Confirm Mapping'}
+                            </button>
+                        </div>
+                    </ModalContent>
+                </Modal>
             </div>
         </div>
     );

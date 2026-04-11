@@ -5,7 +5,7 @@
  * IMAGE, VIDEO, DOCUMENT. Handles campaign job tracking and idempotency.
  * Concurrency: 5
  */
-import { Job } from 'bullmq';
+import { Job, DelayedError } from 'bullmq';
 import { prisma } from '../../prisma/client';
 import { createLogger } from '../logger';
 import { waManager } from '../../modules/whatsapp/whatsapp.service';
@@ -14,6 +14,7 @@ import { emit as realtimeEmit } from '../realtime';
 import { env } from '../../env';
 import { resolve } from 'path';
 import { acquireIdempotencyLock, completeIdempotency, releaseIdempotencyLock } from '../idempotency';
+import { checkSessionLimit } from '../session-limiter';
 
 const log = createLogger({ module: 'worker:outbound-messages' });
 
@@ -95,6 +96,19 @@ export async function processOutboundMessage(job: Job): Promise<void> {
             });
             if (!accountCheck || accountCheck.status !== 'CONNECTED') {
                 throw new Error(`Session ${activeSessionId} is not CONNECTED — aborting send`);
+            }
+
+            // Per-session rate limiter — use checkSessionLimit for precise retryAfterMs
+            const rateCheck = await checkSessionLimit(activeSessionId);
+            if (!rateCheck.allowed) {
+                // FIX (BUG-3): Do NOT release the idempotency lock before moveToDelayed.
+                // The previous code called releaseIdempotencyLock() first, creating a window
+                // where another worker could pick up the job with no lock and send a duplicate.
+                // The lock must stay held through the delay window. Its TTL covers the delay.
+                log.warn({ activeSessionId, messageId, retryAfterMs: rateCheck.retryAfterMs }, 'Rate limit exceeded — delaying job without releasing idempotency lock');
+                await job.moveToDelayed(Date.now() + rateCheck.retryAfterMs, job.token!);
+                // Throw DelayedError so BullMQ knows we intentionally delayed it and does not attempt to move it to complete
+                throw new DelayedError();
             }
         }
         // ─────────────────────────────────────────────────────────────────
@@ -251,9 +265,10 @@ export async function processOutboundMessage(job: Job): Promise<void> {
         const formattedJid = toJid.includes('@') ? toJid : `${toJid.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
         const result = await socket.sendMessage(formattedJid, payload);
 
-        await prisma.message.update({
+        // Use updateMany for load testing safety
+        await prisma.message.updateMany({
             where: { id: messageId },
-            data: { remoteId: result?.key.id, status: 'SENT' },
+            data: { remoteId: result?.key?.id, status: 'SENT' },
         });
 
         if (job.data.campaignId) {
@@ -284,13 +299,18 @@ export async function processOutboundMessage(job: Job): Promise<void> {
         await completeIdempotency(idempotencyKey);
 
     } catch (err: any) {
+        if (err instanceof DelayedError || err.name === 'DelayedError') {
+            throw err; // Let BullMQ handle the delay natively
+        }
+
         // ── Release Lock on Failure to Allow Retry ─────────────
         const idempotencyKey = `wa:out:${workspaceId}:${messageId}`;
         await releaseIdempotencyLock(idempotencyKey);
 
         log.error({ err, messageId, toJid }, 'Failed to send outbound message');
 
-        await prisma.message.update({ where: { id: messageId }, data: { status: 'FAILED' } });
+        // Safe update using updateMany in case message doesn't exist in DB (e.g. load tests)
+        await prisma.message.updateMany({ where: { id: messageId }, data: { status: 'FAILED' } });
 
         if (job.data.campaignId) {
             await prisma.campaignMember.updateMany({

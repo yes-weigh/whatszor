@@ -28,15 +28,24 @@ export function getDisplayName(conv: Conversation): string {
         : null;
 
     if (crmName) return crmName;
-    if (conv.waContactName) return conv.waContactName;
 
     const providerId = conv.providerId ?? '';
-    if (providerId.endsWith('@lid') || conv.phone === null) {
-        return 'WhatsApp Business';
+    const phone = conv.phone ?? providerId.replace(/\D/g, '');
+
+    // Ignore generic WhatsApp Business push names because users want to see the actual number
+    if (conv.waContactName && conv.waContactName.toLowerCase() !== 'whatsapp business') {
+        return conv.waContactName;
     }
 
-    const phone = conv.phone ?? providerId.replace(/\D/g, '');
-    return phone ? `+${phone}` : 'Unknown';
+    // Fallback for internal identifiers (LIDs)
+    if (providerId.endsWith('@lid')) {
+        return 'Hidden Number';
+    }
+
+    // Default to phone number
+    if (phone) return `+${phone}`;
+
+    return 'Unknown';
 }
 
 export function ContactAvatar({ jid, name, sessionId, sizeClass = 'w-10 h-10 text-base', delay = 0 }: {
@@ -276,6 +285,19 @@ export function ConversationsList({
                                         : ''}
                                 </span>
                             </div>
+
+                            {/* ── DEBUG: raw JID badge ─────────────────────── */}
+                            <div className="flex items-center gap-1 mt-0.5">
+                                <span className={`font-mono text-[10px] truncate max-w-[200px] px-1 rounded ${
+                                    conv.providerId?.endsWith('@lid')
+                                        ? 'text-orange-400 bg-orange-500/10'
+                                        : 'text-cyan-400 bg-cyan-500/10'
+                                }`}>
+                                    {conv.providerId}
+                                </span>
+                            </div>
+                            {/* ────────────────────────────────────────────── */}
+
                             <div className="flex items-center justify-between gap-2 mt-1 max-w-full">
                                 <span className={`text-[13px] truncate flex-1 ${conv.unreadCount > 0 ? 'text-primary font-medium' : 'text-muted'}`}>
                                     {isActive ? "Typing..." : (conv.lastMessage ?? 'No messages yet')}

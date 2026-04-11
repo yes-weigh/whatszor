@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { AdminLoginSchema } from '@whatszor/shared';
 import * as adminService from './admin.service';
+import * as dlqService from './dlq.service';
 import { authenticateAdmin } from '../../middleware/authenticateAdmin';
 import { prisma } from '../../prisma/client';
 import { waManager } from '../whatsapp/whatsapp.service';
@@ -115,11 +116,11 @@ export const adminRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) 
             timestamp: new Date().toISOString(),
         });
 
-        await logEvent(workspaceId, 'qr_relay_triggered', 'admin_panel', {
+        logEvent(workspaceId, 'qr_relay_triggered', 'admin_panel', {
             adminId,
             sessionId,
             sessionOwnerId,
-        }).catch(() => {});
+        });
 
         return reply.status(202).send({
             success: true,
@@ -295,5 +296,177 @@ export const adminRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) 
             },
         });
     });
+
+    // ── Dead Letter Queue ─────────────────────────────────────────────────────
+    /**
+     * GET  /api/v1/admin/dlq/stats
+     *   Aggregate counts by status + queue. Use for the admin dashboard badge.
+     *
+     * GET  /api/v1/admin/dlq
+     *   Paginated list. Supports ?queueName=outbound-messages&status=PENDING_REVIEW
+     *   &workspaceId=xxx&since=2026-04-01T00:00:00Z&skip=0&take=50
+     *
+     * GET  /api/v1/admin/dlq/:id
+     *   Full entry including the original job payload and stack trace.
+     *
+     * POST /api/v1/admin/dlq/:id/replay
+     *   Re-enqueue the original payload to BullMQ. Idempotent — 409 if already REPLAYED.
+     *
+     * POST /api/v1/admin/dlq/bulk-replay
+     *   Replay multiple entries. Body: { ids: string[] } (max 100).
+     *
+     * POST /api/v1/admin/dlq/:id/discard
+     *   Mark as DISCARDED — will not be replayed.
+     *
+     * DELETE /api/v1/admin/dlq/purge
+     *   Hard-delete DISCARDED + REPLAYED entries older than ?olderThanDays=30.
+     *   Destructive — protected by a confirmation header.
+     */
+
+    // GET /dlq/stats
+    fastify.get('/dlq/stats', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        try {
+            const { workspaceId } = req.query as { workspaceId?: string };
+            const stats = await dlqService.getDlqStats(workspaceId);
+            return reply.sendSuccess(stats);
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
+
+    // GET /dlq
+    fastify.get('/dlq', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        try {
+            const q = req.query as {
+                queueName?: string;
+                status?: string;
+                workspaceId?: string;
+                since?: string;
+                skip?: string;
+                take?: string;
+            };
+
+            const result = await dlqService.listDlqEntries({
+                queueName: q.queueName,
+                status: q.status as any,
+                workspaceId: q.workspaceId,
+                since: q.since,
+                skip: q.skip ? parseInt(q.skip, 10) : undefined,
+                take: q.take ? parseInt(q.take, 10) : undefined,
+            });
+
+            return reply.sendSuccess(result);
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
+
+    // GET /dlq/:id
+    fastify.get('/dlq/:id', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        try {
+            const { id } = req.params as { id: string };
+            const entry = await dlqService.getDlqEntry(id);
+            return reply.sendSuccess(entry);
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
+
+    // POST /dlq/:id/replay
+    fastify.post('/dlq/:id/replay', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        try {
+            const { id } = req.params as { id: string };
+            const replayedBy: string = req.user.sub;
+            const result = await dlqService.replayDlqEntry(id, replayedBy);
+            return reply.code(202).sendSuccess({
+                message: `Job ${result.dlqId} re-enqueued to [${result.queueName}] as ${result.newJobId}`,
+                ...result,
+            });
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
+
+    // POST /dlq/bulk-replay
+    fastify.post('/dlq/bulk-replay', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        try {
+            const { ids } = req.body as { ids?: string[] };
+            if (!Array.isArray(ids) || ids.length === 0) {
+                return reply.sendError({ message: 'ids must be a non-empty array', code: 'BAD_REQUEST' }, 400);
+            }
+            const replayedBy: string = req.user.sub;
+            const result = await dlqService.bulkReplayDlqEntries(ids, replayedBy);
+            return reply.code(202).sendSuccess(result);
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
+
+    // POST /dlq/:id/discard
+    fastify.post('/dlq/:id/discard', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        try {
+            const { id } = req.params as { id: string };
+            await dlqService.discardDlqEntry(id);
+            return reply.sendSuccess({ message: `DLQ entry ${id} discarded.` });
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
+
+    // DELETE /dlq/purge?olderThanDays=30
+    // Requires the header: x-confirm-purge: yes
+    // This permanently deletes closed DLQ entries — intended for scheduled maintenance.
+    fastify.delete('/dlq/purge', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        try {
+            const confirm = req.headers['x-confirm-purge'];
+            if (confirm !== 'yes') {
+                return reply.sendError(
+                    { message: 'Send header x-confirm-purge: yes to confirm purge', code: 'CONFIRMATION_REQUIRED' },
+                    400,
+                );
+            }
+
+            const { olderThanDays = '30' } = req.query as { olderThanDays?: string };
+            const days = Math.max(1, parseInt(olderThanDays, 10) || 30);
+            const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+            const { count } = await prisma.deadLetterJob.deleteMany({
+                where: {
+                    status: { in: ['DISCARDED', 'REPLAYED'] },
+                    createdAt: { lt: cutoff },
+                },
+            });
+
+            return reply.sendSuccess({
+                message: `Purged ${count} closed DLQ entries older than ${days} days.`,
+                deleted: count,
+                cutoffDate: cutoff.toISOString(),
+            });
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
 };
+
 

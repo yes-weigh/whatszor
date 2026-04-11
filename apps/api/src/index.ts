@@ -12,13 +12,15 @@
  */
 import { env } from './env';
 import { createLogger } from './core/logger';
-import { connectRedis, disconnectRedis } from './core/redis';
+import { connectRedis, disconnectRedis, getRedisClient } from './core/redis';
+import { preloadLuaScripts } from './core/lua-scripts';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
 import { initQueues, closeQueues, getQueue, QueueName } from './queues/index';
 import { startApiNodeWorkers, startBackgroundWorkers, stopWorkers } from './queues/worker';
 import { initializeWorkers } from './core/queue';
 import { createServer } from './core/server';
 import { waManager } from './modules/whatsapp/whatsapp.service';
+import { flushMessageBuffer } from './core/message-buffer';
 
 const log = createLogger({ module: 'bootstrap' });
 
@@ -31,8 +33,9 @@ async function bootstrap() {
         process.exit(1);
     }
 
-    // 1. Connect Redis
+    // 1. Connect Redis & Preload Lua
     await connectRedis();
+    await preloadLuaScripts(getRedisClient());
 
     // 2. Connect PostgreSQL
     await connectDatabase();
@@ -136,7 +139,28 @@ async function bootstrap() {
             await closeQueues();
             log.info('Queues closed');
 
-            // 5. Hardened disconnection of data stores
+            // 5. Flush all asynchronous memory buffers to database
+            log.info('Flushing async buffers...');
+            const { flushPendingEvents, setEventLoggerShuttingDown } = require('./core/event-logger');
+            const { flushPendingAutomationLogs, setAutomationLogShuttingDown } = require('./modules/automation/keyword-automation.service');
+            
+            // Seal buffers from new entries
+            setEventLoggerShuttingDown();
+            setAutomationLogShuttingDown();
+
+            // FIX (BUG-10): flush message buffer explicitly before events.
+            // Messages must land in DB first because event records may reference messageIds.
+            // The old process.on('beforeExit') hook in message-buffer.ts never fires
+            // when process.exit() is called directly.
+            await flushMessageBuffer();
+
+            await Promise.allSettled([
+                flushPendingEvents(),
+                flushPendingAutomationLogs()
+            ]);
+            log.info('Buffers flushed');
+
+            // 6. Hardened disconnection of data stores
             log.info('Disconnecting database and redis...');
             await Promise.allSettled([
                 disconnectDatabase(),

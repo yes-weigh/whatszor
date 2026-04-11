@@ -11,9 +11,11 @@
 import { env } from './env';
 import { createLogger } from './core/logger';
 import { alertWorkerCrash } from './core/alert';
-import { connectRedis, disconnectRedis } from './core/redis';
+import { connectRedis, disconnectRedis, getRedisClient } from './core/redis';
+import { preloadLuaScripts } from './core/lua-scripts';
 import { connectDatabase, disconnectDatabase } from './prisma/client';
 import { startBackgroundWorkers, stopWorkers } from './queues/worker';
+import { flushMessageBuffer } from './core/message-buffer';
 
 const log = createLogger({ module: 'worker-bootstrap', action: 'startup' });
 
@@ -26,8 +28,9 @@ async function bootstrap() {
         process.exit(1);
     }
 
-    // 1. Connect Redis
+    // 1. Connect Redis & Preload Lua
     await connectRedis();
+    await preloadLuaScripts(getRedisClient());
 
     // 2. Connect PostgreSQL
     await connectDatabase();
@@ -42,14 +45,48 @@ async function bootstrap() {
     log.info(`🚀 Whatsvue Worker Process started`);
 
     // 5. Graceful shutdown
+    let isShuttingDown = false;
     const shutdown = async (signal: string) => {
+        if (isShuttingDown) return;
+        isShuttingDown = true;
         log.warn(`Received ${signal} — starting graceful shutdown`);
 
-        try {
-            await stopWorkers();
-            await disconnectDatabase();
-            await disconnectRedis();
+        // Force exit after 25s if cleanup hangs
+        const forceExitTimeout = setTimeout(() => {
+            log.fatal({ signal, timeout: '25s' }, 'Graceful shutdown timed out — forcing exit');
+            process.exit(1);
+        }, 25_000);
 
+        try {
+            log.info('Stopping workers...');
+            await stopWorkers();
+            log.info('Workers stopped');
+
+            log.info('Flushing async buffers...');
+            const { flushPendingEvents, setEventLoggerShuttingDown } = require('./core/event-logger');
+            const { flushPendingAutomationLogs, setAutomationLogShuttingDown } = require('./modules/automation/keyword-automation.service');
+            
+            // Seal buffers from new entries
+            setEventLoggerShuttingDown();
+            setAutomationLogShuttingDown();
+
+            // FIX (BUG-10): drain message buffer first, before events
+            await flushMessageBuffer();
+
+            await Promise.allSettled([
+                flushPendingEvents(),
+                flushPendingAutomationLogs()
+            ]);
+            log.info('Buffers flushed');
+
+            log.info('Disconnecting database and redis...');
+            await Promise.allSettled([
+                disconnectDatabase(),
+                disconnectRedis()
+            ]);
+            log.info('Data stores disconnected');
+
+            clearTimeout(forceExitTimeout);
             log.info('Graceful shutdown complete');
             process.exit(0);
         } catch (err) {

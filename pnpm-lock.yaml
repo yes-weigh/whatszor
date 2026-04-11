@@ -115,6 +115,9 @@ importers:
       prisma:
         specifier: ^5.14.0
         version: 5.22.0
+      prom-client:
+        specifier: ^15.1.3
+        version: 15.1.3
       qrcode-terminal:
         specifier: ^0.12.0
         version: 0.12.0
@@ -153,6 +156,9 @@ importers:
   apps/web:
     dependencies:
       '@fontsource/inter':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource/outfit':
         specifier: ^5.2.8
         version: 5.2.8
       '@hookform/resolvers':
@@ -797,6 +803,9 @@ packages:
 
   '@fontsource/inter@5.2.8':
     resolution: {integrity: sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg==}
+
+  '@fontsource/outfit@5.2.8':
+    resolution: {integrity: sha512-rXC6g0MqD7cOBjht0bMqc43qM6lRqDLML9KXsmg9uykz0wLQhy8Z/ajrMG6iyoT3NJR+MYgU+OEHp7uHoTb+Yw==}
 
   '@google/genai@1.44.0':
     resolution: {integrity: sha512-kRt9ZtuXmz+tLlcNntN/VV4LRdpl6ZOu5B1KbfNgfR65db15O6sUQcwnwLka8sT/V6qysD93fWrgJHF2L7dA9A==}
@@ -3061,6 +3070,9 @@ packages:
     resolution: {integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==}
     engines: {node: '>=8'}
 
+  bintrees@1.0.2:
+    resolution: {integrity: sha512-VOMgTMwjAaUG580SXn3LacVgjurrbMme7ZZNYGSSV7mmtY6QQRh0Eg3pwIcntQ77DErK1L0NxkbetjcoXzVwKw==}
+
   bowser@2.14.1:
     resolution: {integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==}
 
@@ -4885,6 +4897,10 @@ packages:
     resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
     engines: {node: '>=0.4.0'}
 
+  prom-client@15.1.3:
+    resolution: {integrity: sha512-6ZiOBfCywsD4k1BN9IX0uZhF+tJkV8q8llP64G5Hajs4JOeVLPCwpPVcpXy3BwYiUGgyJzsJJQeOIv7+hDSq8g==}
+    engines: {node: ^16 || ^18 || >=20}
+
   promise-coalesce@1.5.0:
     resolution: {integrity: sha512-cTJ30U+ur1LD7pMPyQxiKIwxjtAjLsyU7ivRhVWZrX9BNIXtf78pc37vSMc8Vikx7DVzEKNk2SEJ5KWUpSG2ig==}
     engines: {node: '>=16'}
@@ -5401,6 +5417,9 @@ packages:
   tapable@2.3.2:
     resolution: {integrity: sha512-1MOpMXuhGzGL5TTCZFItxCc0AARf1EZFQkGqMm7ERKj8+Hgr5oLvJOVFcC+lRmR8hCe2S3jC4T5D7Vg/d7/fhA==}
     engines: {node: '>=6'}
+
+  tdigest@0.1.2:
+    resolution: {integrity: sha512-+G0LLgjjo9BZX2MfdvPfH+MKLCrxlXSYec5DaPYP1fe6Iyhf0/fSmJ0bFiZ1F8BT6cGXl2LpltQptzjXKWEkKA==}
 
   terser-webpack-plugin@5.4.0:
     resolution: {integrity: sha512-Bn5vxm48flOIfkdl5CaD2+1CiUVbonWQ3KQPyP7/EuIl9Gbzq/gQFOzaMFUEgVjB1396tcK0SG8XcNJ/2kDH8g==}
@@ -6647,6 +6666,8 @@ snapshots:
   '@floating-ui/utils@0.2.11': {}
 
   '@fontsource/inter@5.2.8': {}
+
+  '@fontsource/outfit@5.2.8': {}
 
   '@google/genai@1.44.0':
     dependencies:
@@ -8995,6 +9016,8 @@ snapshots:
 
   binary-extensions@2.3.0: {}
 
+  bintrees@1.0.2: {}
+
   bowser@2.14.1: {}
 
   brace-expansion@1.1.12:
@@ -11033,6 +11056,11 @@ snapshots:
 
   progress@2.0.3: {}
 
+  prom-client@15.1.3:
+    dependencies:
+      '@opentelemetry/api': 1.9.0
+      tdigest: 0.1.2
+
   promise-coalesce@1.5.0: {}
 
   prop-types@15.8.1:
@@ -11696,6 +11724,10 @@ snapshots:
       - yaml
 
   tapable@2.3.2: {}
+
+  tdigest@0.1.2:
+    dependencies:
+      bintrees: 1.0.2
 
   terser-webpack-plugin@5.4.0(esbuild@0.27.3)(webpack@5.105.4(esbuild@0.27.3)):
     dependencies:

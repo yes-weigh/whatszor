@@ -20,51 +20,134 @@ export type EventType =
     | 'webhook_received'
     | 'contacts_bulk_deleted'
     // ── Knowledge Bot Events ───────────────────────────
-    | 'knowledge_question_asked'     // Bot sent a WhatsApp outreach question
-    | 'knowledge_response_received'  // Bot received an inbound reply and decoded it
-    | 'knowledge_update_applied'     // Auto-merge accepted — product fields updated
-    | 'knowledge_response_orphaned'  // Inbound reply had no resolvable product context
-    | 'knowledge_update_failed'      // AI extraction or DB merge failed
+    | 'knowledge_question_asked'
+    | 'knowledge_response_received'
+    | 'knowledge_update_applied'
+    | 'knowledge_response_orphaned'
+    | 'knowledge_update_failed'
     // ── Admin & Audit Events ──────────────────────────
-    | 'admin_impersonation'          // Super-admin entered a workspace
-    | 'workspace_suspended'          // Admin suspended a workspace
-    | 'workspace_activated'          // Admin reactivated a workspace
-    | 'member_role_changed'          // OWNER changed a member's role
-    | 'session_reassigned'           // Session ownership transferred between members
-    | 'session_unassigned'           // Session ownership cleared (no longer assigned)
-    | 'qr_relay_triggered'           // Admin triggered QR regeneration for a member
+    | 'admin_impersonation'
+    | 'workspace_suspended'
+    | 'workspace_activated'
+    | 'member_role_changed'
+    | 'session_reassigned'
+    | 'session_unassigned'
+    | 'qr_relay_triggered'
     // ── Lead Generation Events ────────────────────────
-    | 'lead_list_created'            // User queued a new lead list
-    | 'lead_list_ready'              // Worker finished fetching/processing leads
-    | 'leads_converted'              // Leads were successfully converted to contacts
+    | 'lead_list_created'
+    | 'lead_list_ready'
+    | 'leads_converted'
     | 'system_error';
+
+// ── Batch buffer ─────────────────────────────────────────────────────────────
+// Events are accumulated here and flushed as a single createMany() call.
+// This reduces DB writes from O(events) to O(1) per flush interval.
+
+const BATCH_SIZE = 50;       // flush when buffer hits this size
+const FLUSH_INTERVAL_MS = 2_000; // flush every 2s regardless of buffer size
+
+interface EventRecord {
+    id: string;
+    workspaceId: string;
+    eventType: string;
+    sourceModule: string;
+    payloadMetadata: any;
+    traceId: string | null;
+}
+
+let buffer: EventRecord[] = [];
+let flushTimer: NodeJS.Timeout | null = null;
+let isFlushing = false;
+let isShuttingDown = false;
+
+export function setEventLoggerShuttingDown() {
+    isShuttingDown = true;
+}
+
+export async function flushPendingEvents(): Promise<void> {
+    if (buffer.length === 0) return;
+    if (isFlushing) {
+        // Simple backoff if called concurrently
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return flushPendingEvents();
+    }
+    
+    isFlushing = true;
+    const batch = buffer.splice(0, buffer.length); // take entire buffer atomically
+    
+    try {
+        await Promise.race([
+            prisma.eventLog.createMany({
+                data: batch,
+                skipDuplicates: true,
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Flush timeout')), 5000))
+        ]);
+    } catch (error) {
+        log.error({ error, count: batch.length }, 'Event log batch flush failed');
+        // Re-enqueue at front so events are not lost (cap at 500 to avoid unbounded growth)
+        if (buffer.length < 500) {
+            buffer.unshift(...batch.slice(0, 500 - buffer.length));
+        }
+    } finally {
+        isFlushing = false;
+    }
+}
+
+function scheduleFlush(): void {
+    if (flushTimer) return;
+    flushTimer = setTimeout(async () => {
+        flushTimer = null;
+        await flushPendingEvents();
+    }, FLUSH_INTERVAL_MS);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Write a structured event to the EventLog table.
  *
- * traceId is automatically resolved from the AsyncLocalStorage request context
- * so every event is automatically correlated to the originating request/job.
- * An explicit traceId override may be passed by long-running workers that
- * receive the traceId from the job payload rather than from ALS.
+ * Events are batched in-process and flushed every 2 seconds (or at 50 events)
+ * via createMany() — reducing individual DB writes by ~95%.
+ *
+ * This function is intentionally NOT awaited at call sites — it returns void
+ * and errors are handled internally. Call as fire-and-forget:
+ *
+ *   logEvent(workspaceId, 'message_received', 'inbound_worker', { ... });
+ *
+ * traceId is automatically resolved from AsyncLocalStorage request context.
  */
-export async function logEvent(
+export function logEvent(
     workspaceId: string,
     eventType: EventType,
     sourceModule: string,
     payloadMetadata: any = {},
     traceId?: string,
-) {
-    try {
-        await prisma.eventLog.create({
-            data: {
-                workspaceId,
-                eventType,
-                sourceModule,
-                payloadMetadata,
-                traceId: traceId ?? getTraceId(),
-            }
-        });
-    } catch (error) {
-        log.error({ error, eventType, workspaceId }, 'Failed to log platform event');
+): void {
+    const record: EventRecord = {
+        id: require('crypto').randomUUID(),
+        workspaceId,
+        eventType,
+        sourceModule,
+        payloadMetadata,
+        traceId: traceId ?? getTraceId() ?? null,
+    };
+
+    if (isShuttingDown) {
+        prisma.eventLog.create({ data: record }).catch(err => log.error({ err }, 'Shutdown event log failed'));
+        return;
+    }
+
+    buffer.push(record);
+
+    if (buffer.length >= BATCH_SIZE) {
+        // Threshold flush — clear timer and flush immediately
+        if (flushTimer) {
+            clearTimeout(flushTimer);
+            flushTimer = null;
+        }
+        flushPendingEvents().catch(err => log.error({ err }, 'Threshold event log flush failed'));
+    } else {
+        scheduleFlush();
     }
 }

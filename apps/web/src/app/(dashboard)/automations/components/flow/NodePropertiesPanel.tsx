@@ -1,6 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Copy, Plus, Minus } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
 
 interface NodePropertiesPanelProps {
     selectedNode: any | null;
@@ -187,6 +189,12 @@ function ConditionRow({ cond, index, onUpdate, onRemove, showRemove }: {
 
 // ── Main Panel ────────────────────────────────────────────────
 export function NodePropertiesPanel({ selectedNode, onClose, onUpdateNodeData, onDelete, onDuplicate, sessions = [] }: NodePropertiesPanelProps) {
+    const { data: q } = useQuery({
+        queryKey: ['products-list'],
+        queryFn: () => api.get('/products').then(r => r.data)
+    });
+    const products = q?.products || [];
+
     if (!selectedNode) return null;
 
     const data = selectedNode.data;
@@ -249,6 +257,7 @@ export function NodePropertiesPanel({ selectedNode, onClose, onUpdateNodeData, o
                                             'CAMPAIGN_SENT': 'Campaign Sent',
                                             'CAMPAIGN_REPLIED': 'Campaign Replied',
                                             'TAG_ADDED': 'Tag Added',
+                                            'PRODUCT_INTEREST': 'Product Interest'
                                         };
                                         handleUpdate('label', labels[t] || 'Trigger');
                                     }}
@@ -260,6 +269,7 @@ export function NodePropertiesPanel({ selectedNode, onClose, onUpdateNodeData, o
                                     <option value="CAMPAIGN_SENT">Campaign Sent</option>
                                     <option value="CAMPAIGN_REPLIED">Campaign Replied</option>
                                     <option value="TAG_ADDED">Tag Added</option>
+                                    <option value="PRODUCT_INTEREST">Product Interest</option>
                                 </select>
                             </div>
 
@@ -298,6 +308,36 @@ export function NodePropertiesPanel({ selectedNode, onClose, onUpdateNodeData, o
                                         value={data.tagFilter || ''}
                                         onChange={(e) => handleUpdate('tagFilter', e.target.value)}
                                     />
+                                </div>
+                            )}
+
+                            {/* Product selection for PRODUCT_INTEREST */}
+                            {data.triggerType === 'PRODUCT_INTEREST' && (
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-medium text-secondary">Specific Product</label>
+                                    <select
+                                        title="Product Selection"
+                                        className={inputClasses}
+                                        value={data.productId || ''}
+                                        onChange={(e) => handleUpdate('productId', e.target.value)}
+                                    >
+                                        <option value="">Any Product</option>
+                                        {products.map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                    <label className="text-sm font-medium text-secondary mt-2">Relation Type</label>
+                                    <select
+                                        title="Relation Type Selection"
+                                        className={inputClasses}
+                                        value={data.relationType || ''}
+                                        onChange={(e) => handleUpdate('relationType', e.target.value)}
+                                    >
+                                        <option value="">Any Relation</option>
+                                        <option value="INTERESTED">Interested</option>
+                                        <option value="CART">Added to Cart</option>
+                                        <option value="OWNED">Purchased / Owned</option>
+                                    </select>
                                 </div>
                             )}
                         </>

@@ -99,11 +99,11 @@ export async function processKnowledgeOutreachJob(job: Job) {
                 // Active session context TTL: 1 hour
                 await redis.set(`bot:session:${targetNumber}`, p.id, 'EX', 60 * 60);
                 log.info({ msgId, productId: p.id, phone: targetNumber }, 'Stored bot routing context in Redis');
-                await logEvent(workspaceId, 'knowledge_question_asked', 'knowledge_worker', {
+                logEvent(workspaceId, 'knowledge_question_asked', 'knowledge_worker', {
                     productId: p.id,
                     phone: targetNumber,
                     messageId: msgId
-                }).catch(() => {});
+                });
             }
 
             // Mark product Outreach completion

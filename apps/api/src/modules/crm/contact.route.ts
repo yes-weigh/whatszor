@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
-import { CreateContactSchema, UpdateContactSchema } from '@whatszor/shared';
+import { CreateContactSchema, UpdateContactSchema, createError } from '@whatszor/shared';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import * as contactService from './contact.service';
+import * as contactProductService from './contact-product.service';
 
 export const contactRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
@@ -52,5 +53,49 @@ export const contactRoutes: FastifyPluginAsync = async (fastify: FastifyInstance
         }
         await contactService.deleteManyContacts(req.user.workspaceId, ids);
         return reply.sendSuccess({ message: 'Contacts deleted successfully' });
+    });
+
+    // ── Contact-Product Relationships ─────────────────────────────────────
+
+    fastify.post('/:id/products', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const body = req.body as { productId: string; relationType?: string };
+        
+        if (!body || !body.productId) {
+            return reply.sendError(createError('productId is required', 'BAD_REQUEST', 400), 400);
+        }
+
+        const relation = await contactProductService.addProductToContact(
+            req.user.workspaceId, 
+            id, 
+            body.productId, 
+            body.relationType
+        );
+        return reply.sendSuccess(relation, 201);
+    });
+
+    fastify.delete('/:id/products/:productId', { preHandler: requireRole('contacts:update') }, async (req, reply) => {
+        const { id, productId } = req.params as { id: string; productId: string };
+        const { relationType } = req.query as { relationType?: string };
+        
+        if (!relationType) {
+            return reply.sendError(createError('relationType query parameter is required to explicitly define deletion bounds.', 'BAD_REQUEST', 400), 400);
+        }
+
+        await contactProductService.removeProductFromContact(req.user.workspaceId, id, productId, relationType);
+        return reply.sendSuccess({ message: 'Product removed from contact' });
+    });
+
+    fastify.get('/:id/products', async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const { limit, cursor } = req.query as { limit?: string; cursor?: string };
+        
+        const products = await contactProductService.listProductsForContact(
+            req.user.workspaceId, 
+            id,
+            limit ? parseInt(limit, 10) : 50,
+            cursor
+        );
+        return reply.sendSuccess({ items: products.items, nextCursor: products.nextCursor });
     });
 };

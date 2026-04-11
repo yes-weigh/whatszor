@@ -31,7 +31,9 @@ export interface Conversation {
     lastMessage: string | null;
     lastMessageAt: string | null;
     unreadCount: number;
-    contact: Contact | null;
+    contact: (Contact & { 
+        contactProducts?: { relationType: string; source?: string; product: { id: string; name: string } }[] 
+    }) | null;
 }
 
 export interface Message {
@@ -57,6 +59,7 @@ export function useConversations() {
 
     const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null); 
+    const [filterProductId, setFilterProductId] = useState<string | null>(null);
     const [replySession, setReplySession] = useState<string | null>(null);
 
     // Fetch Accounts
@@ -69,9 +72,12 @@ export function useConversations() {
 
     // Fetch Conversations
     const { data: convsResult, isLoading: convsLoading } = useQuery<{ items: Conversation[] }>({
-        queryKey: ['conversations', activeSessionId],
+        queryKey: ['conversations', activeSessionId, filterProductId],
         queryFn: () => {
-            const qs = activeSessionId ? `?sessionId=${activeSessionId}` : '';
+            const params = new URLSearchParams();
+            if (activeSessionId) params.append('sessionId', activeSessionId);
+            if (filterProductId) params.append('productId', filterProductId);
+            const qs = params.toString() ? `?${params.toString()}` : '';
             return api.get(`/conversations${qs}`).then(r => r.data ?? { items: [] });
         },
         refetchInterval: 60_000,
@@ -176,6 +182,8 @@ export function useConversations() {
         connectedAccounts,
         activeSessionId,
         setActiveSessionId,
+        filterProductId,
+        setFilterProductId,
         conversations,
         convsLoading,
         activeConversation,

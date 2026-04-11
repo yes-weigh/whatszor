@@ -3,6 +3,7 @@ import { prisma } from '../../prisma/client';
 import { createLogger } from '../../core/logger';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 import { createOrGetConversation } from '../../modules/messaging/conversation.service';
+import { getQueue, QueueName } from '../../queues';
 
 const log = createLogger({ module: 'campaign-worker' });
 
@@ -63,20 +64,26 @@ export async function processCampaignJob(job: Job) {
         return;
     }
 
+    const BATCH_SIZE = 500;
     // Process members pending delivery
     const members = await prisma.campaignMember.findMany({
         where: {
             campaignId,
             status: 'PENDING'
         },
+        take: BATCH_SIZE,
+        orderBy: { id: 'asc' },
         include: {
             contact: true
         }
     });
 
-    log.info({ campaignId, pendingCount: members.length }, 'Processing campaign members');
+    log.info({ campaignId, batchCount: members.length }, 'Processing campaign members batch');
 
-    let processed = 0;
+    if (members.length === 0) {
+        log.info({ campaignId }, 'No more pending members found.');
+        return;
+    }
 
     for (const member of members) {
         try {
@@ -90,12 +97,6 @@ export async function processCampaignJob(job: Job) {
                 providerId: member.contact.phone,
             });
 
-            // Stagger messages to prevent burst sending
-            // Normal: 3s + 2s jitter. Fast: 1s + 500ms jitter.
-            const MIN_DELAY_MS = job.data.isFastMode ? 1000 : 3000;
-            const JITTER_MS = job.data.isFastMode ? 500 : 2000;
-            const jobDelay = processed * (MIN_DELAY_MS + Math.floor(Math.random() * JITTER_MS));
-
             const isTemplate = !!templateVersionId;
             const message = await composeAndQueueMessage({
                 workspaceId,
@@ -103,7 +104,8 @@ export async function processCampaignJob(job: Job) {
                 provider: 'WHATSAPP',
                 providerId: member.contact.phone, // Real JID resolution happens in WA worker
                 campaignId: campaign.id,
-                delay: jobDelay,
+                // We rely on outbound worker's per-session limit now, so no arbitrary delay needed
+                delay: 0,
                 ...(isTemplate ? {
                     templateVersionId: (member.templateVersionId || templateVersionId) as string,
                     templateVariables: {
@@ -124,8 +126,6 @@ export async function processCampaignJob(job: Job) {
                     messageId: message.id
                 }
             });
-            
-            processed++;
 
         } catch (error: any) {
             log.error({ memberId: member.id, err: error }, 'Failed to queue campaign message for member');
@@ -149,6 +149,13 @@ export async function processCampaignJob(job: Job) {
         }
     }
 
+    // Recursively schedule the next batch
+    if (members.length === BATCH_SIZE) {
+        log.info({ campaignId }, 'Batch complete, scheduling next batch chunk.');
+        await getQueue(QueueName.CAMPAIGN).add(job.name, job.data, { delay: 1000 });
+        return;
+    }
+
     await prisma.campaign.update({
         where: { id: campaignId },
         data: {
@@ -157,5 +164,5 @@ export async function processCampaignJob(job: Job) {
         }
     });
 
-    log.info({ campaignId }, 'Campaign execution finished.');
+    log.info({ campaignId }, 'Campaign completely finished.');
 }

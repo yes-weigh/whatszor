@@ -20,6 +20,7 @@ export enum QueueName {
     KNOWLEDGE_OUTREACH = 'knowledge_outreach',
     KNOWLEDGE_INGESTION = 'knowledge_ingestion',
     LEAD_GENERATION = 'lead-generation',
+    RECEIPTS = 'receipts',
 }
 
 // ── Per-queue job option tuning ─────────────────────────────────────────────
@@ -62,6 +63,12 @@ const QUEUE_JOB_OPTIONS: Partial<Record<QueueName, QueueOptions['defaultJobOptio
         removeOnComplete: { count: 100 },
         removeOnFail: { count: 200 },
     },
+    [QueueName.RECEIPTS]: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 1_000 },
+        removeOnComplete: true,
+        removeOnFail: { count: 100 },
+    },
 };
 
 const DEFAULT_JOB_OPTIONS: QueueOptions['defaultJobOptions'] = {
@@ -74,10 +81,14 @@ const DEFAULT_JOB_OPTIONS: QueueOptions['defaultJobOptions'] = {
 
 function buildConnectionOptions() {
     const redisUrl = new URL(env.REDIS_URL);
+    const dbMatch = redisUrl.pathname.match(/\/(?<db>\d+)/);
+    const db = dbMatch ? parseInt(dbMatch.groups!.db, 10) : 0;
+    
     return {
         host: redisUrl.hostname,
         port: parseInt(redisUrl.port || '6379', 10),
         password: redisUrl.password || undefined,
+        db,
         maxRetriesPerRequest: null,
         retryStrategy: (times: number) => Math.min(times * 200, 30_000),
     };
