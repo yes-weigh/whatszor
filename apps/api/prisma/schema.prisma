@@ -598,6 +598,7 @@ model WhatsAppAccount {
 
   conversations   Conversation[]
   accountAccesses AccountAccess[]
+  campaigns       Campaign[]
 
   @@index([workspaceId, userId, status])
   @@index([workspaceId])
@@ -657,9 +658,11 @@ model Campaign {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  audience  Audience?        @relation(fields: [audienceId], references: [id], onDelete: SetNull)
-  members   CampaignMember[]
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  audience        Audience?        @relation(fields: [audienceId], references: [id], onDelete: SetNull)
+  whatsappAccount WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
+  whatsappAccountId String?        @map("whatsapp_account_id")
+  members         CampaignMember[]
 
   @@index([workspaceId])
   @@index([status])

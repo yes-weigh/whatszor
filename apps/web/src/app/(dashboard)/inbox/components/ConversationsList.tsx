@@ -201,9 +201,7 @@ export function ConversationsList({
                     {/* ── Per-session chips ── */}
                     {connectedAccounts.map((acc, i) => {
                         const dotColors = ['bg-violet-400','bg-emerald-400','bg-blue-400','bg-amber-400','bg-rose-400','bg-cyan-400'];
-                        const borderColors = ['border-violet-400/40','border-emerald-400/40','border-blue-400/40','border-amber-400/40','border-rose-400/40','border-cyan-400/40'];
                         const dot = dotColors[i % dotColors.length];
-                        const borderAccent = borderColors[i % borderColors.length];
                         const count = conversations.filter(c => c.sessionId === acc.sessionId).length;
                         const isActive = activeSessionId === acc.sessionId;
                         return (

@@ -388,7 +388,7 @@ export default function NewCampaignPage() {
     const [savedCampaignId, setSavedCampaignId] = useState<string | null>(null);
     const [draftSaved, setDraftSaved] = useState(false);
     const [isLoadingEdit, setIsLoadingEdit] = useState(!!editId);
-    const pendingTemplateIdRef = useRef<string | null>(null); // templateId to apply once templates load
+    const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(null); // templateId to apply once templates load
     const nameInputRef = useRef<HTMLInputElement>(null);
 
     const [draft, setDraft] = useState<CampaignDraft>({
@@ -425,7 +425,7 @@ export default function NewCampaignPage() {
                 setComposeText(c.messageText);
             } else if (c.templateId) {
                 // Templates may not be loaded yet — store for deferred apply
-                pendingTemplateIdRef.current = c.templateId;
+                setPendingTemplateId(c.templateId);
                 setActiveTemplateId(c.templateId);
             }
             if (c.audienceId) {
@@ -495,13 +495,13 @@ export default function NewCampaignPage() {
     // (applyTemplate is defined later via useCallback, so we forward-ref it)
     const applyTemplateRef = useRef<((t: MessageTemplate) => void) | null>(null);
     useEffect(() => {
-        if (!pendingTemplateIdRef.current || templates.length === 0) return;
-        const match = templates.find(t => t.id === pendingTemplateIdRef.current);
+        if (!pendingTemplateId || templates.length === 0) return;
+        const match = templates.find(t => t.id === pendingTemplateId);
         if (match && applyTemplateRef.current) {
-            pendingTemplateIdRef.current = null; // consume so we don't re-apply
+            setPendingTemplateId(null); // consume so we don't re-apply
             applyTemplateRef.current(match);
         }
-    }, [templates]);
+    }, [templates, pendingTemplateId]);
 
     const { audiences, refresh: refreshAudiences } = useAudiences();
 

@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import {
     Smartphone, CheckCircle2, MonitorSmartphone, Unplug,
     Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain, Edit2,
-    AlertTriangle, RefreshCcw, UserCheck, UserX, ChevronDown
+    UserCheck, UserX, ChevronDown
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -514,52 +514,6 @@ export function WhatsAppTab() {
         setConnectingSession(session);
     };
 
-    // ── Bulk danger-zone states ────────────────────────────────
-    const [isFlushing, setIsFlushing] = useState(false);
-    const [isResyncingAll, setIsResyncingAll] = useState(false);
-    const [bulkResult, setBulkResult] = useState<string | null>(null);
-
-    const handleFlushAll = async () => {
-        if (!confirm(
-            '⚠️ DANGER: This will permanently delete ALL conversations, messages, and contact names for EVERY connected WhatsApp session, then re-download them fresh.\n\nThis cannot be undone. Continue?'
-        )) return;
-
-        setIsFlushing(true);
-        setBulkResult(null);
-        let done = 0;
-        try {
-            for (const s of sessions) {
-                await api.post(`/whatsapp/sessions/${s.sessionId}/resync`, { clearHistory: true });
-                done++;
-            }
-            setBulkResult(`✅ Flushed & resyncing ${done} session(s). Fresh data will appear within a few minutes.`);
-            qc.invalidateQueries({ queryKey: ['wa-accounts'] });
-        } catch {
-            setBulkResult(`⚠️ Completed ${done}/${sessions.length} sessions before an error. Some sessions may still be syncing.`);
-        } finally {
-            setIsFlushing(false);
-        }
-    };
-
-    const handleResyncAll = async () => {
-        if (!confirm('Quick-resync all connected sessions? This will bounce each connection to pick up any missed messages.')) return;
-
-        setIsResyncingAll(true);
-        setBulkResult(null);
-        let done = 0;
-        try {
-            for (const s of sessions.filter(s => s.status === 'CONNECTED')) {
-                await api.post(`/whatsapp/sessions/${s.sessionId}/resync`, { clearHistory: false });
-                done++;
-            }
-            setBulkResult(`✅ Resync started for ${done} connected session(s).`);
-            qc.invalidateQueries({ queryKey: ['wa-accounts'] });
-        } catch {
-            setBulkResult(`⚠️ Completed ${done} sessions before an error.`);
-        } finally {
-            setIsResyncingAll(false);
-        }
-    };
 
 
     if (isLoading) {
