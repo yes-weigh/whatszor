@@ -51,8 +51,8 @@ export const leadGenerationApi = {
         return res.data;
     },
 
-    generateLeads: async (query: string): Promise<{ leadListId: string, status: string, message: string }> => {
-        const res = await api.post('/lead-generation/search', { query });
+    generateLeads: async (query: string, fetchMaximum?: boolean): Promise<{ leadListId: string, status: string, message: string }> => {
+        const res = await api.post('/lead-generation/search', { query, fetchMaximum });
         return res.data;
     },
 

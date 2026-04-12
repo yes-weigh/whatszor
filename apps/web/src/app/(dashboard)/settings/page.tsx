@@ -58,7 +58,7 @@ export default function SettingsPage() {
                             onClick={() => tab.externalHref ? router.push(tab.externalHref) : setActiveTab(tab.id)}
                             className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                                 activeTab === tab.id && !tab.externalHref
-                                    ? 'bg-primary text-white' 
+                                    ? 'bg-accent text-black' 
                                     : 'text-secondary hover:bg-elevated hover:text-primary'
                             }`}
                         >

@@ -2,6 +2,37 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../../prisma/client';
 import { subDays, startOfDay, format, formatDistanceToNow } from 'date-fns';
 
+export async function getSidebarStats(req: FastifyRequest, reply: FastifyReply) {
+    const workspaceId = req.user.workspaceId;
+
+    const [unreadConversations, runningCampaigns, liveAutomations] = await Promise.all([
+        prisma.conversation.count({
+            where: {
+                workspaceId,
+                unreadCount: { gt: 0 },
+            },
+        }),
+        prisma.campaign.count({
+            where: {
+                workspaceId,
+                status: { in: ['RUNNING', 'SCHEDULED'] },
+            },
+        }),
+        prisma.automationRule.count({
+            where: {
+                workspaceId,
+                status: 'ACTIVE',
+            },
+        }),
+    ]);
+
+    return reply.sendSuccess({
+        unreadConversations,
+        runningCampaigns,
+        liveAutomations,
+    });
+}
+
 export async function getDashboardStats(req: FastifyRequest, reply: FastifyReply) {
     const workspaceId = req.user.workspaceId;
 

@@ -47,13 +47,15 @@ export const leadGenerationRoutes: FastifyPluginAsync = async (fastify: FastifyI
             query?: string;
             name?: string;
             maxResults?: number;
+            fetchMaximum?: boolean;
         };
 
         if (!body.query?.trim()) {
             return reply.sendError({ message: 'query is required', code: 'BAD_REQUEST' }, 400);
         }
 
-        if (body.maxResults !== undefined) {
+        // maxResults validation only applies for non-maximum fetches
+        if (!body.fetchMaximum && body.maxResults !== undefined) {
             const n = Number(body.maxResults);
             if (!Number.isInteger(n) || n < 1 || n > 20) {
                 return reply.sendError(
@@ -68,6 +70,7 @@ export const leadGenerationRoutes: FastifyPluginAsync = async (fastify: FastifyI
                 query: body.query!.trim(),
                 name: body.name,
                 maxResults: body.maxResults,
+                fetchMaximum: body.fetchMaximum,
             });
 
             return reply.code(202).sendSuccess({

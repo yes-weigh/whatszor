@@ -37,7 +37,7 @@ export interface LeadGenerationJobData {
     traceId?: string;
 }
 
-const MAX_DETAILS_PER_JOB = 20; // Hard cap — controls API cost per job
+const MAX_DETAILS_PER_JOB = 100; // Hard cap — controls API cost per job (100 when fetchMaximum is enabled)
 
 export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>): Promise<void> {
     const { workspaceId, leadListId, query, maxResults } = job.data;

@@ -4,102 +4,286 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Users2, Megaphone, Zap, LayoutDashboard,
-    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, MapPin
+    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, MapPin,
+    LogOut, Plus, ChevronDown, UserPlus
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 import NextImage from 'next/image';
+import { AddContactModal } from '@/components/contacts/AddContactModal';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
-const navItems = [
-    { href: '/inbox',         label: 'Inbox',         icon: MessageSquare,  requiredPermission: 'conversations:read' },
-    { href: '/analytics',     label: 'Analytics',     icon: LayoutDashboard },
-    { href: '/contacts',      label: 'Contacts',      icon: Users },
-    { href: '/audiences',     label: 'Audiences',     icon: Users2 },
-    { href: '/campaigns',     label: 'Campaigns',     icon: Megaphone },
-    { href: '/leads',         label: 'Lead Generation', icon: MapPin },
-    { href: '/automations',   label: 'Automations',   icon: Zap },
-    { href: '/media',         label: 'Media Gallery', icon: Image },
-    { href: '/templates',     label: 'Templates',     icon: LayoutTemplate },
-
+// ─── Navigation structure with section grouping ───────────────────────────────
+const navSections = [
+    {
+        label: 'MAIN',
+        items: [
+            {
+                id: 'inbox',
+                href: '/inbox',
+                label: 'Inbox',
+                icon: MessageSquare,
+                requiredPermission: 'conversations:read',
+            },
+            {
+                href: '/analytics',
+                label: 'Analytics',
+                icon: LayoutDashboard,
+            },
+        ],
+    },
+    {
+        label: 'CRM',
+        items: [
+            { href: '/contacts',  label: 'Contacts',  icon: Users },
+            { href: '/audiences', label: 'Audiences', icon: Users2 },
+        ],
+    },
+    {
+        label: 'GROWTH',
+        items: [
+            {
+                id: 'campaigns',
+                href: '/campaigns',
+                label: 'Campaigns',
+                icon: Megaphone,
+            },
+            { href: '/leads', label: 'Lead Generation', icon: MapPin },
+        ],
+    },
+    {
+        label: 'AUTOMATION',
+        items: [
+            {
+                id: 'automations',
+                href: '/automations',
+                label: 'Automations',
+                icon: Zap,
+            },
+        ],
+    },
+    {
+        label: 'CONTENT',
+        items: [
+            { href: '/media',     label: 'Media Gallery', icon: Image },
+            { href: '/templates', label: 'Templates',     icon: LayoutTemplate },
+        ],
+    },
 ];
 
+// ─── Badge components ─────────────────────────────────────────────────────────
+function CountBadge({ count }: { count: number }) {
+    return (
+        <span className="sidebar-badge-count">
+            {count > 99 ? '99+' : count}
+        </span>
+    );
+}
+
+function StatusBadge({ label }: { label: string }) {
+    return (
+        <span className="sidebar-badge-status">
+            <span className="sidebar-badge-dot" />
+            {label}
+        </span>
+    );
+}
+
+function LiveBadge({ label }: { label: string }) {
+    return (
+        <span className="sidebar-badge-live">
+            <span className="sidebar-badge-dot-live" />
+            {label}
+        </span>
+    );
+}
+
+// ─── Main Sidebar ─────────────────────────────────────────────────────────────
 export function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
-    const { user, hasPermission } = useAuthStore();
+    const [isAddContactOpen, setIsAddContactOpen] = useState(false);
+    const { user, hasPermission, logout } = useAuthStore();
     const [isMounted, setIsMounted] = useState(false);
 
-    useEffect(() => {
-        setIsMounted(true);
-    }, []);
+    useEffect(() => { setIsMounted(true); }, []);
 
-    // Filter nav items the current user has permission to see
-    const visibleNavItems = navItems.filter(item =>
-        !item.requiredPermission || (isMounted && hasPermission(item.requiredPermission))
-    );
+    // Fetch live sidebar stat badges
+    const { data: stats } = useQuery({
+        queryKey: ['sidebar-stats'],
+        queryFn: async () => {
+            const res = await api.get('/dashboard/sidebar');
+            return res.data || { unreadConversations: 0, runningCampaigns: 0, liveAutomations: 0 };
+        },
+        enabled: isMounted && !!user,
+        refetchInterval: 15000, // Poll every 15s to keep sidebar fresh
+    });
+
+    const isActive = (href: string) =>
+        pathname === href || pathname.startsWith(href + '/');
 
     return (
-        <aside
-            className={`flex flex-col h-screen sticky top-0 border-r border-white/5 bg-black/40 backdrop-blur-xl shrink-0 transition-all duration-200 ${collapsed ? 'w-16' : 'w-[220px]'}`}
-        >
-            {/* Logo */}
-            <div className="flex items-center gap-3 px-4 h-16 border-b border-white/5">
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 glass-card p-1">
-                    <NextImage src="/logo.png" alt="WhatsVue Logo" width={24} height={24} className="object-contain" />
+        <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : 'sidebar--expanded'}`}>
+
+            {/* ── Workspace header (branding + switcher) ─────────────────── */}
+            <div className="sidebar-header">
+                <div className="sidebar-logo-mark">
+                    <NextImage src="/logo.png" alt="WhatsVue" width={18} height={18} className="object-contain" />
                 </div>
                 {!collapsed && (
-                    <span className="font-bold text-sm tracking-wide text-white">
-                        WhatsVue
-                    </span>
+                    <div className="sidebar-workspace-info">
+                        <span className="sidebar-workspace-name">WhatsVue</span>
+                        <span className="sidebar-workspace-plan">Pro</span>
+                    </div>
+                )}
+                {!collapsed && (
+                    <button className="sidebar-workspace-chevron" aria-label="Switch workspace">
+                        <ChevronDown size={12} />
+                    </button>
                 )}
             </div>
 
-            {/* Nav */}
-            <nav className="flex-1 py-3 px-2 flex flex-col gap-1">
-                {visibleNavItems.map(({ href, label, icon: Icon }) => {
-                    const active = pathname === href || pathname.startsWith(href + '/');
+            {/* ── Navigation ─────────────────────────────────────────────── */}
+            <nav className="sidebar-nav">
+                {navSections.map(({ label, items }) => {
+                    const visibleItems = items.filter(item =>
+                        !(item as any).requiredPermission || (isMounted && hasPermission((item as any).requiredPermission))
+                    );
+                    if (!visibleItems.length) return null;
+
                     return (
-                        <Link
-                            key={href}
-                            href={href}
-                            className={`nav-item ${active ? 'active' : ''}`}
-                            title={collapsed ? label : undefined}
-                        >
-                            <Icon size={18} className="shrink-0" />
-                            {!collapsed && <span>{label}</span>}
-                        </Link>
+                        <div key={label} className="sidebar-section">
+                            {!collapsed && (
+                                <span className="sidebar-section-label">{label}</span>
+                            )}
+                            {visibleItems.map((item: any) => {
+                                const { id, href, label: itemLabel, icon: Icon, badge } = item;
+                                const active = isActive(href);
+                                return (
+                                    <Link
+                                        key={href}
+                                        href={href}
+                                        className={`sidebar-nav-item ${active ? 'sidebar-nav-item--active' : ''}`}
+                                        title={collapsed ? itemLabel : undefined}
+                                    >
+                                        <Icon
+                                            size={16}
+                                            className={`sidebar-nav-icon ${active ? 'sidebar-nav-icon--active' : ''}`}
+                                        />
+                                        {!collapsed && (
+                                            <>
+                                                <span className="sidebar-nav-label">{itemLabel}</span>
+                                                
+                                                {/* Dynamic Badges based on ID and stats */}
+                                                {id === 'inbox' && (stats?.unreadConversations || 0) > 0 && (
+                                                    <CountBadge count={stats.unreadConversations} />
+                                                )}
+                                                {id === 'campaigns' && (stats?.runningCampaigns || 0) > 0 && (
+                                                    <StatusBadge label="running" />
+                                                )}
+                                                {id === 'automations' && (stats?.liveAutomations || 0) > 0 && (
+                                                    <LiveBadge label="live" />
+                                                )}
+                                                
+                                                {/* Legacy static badges if any exist */}
+                                                {badge?.type === 'count' && id !== 'inbox' && (
+                                                    <CountBadge count={badge.count} />
+                                                )}
+                                                {badge?.type === 'status' && id !== 'campaigns' && (
+                                                    <StatusBadge label={badge.status} />
+                                                )}
+                                                {badge?.type === 'live' && id !== 'automations' && (
+                                                    <LiveBadge label={badge.status} />
+                                                )}
+                                            </>
+                                        )}
+                                        {/* collapsed mode: show count dot only */}
+                                        {collapsed && (
+                                            (id === 'inbox' && (stats?.unreadConversations || 0) > 0) || (badge?.type === 'count')
+                                        ) && (
+                                            <span className="sidebar-badge-dot-collapsed" />
+                                        )}
+                                    </Link>
+                                );
+                            })}
+                        </div>
                     );
                 })}
             </nav>
 
-            {/* Bottom */}
-            <div className="border-t border-white/5 px-2 py-3 flex flex-col gap-1">
-                <Link href="/settings" className="nav-item" title={collapsed ? 'Settings' : undefined}>
-                    <Settings size={18} className="shrink-0" />
-                    {!collapsed && <span>Settings</span>}
+            {/* ── Quick Actions ──────────────────────────────────────────── */}
+            {!collapsed && (
+                <div className="sidebar-quick-actions">
+                    <span className="sidebar-section-label">QUICK ADD</span>
+                    <Link href="/campaigns?new=1" className="sidebar-quick-btn">
+                        <Plus size={13} />
+                        <span>New Campaign</span>
+                    </Link>
+                    <button
+                        type="button"
+                        className="sidebar-quick-btn"
+                        onClick={() => setIsAddContactOpen(true)}
+                    >
+                        <UserPlus size={13} />
+                        <span>Add Contact</span>
+                    </button>
+                </div>
+            )}
+
+            {/* ── Bottom zone ────────────────────────────────────────────── */}
+            <div className="sidebar-bottom">
+                <Link
+                    href="/settings"
+                    className={`sidebar-nav-item ${isActive('/settings') ? 'sidebar-nav-item--active' : ''}`}
+                    title={collapsed ? 'Settings' : undefined}
+                >
+                    <Settings size={16} className="sidebar-nav-icon" />
+                    {!collapsed && <span className="sidebar-nav-label">Settings</span>}
                 </Link>
 
-                {isMounted && !collapsed && user && (
-                    <div className="flex items-center gap-2 px-3 py-2 mt-1 rounded-lg glass-card p-2 border-transparent">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                <ThemeToggle collapsed={collapsed} />
+
+                {isMounted && user && (
+                    <div className="sidebar-user">
+                        <div className="sidebar-user-avatar">
                             {user.name?.charAt(0).toUpperCase()}
                         </div>
-                        <div className="flex-1 overflow-hidden">
-                            <p className="text-xs font-medium truncate text-white">{user.name}</p>
-                            <p className="text-xs truncate text-zinc-500">{user.email}</p>
-                        </div>
+                        {!collapsed && (
+                            <>
+                                <div className="sidebar-user-info">
+                                    <p className="sidebar-user-name">{user.name}</p>
+                                    <p className="sidebar-user-email">{user.email}</p>
+                                </div>
+                                <button
+                                    className="sidebar-user-logout"
+                                    onClick={() => logout()}
+                                    aria-label="Sign out"
+                                    title="Sign out"
+                                >
+                                    <LogOut size={13} />
+                                </button>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
 
-            {/* Collapse Toggle */}
+            {/* ── Collapse toggle ────────────────────────────────────────── */}
             <button
                 aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 onClick={() => setCollapsed(c => !c)}
-                className="absolute -right-3 top-16 w-6 h-6 rounded-full flex items-center justify-center border border-white/10 bg-black/80 backdrop-blur-md text-zinc-400 hover:text-white hover:border-emerald-500/50 hover:shadow-[0_0_10px_rgba(16,185,129,0.3)] transition-all z-20"
+                className="sidebar-toggle"
             >
-                {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+                {collapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
             </button>
+
+            {/* Global modals mounted inside sidebar so they're always available */}
+            <AddContactModal
+                open={isAddContactOpen}
+                onOpenChange={setIsAddContactOpen}
+            />
         </aside>
     );
 }

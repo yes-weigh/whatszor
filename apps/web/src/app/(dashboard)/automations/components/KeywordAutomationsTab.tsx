@@ -148,18 +148,18 @@ function AutomationModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="w-full max-w-lg rounded-2xl border border-white/10 shadow-2xl bg-[rgba(10,10,10,0.98)] max-h-[90vh] overflow-y-auto">
+            <div className="w-full max-w-lg rounded-2xl border border-white/10 shadow-2xl bg-surface max-h-[90vh] overflow-y-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-white/8 sticky top-0 z-10 bg-[rgba(10,10,10,0.98)]">
+                <div className="flex items-center justify-between p-6 border-b border-white/8 sticky top-0 z-10 bg-surface">
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
                             <Zap size={18} className="text-emerald-400" />
                         </div>
                         <div>
-                            <h2 className="text-base font-semibold text-white">
+                            <h2 className="text-base font-semibold text-primary">
                                 {isEdit ? 'Edit Keyword Automation' : 'New Keyword Automation'}
                             </h2>
-                            <p className="text-xs text-zinc-500">Auto-reply when message matches keyword</p>
+                            <p className="text-xs text-muted">Auto-reply when message matches keyword</p>
                         </div>
                     </div>
                     <button onClick={onClose} title="Close" aria-label="Close modal" className="text-zinc-500 hover:text-white transition-colors">
@@ -172,7 +172,7 @@ function AutomationModal({
                     {/* Keyword + Match Type */}
                     <div className="relative">
                         <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs font-medium text-zinc-400">Trigger Keyword</label>
+                            <label className="block text-xs font-medium text-secondary">Trigger Keyword</label>
                             <button 
                                 type="button" 
                                 onClick={() => setShowMatchInfo(!showMatchInfo)}
@@ -185,12 +185,12 @@ function AutomationModal({
                         
                         {/* The Info Popover */}
                         {showMatchInfo && (
-                            <div className="absolute top-7 right-0 min-w-[340px] max-w-[420px] z-[60] bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl p-4 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
-                                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                            <div className="absolute top-7 right-0 min-w-[340px] max-w-[420px] z-[60] bg-surface border border-theme rounded-xl shadow-2xl p-4 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="flex items-center justify-between mb-3 border-b border-theme pb-2">
+                                    <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
                                         <Zap size={14} className="text-emerald-400"/> Match Types Explained
                                     </h3>
-                                    <button type="button" aria-label="Close" title="Close" onClick={() => setShowMatchInfo(false)} className="text-zinc-500 hover:text-white">
+                                    <button type="button" aria-label="Close" title="Close" onClick={() => setShowMatchInfo(false)} className="text-muted hover:text-primary">
                                         <X size={14} />
                                     </button>
                                 </div>
@@ -199,37 +199,37 @@ function AutomationModal({
                                         <div className="flex items-center gap-1.5 text-blue-400 text-xs font-bold mb-1">
                                             <MessageSquare size={12} /> Contains (Default)
                                         </div>
-                                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                        <p className="text-[11px] text-muted leading-relaxed">
                                             Triggers if the keyword is found <em>anywhere</em> within the lead&apos;s message. Best for general inquiries.
-                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">price</code> triggers on &quot;What is the price?&quot;</span>
+                                            <br/><span className="text-muted mt-1 block">Ex: keyword <code className="bg-elevated px-1 rounded">price</code> triggers on &quot;What is the price?&quot;</span>
                                         </p>
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold mb-1">
                                             <Check size={12} /> Exact
                                         </div>
-                                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                        <p className="text-[11px] text-muted leading-relaxed">
                                             Triggers ONLY if the lead&apos;s message matches your keyword with 100% precision.
-                                            <br/><span className="text-zinc-500 mt-1 block">Ex: keyword <code className="bg-white/10 px-1 rounded">STOP</code> triggers on &quot;STOP&quot; but not &quot;Please stop&quot;</span>
+                                            <br/><span className="text-muted mt-1 block">Ex: keyword <code className="bg-elevated px-1 rounded">STOP</code> triggers on &quot;STOP&quot; but not &quot;Please stop&quot;</span>
                                         </p>
                                     </div>
                                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
                                         <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold mb-2">
                                             <Regex size={12} /> Regex Reference
                                         </div>
-                                        <p className="text-[11px] text-zinc-400 leading-relaxed mb-2.5">
-                                            Uses standard Regular Expression syntax for complex pattern matching. Do not include wrapping slashes (no <code className="text-zinc-300 tracking-wider bg-white/5 px-1 rounded">/</code>), just enter the raw pattern. All matches are case-insensitive by default.
+                                        <p className="text-[11px] text-muted leading-relaxed mb-2.5">
+                                            Uses standard Regular Expression syntax for complex pattern matching. Do not include wrapping slashes (no <code className="text-secondary tracking-wider bg-elevated px-1 rounded">/</code>), just enter the raw pattern. All matches are case-insensitive by default.
                                         </p>
-                                        <div className="text-[10px] text-zinc-500 space-y-2">
-                                            <div className="bg-black/40 p-2 rounded border border-white/5">
+                                        <div className="text-[10px] text-muted space-y-2">
+                                            <div className="bg-elevated p-2 rounded border border-theme">
                                                 <code className="text-amber-300 font-mono tracking-wider">\b(buy|purchase|order)\b</code>
                                                 <p className="mt-1 leading-relaxed">Matches any of those exact words, but ignores variations like &quot;buying&quot; or &quot;preorder&quot;.</p>
                                             </div>
-                                            <div className="bg-black/40 p-2 rounded border border-white/5">
+                                            <div className="bg-elevated p-2 rounded border border-theme">
                                                 <code className="text-amber-300 font-mono tracking-wider">{"^start.*"}</code>
                                                 <p className="mt-1 leading-relaxed">Matches any message that <em>begins</em> with the word &quot;start&quot;.</p>
                                             </div>
-                                            <div className="bg-black/40 p-2 rounded border border-white/5">
+                                            <div className="bg-elevated p-2 rounded border border-theme">
                                                 <code className="text-amber-300 font-mono tracking-wider">{"\\d{5}"}</code>
                                                 <p className="mt-1 leading-relaxed">Matches if the message contains exactly a 5-digit number (e.g., zip codes).</p>
                                             </div>
@@ -239,9 +239,9 @@ function AutomationModal({
                                         <div className="flex items-center gap-1.5 text-pink-400 text-xs font-bold mb-1">
                                             <Brain size={12} /> AI Intent
                                         </div>
-                                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                        <p className="text-[11px] text-muted leading-relaxed">
                                             AI routes the message based on its <em>meaning</em>. Falls back to Contains if AI fails.
-                                            <br/><span className="text-zinc-500 mt-1 block">Ex: intent <code className="bg-white/10 px-1 rounded">support</code> triggers on &quot;My app is crashing!&quot;</span>
+                                            <br/><span className="text-muted mt-1 block">Ex: intent <code className="bg-elevated px-1 rounded">support</code> triggers on &quot;My app is crashing!&quot;</span>
                                         </p>
                                     </div>
                                 </div>
@@ -255,7 +255,7 @@ function AutomationModal({
                                 placeholder="e.g. price, demo, buy"
                                 value={keyword}
                                 onChange={e => setKeyword(e.target.value)}
-                                className="flex-1 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/60"
+                                className="flex-1 px-3 py-2.5 rounded-lg bg-elevated border border-theme text-sm text-primary placeholder:text-muted outline-none focus:border-accent/60"
                                 required
                             />
                             <select
@@ -264,7 +264,7 @@ function AutomationModal({
                                 aria-label="Match type"
                                 value={matchType}
                                 onChange={e => setMatchType(e.target.value as KeywordAutomation['matchType'])}
-                                className="px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500/60"
+                                className="px-3 py-2.5 rounded-lg bg-elevated border border-theme text-sm text-secondary outline-none focus:border-accent/60"
                             >
                                 {Object.entries(matchTypeInfo).map(([val, info]) => (
                                     <option key={val} value={val}>{info.label}</option>
@@ -272,16 +272,16 @@ function AutomationModal({
                             </select>
                         </div>
                         <div className="flex items-center gap-1.5 mt-1.5">
-                            <span className="text-zinc-600">{matchTypeInfo[matchType]?.icon}</span>
-                            <p className="text-xs text-zinc-500">→ {matchTypeInfo[matchType]?.desc}</p>
+                            <span className="text-muted">{matchTypeInfo[matchType]?.icon}</span>
+                            <p className="text-xs text-muted">→ {matchTypeInfo[matchType]?.desc}</p>
                         </div>
                     </div>
 
                     {/* Priority */}
                     <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-2 flex items-center gap-1.5">
-                            <ArrowUpDown size={11} className="text-zinc-500" />
-                            Priority <span className="text-zinc-600">(higher = runs first)</span>
+                        <label className="block text-xs font-medium text-muted mb-2 flex items-center gap-1.5">
+                            <ArrowUpDown size={11} className="text-muted" />
+                            Priority <span className="text-muted">(higher = runs first)</span>
                         </label>
                         <input
                             id="kw-priority"
@@ -292,15 +292,15 @@ function AutomationModal({
                             max={100}
                             value={priority}
                             onChange={e => setPriority(Number(e.target.value))}
-                            className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white focus:outline-none focus:border-emerald-500/60"
+                            className="w-full px-3 py-2.5 rounded-lg bg-elevated border border-theme text-sm text-primary outline-none focus:border-accent/60"
                         />
-                        <p className="text-xs text-zinc-600 mt-1">When multiple keywords match, highest priority triggers first.</p>
+                        <p className="text-xs text-muted mt-1">When multiple keywords match, highest priority triggers first.</p>
                     </div>
 
                     {/* Reply Mode Toggle */}
                     <div>
-                        <label className="block text-xs font-medium text-zinc-400 mb-2">Reply Mode</label>
-                        <div className="flex rounded-lg overflow-hidden border border-white/10 p-0.5 bg-white/5">
+                        <label className="block text-xs font-medium text-muted mb-2">Reply Mode</label>
+                        <div className="flex rounded-lg overflow-hidden border border-theme p-0.5 bg-elevated">
                             <button
                                 type="button"
                                 onClick={() => setReplyMode('standard')}
@@ -330,22 +330,22 @@ function AutomationModal({
                     {replyMode === 'standard' && (
                         <>
                             <div>
-                                <label className="block text-xs font-medium text-zinc-400 mb-2">Auto Reply Text</label>
+                                <label className="block text-xs font-medium text-muted mb-2">Auto Reply Text</label>
                                 <textarea
                                     id="kw-reply-text"
                                     rows={4}
                                     placeholder={"Hi! Our pricing starts at ₹999/month. Here's what's included:\n• Feature A\n• Feature B\nReply 'DEMO' to see it live! 🚀"}
                                     value={replyText}
                                     onChange={e => setReplyText(e.target.value)}
-                                    className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/60 resize-none"
+                                    className="w-full px-3 py-2.5 rounded-lg bg-elevated border border-theme text-sm text-primary placeholder:text-muted outline-none focus:border-accent/60 resize-none"
                                     required={replyMode === 'standard'}
                                 />
                             </div>
 
                             {/* Media Attachment */}
                             <div>
-                                <label className="block text-xs font-medium text-zinc-400 mb-2">
-                                    Attach Media <span className="text-zinc-600">(optional)</span>
+                                <label className="block text-xs font-medium text-muted mb-2">
+                                    Attach Media <span className="text-muted">(optional)</span>
                                 </label>
                                 {selectedMedia ? (
                                     <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
@@ -353,7 +353,7 @@ function AutomationModal({
                                             <ImageIcon size={14} className="text-emerald-400" />
                                         </div>
                                         <span className="text-sm text-emerald-300 flex-1 truncate">{selectedMedia.name}</span>
-                                        <button type="button" title="Remove media" onClick={() => setSelectedMedia(null)} className="text-zinc-500 hover:text-red-400 transition-colors">
+                                        <button type="button" title="Remove media" onClick={() => setSelectedMedia(null)} className="text-muted hover:text-red-400 transition-colors">
                                             <X size={14} />
                                         </button>
                                     </div>
@@ -362,7 +362,7 @@ function AutomationModal({
                                         type="button"
                                         id="kw-pick-media"
                                         onClick={() => setShowMediaPicker(!showMediaPicker)}
-                                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 border-dashed text-sm text-zinc-500 hover:text-zinc-300 hover:border-white/20 transition-colors"
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-elevated border border-theme border-dashed text-sm text-muted hover:text-secondary hover:border-border-strong transition-colors"
                                     >
                                         <ImageIcon size={14} />
                                         Pick from Media Gallery
@@ -370,18 +370,18 @@ function AutomationModal({
                                     </button>
                                 )}
                                 {showMediaPicker && (
-                                    <div className="mt-2 rounded-lg border border-white/10 bg-black/80 max-h-48 overflow-y-auto">
+                                    <div className="mt-2 rounded-lg border border-theme bg-surface max-h-48 overflow-y-auto">
                                         {mediaList.length === 0 ? (
-                                            <p className="text-xs text-zinc-500 p-4 text-center">No media in gallery</p>
+                                            <p className="text-xs text-muted p-4 text-center">No media in gallery</p>
                                         ) : (
                                             mediaList.map((m: Media) => (
                                                 <button
                                                     key={m.id}
                                                     type="button"
                                                     onClick={() => { setSelectedMedia(m); setShowMediaPicker(false); }}
-                                                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 transition-colors text-left"
+                                                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary hover:bg-hover transition-colors text-left"
                                                 >
-                                                    <ImageIcon size={12} className="text-zinc-500 shrink-0" />
+                                                    <ImageIcon size={12} className="text-muted shrink-0" />
                                                     <span className="truncate">{m.name}</span>
                                                     <span className="text-xs text-zinc-600 ml-auto shrink-0">{m.type}</span>
                                                 </button>
@@ -396,14 +396,14 @@ function AutomationModal({
                     {/* Template Mode Fields */}
                     {replyMode === 'template' && (
                         <div>
-                            <label className="block text-xs font-medium text-zinc-400 mb-2">Select Template</label>
+                            <label className="block text-xs font-medium text-muted mb-2">Select Template</label>
                             {selectedTemplate ? (
                                 <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
                                     <div className="w-8 h-8 rounded-md bg-purple-500/20 flex items-center justify-center">
                                         <Layout size={14} className="text-purple-400" />
                                     </div>
                                     <span className="text-sm text-purple-300 flex-1 truncate">{selectedTemplate.name}</span>
-                                    <button type="button" title="Remove template" onClick={() => setSelectedTemplate(null)} className="text-zinc-500 hover:text-red-400 transition-colors">
+                                    <button type="button" title="Remove template" onClick={() => setSelectedTemplate(null)} className="text-muted hover:text-red-400 transition-colors">
                                         <X size={14} />
                                     </button>
                                 </div>
@@ -412,7 +412,7 @@ function AutomationModal({
                                     type="button"
                                     id="kw-pick-template"
                                     onClick={() => setShowTemplatePicker(!showTemplatePicker)}
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 border-dashed text-sm text-zinc-500 hover:text-zinc-300 hover:border-white/20 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-elevated border border-theme border-dashed text-sm text-muted hover:text-secondary hover:border-border-strong transition-colors"
                                 >
                                     <Layout size={14} />
                                     Pick from Template Studio
@@ -420,18 +420,18 @@ function AutomationModal({
                                 </button>
                             )}
                             {showTemplatePicker && (
-                                <div className="mt-2 rounded-lg border border-white/10 bg-black/80 max-h-48 overflow-y-auto">
+                                <div className="mt-2 rounded-lg border border-theme bg-surface max-h-48 overflow-y-auto">
                                     {templateList.length === 0 ? (
-                                        <p className="text-xs text-zinc-500 p-4 text-center">No templates found. Create one in Template Studio.</p>
+                                        <p className="text-xs text-muted p-4 text-center">No templates found. Create one in Template Studio.</p>
                                     ) : (
                                         templateList.map((t: Template) => (
                                             <button
                                                 key={t.id}
                                                 type="button"
                                                 onClick={() => { setSelectedTemplate(t); setShowTemplatePicker(false); }}
-                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-zinc-300 hover:bg-white/5 transition-colors text-left"
+                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary hover:bg-hover transition-colors text-left"
                                             >
-                                                <Layout size={12} className="text-zinc-500 shrink-0" />
+                                                <Layout size={12} className="text-muted shrink-0" />
                                                 <span className="truncate">{t.name}</span>
                                             </button>
                                         ))
@@ -444,14 +444,14 @@ function AutomationModal({
                     {/* Intent Tag + Cooldown */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-medium text-zinc-400 mb-2">Intent Tag</label>
+                            <label className="block text-xs font-medium text-muted mb-2">Intent Tag</label>
                             <select
                                 id="kw-intent"
                                 title="Intent tag"
                                 aria-label="Intent tag"
                                 value={intent}
                                 onChange={e => setIntent(e.target.value)}
-                                className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-zinc-300 focus:outline-none focus:border-emerald-500/60"
+                                className="w-full px-3 py-2.5 rounded-lg bg-elevated border border-theme text-sm text-secondary outline-none focus:border-accent/60"
                             >
                                 <option value="">None</option>
                                 {intentOptions.map(o => (
@@ -460,7 +460,7 @@ function AutomationModal({
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-zinc-400 mb-2">Cooldown (sec)</label>
+                            <label className="block text-xs font-medium text-muted mb-2">Cooldown (sec)</label>
                             <input
                                 id="kw-cooldown"
                                 title="Cooldown seconds"
@@ -470,21 +470,21 @@ function AutomationModal({
                                 max={3600}
                                 value={cooldownSec}
                                 onChange={e => setCooldownSec(Number(e.target.value))}
-                                className="w-full px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-sm text-white focus:outline-none focus:border-emerald-500/60"
+                                className="w-full px-3 py-2.5 rounded-lg bg-elevated border border-theme text-sm text-primary outline-none focus:border-accent/60"
                             />
                         </div>
                     </div>
 
                     {/* Preview */}
-                    <div className="rounded-xl border border-white/8 p-4 bg-white/[0.02]">
-                        <p className="text-xs text-zinc-500 mb-2 font-medium uppercase tracking-wider">Preview</p>
+                    <div className="rounded-xl border border-theme p-4 bg-elevated">
+                        <p className="text-xs text-muted mb-2 font-medium uppercase tracking-wider">Preview</p>
                         <div className="flex items-start gap-2">
-                            <div className="text-xs text-zinc-600 mt-0.5">When:</div>
+                            <div className="text-xs text-muted mt-0.5">When:</div>
                             <div>
                                 <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
                                     {keyword || 'keyword'}
                                 </span>
-                                <span className="text-xs text-zinc-600 mx-1.5">
+                                <span className="text-xs text-muted mx-1.5">
                                     ({matchType.toLowerCase()} match)
                                 </span>
                                 {priority > 0 && (
@@ -495,8 +495,8 @@ function AutomationModal({
                             </div>
                         </div>
                         <div className="flex items-start gap-2 mt-1.5">
-                            <div className="text-xs text-zinc-600 mt-0.5">Sends:</div>
-                            <div className="text-xs text-zinc-400 flex-1">
+                            <div className="text-xs text-muted mt-0.5">Sends:</div>
+                            <div className="text-xs text-secondary flex-1">
                                 {replyMode === 'template' ? (
                                     <span className="text-purple-400 flex items-center gap-1">
                                         <Layout size={10} />
@@ -522,7 +522,7 @@ function AutomationModal({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 text-sm text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                            className="flex-1 px-4 py-2.5 rounded-lg bg-elevated text-sm text-secondary hover:text-primary hover:bg-hover transition-colors"
                         >
                             Cancel
                         </button>
@@ -609,8 +609,8 @@ export function KeywordAutomationsTab() {
             {/* Header row */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-sm font-semibold text-white">Keyword Automations</h3>
-                    <p className="text-xs text-zinc-500 mt-0.5">
+                    <h3 className="text-sm font-semibold text-primary">Keyword Automations</h3>
+                    <p className="text-xs text-muted mt-0.5">
                         Instant replies triggered by keyword matching — text or rich templates
                     </p>
                 </div>
@@ -650,12 +650,12 @@ export function KeywordAutomationsTab() {
 
             {/* Empty state */}
             {!isLoading && automations.length === 0 && (
-                <div className="rounded-xl border border-white/8 p-10 text-center bg-white/[0.02]">
+                <div className="rounded-xl border border-theme p-10 text-center bg-elevated">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
                         <Zap size={22} className="text-emerald-400" />
                     </div>
-                    <p className="text-sm font-medium text-white mb-1">No keyword automations yet</p>
-                    <p className="text-xs text-zinc-500 mb-4">
+                    <p className="text-sm font-medium text-primary mb-1">No keyword automations yet</p>
+                    <p className="text-xs text-muted mb-4">
                         Create your first one. When a lead texts &quot;price&quot;, they&apos;ll get your reply instantly.
                     </p>
                     <button
@@ -674,7 +674,7 @@ export function KeywordAutomationsTab() {
                         key={auto.id}
                         className={`rounded-xl border p-4 transition-all duration-200 ${auto.isActive
                             ? 'border-emerald-500/25 bg-emerald-500/[0.04]'
-                            : 'border-white/8 bg-white/[0.02]'
+                            : 'border-theme bg-elevated'
                             }`}
                     >
                         <div className="flex items-start gap-4">
@@ -693,7 +693,7 @@ export function KeywordAutomationsTab() {
                             <div className="flex-1 min-w-0">
                                 {/* Keyword + badges */}
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <code className="text-sm font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded-md">
+                                    <code className="text-sm font-mono font-bold text-primary bg-elevated px-2 py-0.5 rounded-md">
                                         {auto.keyword}
                                     </code>
                                     <span className={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${matchTypeStyles[auto.matchType] ?? 'bg-zinc-700 text-zinc-300'}`}>
@@ -723,7 +723,7 @@ export function KeywordAutomationsTab() {
                                 </div>
 
                                 {/* Reply preview */}
-                                <p className="text-xs text-zinc-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                <p className="text-xs text-muted mt-1.5 line-clamp-2 leading-relaxed">
                                     {auto.template ? (
                                         <span className="flex items-center gap-1 text-purple-400">
                                             <Layout size={10} className="shrink-0" />
@@ -731,7 +731,7 @@ export function KeywordAutomationsTab() {
                                         </span>
                                     ) : (
                                         <>
-                                            <MessageSquare size={10} className="inline mr-1 text-zinc-600" />
+                                            <MessageSquare size={10} className="inline mr-1 text-muted" />
                                             {auto.replyText}
                                         </>
                                     )}
@@ -740,12 +740,12 @@ export function KeywordAutomationsTab() {
                                 {/* Meta */}
                                 <div className="flex items-center gap-4 mt-2">
                                     {auto.media && !auto.template && (
-                                        <div className="flex items-center gap-1 text-xs text-zinc-500">
+                                        <div className="flex items-center gap-1 text-xs text-muted">
                                             <ImageIcon size={10} />
                                             {auto.media.name}
                                         </div>
                                     )}
-                                    <div className="flex items-center gap-1 text-xs text-zinc-600">
+                                    <div className="flex items-center gap-1 text-xs text-muted">
                                         <Clock size={10} />
                                         {auto.cooldownSec}s cooldown
                                     </div>
@@ -757,18 +757,18 @@ export function KeywordAutomationsTab() {
                                 <button
                                     title="Edit"
                                     onClick={() => { setEditingRule(auto); setShowModal(true); }}
-                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                    className="p-1.5 rounded-lg hover:bg-hover transition-colors"
                                 >
                                     <Pencil size={15} className="text-zinc-500 hover:text-white transition-colors" />
                                 </button>
                                 <button
                                     title={auto.isActive ? 'Disable' : 'Enable'}
                                     onClick={() => toggleMutation.mutate({ id: auto.id, isActive: !auto.isActive })}
-                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                    className="p-1.5 rounded-lg hover:bg-hover transition-colors"
                                 >
                                     {auto.isActive
                                         ? <ToggleRight size={18} className="text-emerald-400" />
-                                        : <ToggleLeft size={18} className="text-zinc-600" />}
+                                        : <ToggleLeft size={18} className="text-muted" />}
                                 </button>
                                 {confirmDelete === auto.id ? (
                                     <div className="flex items-center gap-1">
@@ -784,18 +784,18 @@ export function KeywordAutomationsTab() {
                                             title="Cancel delete"
                                             aria-label="Cancel delete"
                                             onClick={() => setConfirmDelete(null)}
-                                            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                            className="p-1.5 rounded-lg hover:bg-hover transition-colors"
                                         >
-                                            <X size={14} className="text-zinc-500" />
+                                            <X size={14} className="text-muted" />
                                         </button>
                                     </div>
                                 ) : (
                                     <button
                                         title="Delete"
                                         onClick={() => setConfirmDelete(auto.id)}
-                                        className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                        className="p-1.5 rounded-lg hover:bg-hover transition-colors"
                                     >
-                                        <Trash2 size={15} className="text-zinc-600 hover:text-red-400 transition-colors" />
+                                        <Trash2 size={15} className="text-muted/70 hover:text-red-400 transition-colors" />
                                     </button>
                                 )}
                             </div>

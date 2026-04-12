@@ -161,7 +161,13 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         const where: any = { workspaceId };
         
         if (type) where.type = type;
-        if (category) where.category = category;
+        
+        // Hide internal template previews by default unless explicitly requested
+        if (category) {
+            where.category = category;
+        } else {
+            where.category = { not: 'template_preview' };
+        }
         if (search) {
             where.name = { contains: search, mode: 'insensitive' };
         }

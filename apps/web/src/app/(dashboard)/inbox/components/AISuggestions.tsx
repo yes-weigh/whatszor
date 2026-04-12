@@ -17,6 +17,7 @@ interface SuggestionData {
   suggestions: string[];
 }
 
+// eslint-disable-next-line @next/next/no-duplicate-head -- function prop is intentional; always rendered inside a client tree
 export function AISuggestions({ activeConversation, messages, onSelectSuggestion }: AISuggestionsProps) {
   const [cache, setCache] = useState<Record<string, SuggestionData>>({});
   const [loading, setLoading] = useState(false);
@@ -85,10 +86,11 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
   // If no conversation is selected, show empty state
   if (!activeConversation) {
     return (
-      <div className="w-80 border-l border-theme bg-secondary h-full flex flex-col items-center justify-center p-6 text-center opacity-50">
-        <Sparkles size={32} className="text-muted mb-3 opacity-30" />
-        <p className="text-sm font-medium text-primary">AI Copilot</p>
-        <p className="text-xs text-muted mt-1">Select a chat to generate Smart Replies and Intent Analysis</p>
+      <div className="w-[320px] shrink-0 border-l border-theme bg-surface h-full flex flex-col items-center justify-center p-6 text-center opacity-60 relative overflow-hidden">
+        <div className="absolute inset-0 bg-accent-ai/[0.02] pointer-events-none" />
+        <Sparkles size={32} className="text-muted mb-3 relative z-10" />
+        <p className="text-[14px] font-semibold text-primary relative z-10 tracking-tight">AI Copilot</p>
+        <p className="text-[12px] text-muted mt-2 relative z-10">Select a chat to generate Smart Replies and Intent Analysis</p>
       </div>
     );
   }
@@ -128,67 +130,64 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
   }
 
   return (
-    <div className="w-[340px] border-l border-theme bg-secondary h-full flex flex-col overflow-y-auto">
+    <div className="w-[320px] shrink-0 border-l border-theme bg-surface h-full flex flex-col overflow-y-auto relative ai-suggestions-bg">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-theme/50 sticky top-0 bg-secondary/80 backdrop-blur-md z-10 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-theme sticky top-0 bg-surface z-10 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-            <Sparkles size={12} className="text-emerald-400" />
+          <div className="w-6 h-6 rounded-md bg-[rgba(6,182,212,0.1)] flex items-center justify-center border border-[rgba(6,182,212,0.2)]">
+            <Sparkles size={12} className="text-accent-ai" />
           </div>
-          <span className="text-sm font-semibold text-primary">AI Copilot</span>
+          <span className="text-[14px] font-semibold text-primary tracking-tight">AI Copilot</span>
         </div>
-        {loading && <Loader2 size={14} className="text-accent animate-spin" />}
+        {loading && <Loader2 size={14} className="text-accent-ai animate-spin" />}
       </div>
 
       <div className="p-5 flex flex-col gap-6">
         {/* Intent Analysis Block */}
-        <div className="glass-card p-4">
+        <div className="bg-elevated border border-theme rounded-lg p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
-            <Activity size={14} className="text-emerald-400" />
-            <span className="text-xs font-bold uppercase tracking-wider text-muted">Customer Intent</span>
+            <Activity size={14} className="text-accent-ai" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Customer Intent</span>
           </div>
           
           {loading && !currentData ? (
-             <div className="animate-pulse h-12 bg-[#2a3942] rounded mt-2"></div>
+             <div className="animate-pulse h-12 bg-hover rounded mt-2 border border-theme/50"></div>
           ) : error ? (
              <div className="flex flex-col gap-1 mt-2 px-3 py-2 rounded bg-red-500/10 border border-red-500/20">
-               <span className="text-xs font-bold text-red-400 uppercase tracking-wider">AI Unavailable</span>
+               <span className="text-[11px] font-bold text-red-400 uppercase tracking-wider">AI Unavailable</span>
                <span className="text-xs text-muted">{error}</span>
              </div>
           ) : currentData ? (
              renderIntent(currentData.intent, currentData.confidence)
           ) : (
-             <p className="text-sm text-muted mt-2">Waiting for enough context...</p>
+             <p className="text-[13px] text-muted mt-2 font-medium">Waiting for enough context...</p>
           )}
         </div>
 
         {/* Smart Replies Block */}
         <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2 mt-2">
-             <span className="text-xs font-bold uppercase tracking-wider text-muted">Suggested Replies</span>
+          <div className="flex items-center gap-2 mt-1">
+             <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Suggested Replies</span>
           </div>
           
           {loading && !currentData ? (
-            <div className="flex flex-col gap-3">
-              <div className="animate-pulse h-16 bg-[#2a3942] rounded-lg"></div>
-              <div className="animate-pulse h-16 bg-[#2a3942] rounded-lg"></div>
-              <div className="animate-pulse h-16 bg-[#2a3942] rounded-lg"></div>
+            <div className="flex flex-col gap-2.5">
+              <div className="animate-pulse h-16 bg-elevated rounded-lg"></div>
+              <div className="animate-pulse h-16 bg-elevated rounded-lg"></div>
+              <div className="animate-pulse h-16 bg-elevated rounded-lg"></div>
             </div>
           ) : currentData?.suggestions.map((reply, idx) => (
             <button
               key={idx}
               onClick={() => onSelectSuggestion(reply)}
-              className="glass-card-interactive group text-left px-4 py-3 border border-theme/50 flex flex-col gap-2 relative overflow-hidden"
+              className="interactive-press group text-left px-4 py-3 bg-[rgba(34,197,94,0.04)] hover:bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.12)] rounded-lg flex flex-col gap-2 relative overflow-hidden transition-all duration-[120ms] cursor-pointer shadow-sm"
             >
-              {/* Subtle hover gradient */}
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/0 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-              
-              <p className="text-sm text-primary/90 leading-relaxed relative z-10">
-                &quot;{reply}&quot;
+              <p className="text-[13px] font-medium text-primary leading-snug relative z-10">
+                "{reply}"
               </p>
               
               <div className="flex items-center justify-end w-full mt-1 relative z-10">
-                <span className="flex items-center gap-1 text-[11px] font-bold text-accent opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-wider">
+                <span className="flex items-center gap-1 text-[10px] font-bold text-accent opacity-0 group-hover:opacity-100 transition-opacity duration-150 uppercase tracking-wider">
                   Insert <ArrowRight size={10} />
                 </span>
               </div>

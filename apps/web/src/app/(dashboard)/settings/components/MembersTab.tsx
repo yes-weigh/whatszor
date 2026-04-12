@@ -52,7 +52,7 @@ const rolesConfig = [
     {
         name: 'Viewer',
         icon: Eye,
-        color: 'text-gray-600',
+        color: 'text-muted',
         bgColor: 'bg-gray-100',
         description: 'Read-only observation. Can view metrics and CRM data but cannot modify or send messages.',
         capabilities: [
@@ -255,7 +255,7 @@ export function MembersTab() {
                         <div className="flex items-start justify-between mb-6">
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">Roles & Privileges Matrix</h2>
-                                <p className="text-gray-500 text-sm mt-1">
+                                <p className="text-muted text-sm mt-1">
                                     Understand the capability boundaries assigned to each role within your organization.
                                 </p>
                             </div>

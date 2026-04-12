@@ -23,11 +23,12 @@ import type { SearchPreview } from './places.client';
 const log = createLogger({ module: 'lead-generation-service' });
 
 // ── Rate Limit Constants ──────────────────────────────────────────────────────
-const HOURLY_SEARCH_LIMIT  = 10;
-const DAILY_SEARCH_LIMIT   = 50;
-const HOURLY_PREVIEW_LIMIT = 20;
-const MAX_RESULTS_CAP      = 20;
-const DEFAULT_MAX_RESULTS  = 10;
+const HOURLY_SEARCH_LIMIT      = 10;
+const DAILY_SEARCH_LIMIT       = 50;
+const HOURLY_PREVIEW_LIMIT     = 20;
+const MAX_RESULTS_CAP          = 20;   // default cap for normal searches
+const MAX_RESULTS_CAP_PREMIUM  = 100;  // cap when fetchMaximum is enabled
+const DEFAULT_MAX_RESULTS      = 10;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -127,12 +128,13 @@ export async function previewLeadSearch(
  */
 export async function createLeadList(
     workspaceId: string,
-    input: { query: string; name?: string; maxResults?: number },
+    input: { query: string; name?: string; maxResults?: number; fetchMaximum?: boolean },
 ) {
     await checkSearchRateLimit(workspaceId);
     requirePlacesApiKey(); // fail fast before creating any records
 
-    const maxResults = Math.min(input.maxResults ?? DEFAULT_MAX_RESULTS, MAX_RESULTS_CAP);
+    const cap = input.fetchMaximum ? MAX_RESULTS_CAP_PREMIUM : MAX_RESULTS_CAP;
+    const maxResults = Math.min(input.maxResults ?? (input.fetchMaximum ? MAX_RESULTS_CAP_PREMIUM : DEFAULT_MAX_RESULTS), cap);
 
     const leadList = await prisma.leadList.create({
         data: {

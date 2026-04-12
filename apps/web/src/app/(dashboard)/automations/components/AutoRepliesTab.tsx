@@ -151,8 +151,8 @@ export function AutoRepliesTab() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h2 className="text-lg font-bold text-slate-100 m-0">Auto Replies</h2>
-                    <p className="text-[13px] text-slate-500 mt-1">
+                    <h2 className="text-lg font-bold text-primary m-0">Auto Replies</h2>
+                    <p className="text-[13px] text-muted mt-1">
                         Automatically reply when an incoming message matches a keyword exactly.
                     </p>
                 </div>
@@ -172,16 +172,16 @@ export function AutoRepliesTab() {
 
                     {/* Keyword */}
                     <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                        <label className="text-xs font-semibold text-muted uppercase tracking-wider">
                             Trigger Keyword
                         </label>
                         <input
                             value={keyword}
                             onChange={e => setKeyword(e.target.value)}
                             placeholder='e.g. "price" or "delivery time"'
-                            className="bg-slate-900/60 border border-indigo-500/25 rounded-lg px-3.5 py-2.5 text-slate-200 text-sm outline-none w-full box-border"
+                            className="bg-elevated border border-indigo-500/25 rounded-lg px-3.5 py-2.5 text-primary text-sm outline-none w-full box-border"
                         />
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-muted">
                             Case-insensitive exact match. Spaces are supported (e.g. &quot;delivery time&quot;).
                         </span>
                     </div>
@@ -214,7 +214,7 @@ export function AutoRepliesTab() {
                     {mode === 'standard' && (
                         <>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                <label className="text-xs font-semibold text-muted uppercase tracking-wider">
                                     Reply Message
                                 </label>
                                 <textarea
@@ -222,7 +222,7 @@ export function AutoRepliesTab() {
                                     onChange={e => setContent(e.target.value)}
                                     placeholder="What should be sent when this keyword is received?"
                                     rows={4}
-                                    className="bg-slate-900/60 border border-indigo-500/25 rounded-lg px-3.5 py-2.5 text-slate-200 text-sm outline-none w-full resize-y box-border"
+                                    className="bg-elevated border border-indigo-500/25 rounded-lg px-3.5 py-2.5 text-primary text-sm outline-none w-full resize-y box-border"
                                 />
                             </div>
 
@@ -236,13 +236,13 @@ export function AutoRepliesTab() {
                                         onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                     />
                                     <MediaTypeIcon type={selectedMedia.type} size={16} />
-                                    <span className="text-[13px] text-slate-200 flex-1 overflow-hidden overflow-ellipsis whitespace-nowrap">
+                                    <span className="text-[13px] text-primary flex-1 overflow-hidden overflow-ellipsis whitespace-nowrap">
                                         {selectedMedia.name}
                                     </span>
                                     <button
                                         title="Remove attached media"
                                         onClick={() => setSelectedMedia(null)}
-                                        className="text-slate-500 bg-transparent border-none cursor-pointer p-0.5"
+                                        className="text-muted bg-transparent border-none cursor-pointer p-0.5"
                                     >
                                         <X size={14} />
                                     </button>
@@ -269,7 +269,7 @@ export function AutoRepliesTab() {
                             </label>
 
                             {templates.length === 0 ? (
-                                <p className="text-[13px] text-slate-500 italic">
+                                <p className="text-[13px] text-muted italic">
                                     No templates found. Create one in the Template Studio first.
                                 </p>
                             ) : (
@@ -279,14 +279,14 @@ export function AutoRepliesTab() {
                                         title="Select a template for auto reply"
                                         value={selectedTemplateId ?? ''}
                                         onChange={e => setSelectedTemplateId(e.target.value || null)}
-                                        className="appearance-none w-full bg-slate-900/60 border border-violet-500/25 rounded-lg px-3.5 py-2.5 text-slate-200 text-sm outline-none pr-9 cursor-pointer box-border"
+                                        className="appearance-none w-full bg-elevated border border-violet-500/25 rounded-lg px-3.5 py-2.5 text-primary text-sm outline-none pr-9 cursor-pointer box-border"
                                     >
                                         <option value="" disabled>— Choose a template —</option>
                                         {templates.map(t => (
                                             <option key={t.id} value={t.id}>{t.name}</option>
                                         ))}
                                     </select>
-                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
                                 </div>
                             )}
 
@@ -294,7 +294,7 @@ export function AutoRepliesTab() {
                             {pickedTemplate && pickedVersionPreview && (
                                 <div className="rounded-lg bg-violet-500/8 border border-violet-500/20 p-3.5 flex flex-col gap-2">
                                     <p className="text-[12px] font-semibold text-violet-400 uppercase tracking-wide m-0">Preview</p>
-                                    <p className="text-[13px] text-slate-300 m-0 whitespace-pre-line leading-relaxed">
+                                    <p className="text-[13px] text-primary m-0 whitespace-pre-line leading-relaxed">
                                         {pickedVersionPreview.messageText}
                                     </p>
                                     {pickedVersionPreview.buttons?.length > 0 && (
@@ -309,7 +309,7 @@ export function AutoRepliesTab() {
                                             ))}
                                         </div>
                                     )}
-                                    <p className="text-[11px] text-slate-600 m-0 mt-1">
+                                    <p className="text-[11px] text-muted m-0 mt-1">
                                         Existing text and media will be ignored — only this template will be sent.
                                     </p>
                                 </div>
@@ -333,7 +333,7 @@ export function AutoRepliesTab() {
                         </button>
                         <button
                             onClick={reset}
-                            className="px-4 py-2 rounded-lg border border-white/10 bg-transparent text-slate-400 text-[13px] cursor-pointer"
+                            className="px-4 py-2 rounded-lg border border-theme bg-transparent text-secondary text-[13px] cursor-pointer"
                         >
                             Cancel
                         </button>
@@ -348,8 +348,8 @@ export function AutoRepliesTab() {
                 </div>
             ) : autoReplies.length === 0 && !showForm ? (
                 <div className="text-center py-16 px-6 border border-dashed border-indigo-500/20 rounded-xl flex flex-col items-center gap-3">
-                    <Bot size={32} className="text-slate-600" />
-                    <p className="text-slate-500 text-sm m-0">No auto replies yet</p>
+                    <Bot size={32} className="text-muted" />
+                    <p className="text-muted text-sm m-0">No auto replies yet</p>
                     <button
                         onClick={startCreate}
                         className="mt-1 px-5 py-2 rounded-lg border-none bg-gradient-to-br from-indigo-500 to-violet-500 text-white text-[13px] font-semibold cursor-pointer"
@@ -363,7 +363,7 @@ export function AutoRepliesTab() {
                         <div
                             key={ar.id}
                             className={`flex items-start gap-3.5 p-4 rounded-xl border ${
-                                editingId === ar.id ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-white/5 border-white/10'
+                                editingId === ar.id ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-elevated border-theme'
                             }`}
                         >
                             {/* Keyword badge */}
@@ -380,7 +380,7 @@ export function AutoRepliesTab() {
                                             {ar.template.name}
                                         </span>
                                         {ar.template.versions?.[0]?.buttons?.length > 0 && (
-                                            <span className="text-[11px] text-slate-500">
+                                            <span className="text-[11px] text-muted">
                                                 · {ar.template.versions[0].buttons.length} button{ar.template.versions[0].buttons.length !== 1 ? 's' : ''}
                                             </span>
                                         )}
@@ -388,7 +388,7 @@ export function AutoRepliesTab() {
                                 ) : (
                                     /* Standard mode summary */
                                     <>
-                                        <p className="m-0 mb-1 text-[13px] text-slate-300 leading-snug line-clamp-2">
+                                        <p className="m-0 mb-1 text-[13px] text-primary leading-snug line-clamp-2">
                                             {ar.content}
                                         </p>
                                         {ar.media && (
@@ -399,7 +399,7 @@ export function AutoRepliesTab() {
                                                     className="w-7 h-7 object-cover rounded"
                                                     onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                                 />
-                                                <span className="text-[11px] text-slate-600">+ {ar.media.name}</span>
+                                                <span className="text-[11px] text-muted">+ {ar.media.name}</span>
                                             </div>
                                         )}
                                     </>
@@ -411,7 +411,7 @@ export function AutoRepliesTab() {
                                 <button
                                     title="Edit auto reply"
                                     onClick={() => startEdit(ar)}
-                                    className="bg-transparent border border-white/10 rounded-md p-1.5 text-slate-400 cursor-pointer hover:border-indigo-500/30 hover:text-indigo-400 transition-colors"
+                                    className="bg-transparent border border-theme rounded-md p-1.5 text-secondary cursor-pointer hover:border-indigo-500/30 hover:text-indigo-400 transition-colors"
                                 >
                                     <Edit2 size={13} />
                                 </button>

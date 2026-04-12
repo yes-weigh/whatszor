@@ -224,11 +224,11 @@ function SessionCard({
 
     const normalStatus = session.status === 'QR_PENDING' ? 'NEEDS_SCAN' : session.status;
     const statusConfig = {
-        CONNECTED: { color: 'text-green-600', bg: 'bg-green-50 border-green-200', icon: <Wifi size={14} />, label: 'Connected' },
-        CONNECTING: { color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-200', icon: <Loader2 size={14} className="animate-spin" />, label: 'Connecting…' },
-        NEEDS_SCAN: { color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', icon: <Smartphone size={14} />, label: 'Scan QR to link' },
-        DISCONNECTED: { color: 'text-zinc-500', bg: 'bg-zinc-50 border-zinc-200', icon: <WifiOff size={14} />, label: 'Disconnected' },
-    }[normalStatus] ?? { color: 'text-zinc-500', bg: 'bg-zinc-50 border-zinc-200', icon: <WifiOff size={14} />, label: session.status };
+        CONNECTED: { color: 'text-green-700 dark:text-green-400', bg: 'bg-green-500/10 border-green-500/25', icon: <Wifi size={14} />, label: 'Connected' },
+        CONNECTING: { color: 'text-yellow-700 dark:text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/25', icon: <Loader2 size={14} className="animate-spin" />, label: 'Connecting…' },
+        NEEDS_SCAN: { color: 'text-blue-700 dark:text-blue-400', bg: 'bg-blue-500/10 border-blue-500/25', icon: <Smartphone size={14} />, label: 'Scan QR to link' },
+        DISCONNECTED: { color: 'text-muted', bg: 'bg-elevated border-theme', icon: <WifiOff size={14} />, label: 'Disconnected' },
+    }[normalStatus] ?? { color: 'text-muted', bg: 'bg-elevated border-theme', icon: <WifiOff size={14} />, label: session.status };
 
     return (
         <div className={`relative ${showAssignMenu ? 'z-20' : 'z-0'}`}>
@@ -475,7 +475,7 @@ function SessionCard({
                         <Brain size={15} className={session.isKnowledgeBot ? "text-primary" : "text-muted"} />
                         <span className="text-xs font-semibold tracking-tight select-none mt-[1px]">Knowledge Bot</span>
                         <div className="relative ml-1 flex items-center">
-                            <div className={`w-7 h-4 rounded-full transition-colors ${session.isKnowledgeBot ? 'bg-primary' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
+                            <div className={`w-7 h-4 rounded-full transition-colors ${session.isKnowledgeBot ? 'bg-primary' : 'bg-elevated'}`}></div>
                             <div className={`absolute left-0.5 w-3 h-3 bg-white rounded-full transition-transform shadow-sm ${session.isKnowledgeBot ? 'translate-x-3' : 'translate-x-0'}`}></div>
                         </div>
                     </div>
@@ -650,59 +650,6 @@ export function WhatsAppTab() {
                     </div>
                 )}
 
-                {/* ── Danger Zone ───────────────────────────────── */}
-                {sessions.length > 0 && (
-                    <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/5 p-5 flex flex-col gap-4">
-                        <div className="flex items-center gap-2">
-                            <AlertTriangle size={16} className="text-red-400 shrink-0" />
-                            <div>
-                                <h4 className="font-semibold text-red-400 text-sm">Danger Zone</h4>
-                                <p className="text-xs text-muted mt-0.5">These actions affect <strong>all sessions</strong> and cannot be undone.</p>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            {/* Resync All */}
-                            <div className="flex-1 bg-surface rounded-xl border border-theme p-4 flex flex-col gap-2">
-                                <div className="flex items-center gap-2">
-                                    <RefreshCcw size={15} className="text-blue-400" />
-                                    <span className="text-sm font-semibold text-primary">Resync All Sessions</span>
-                                </div>
-                                <p className="text-xs text-muted">Bounce all connected WhatsApp sockets to pull any missed messages. Chat history is preserved.</p>
-                                <button
-                                    className="btn btn-sm mt-1 self-start border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 bg-transparent"
-                                    onClick={handleResyncAll}
-                                    disabled={isResyncingAll || isFlushing || sessions.filter(s => s.status === 'CONNECTED').length === 0}
-                                >
-                                    {isResyncingAll ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
-                                    {isResyncingAll ? 'Resyncing…' : `Resync ${sessions.filter(s => s.status === 'CONNECTED').length} connected`}
-                                </button>
-                            </div>
-
-                            {/* Flush All */}
-                            <div className="flex-1 bg-surface rounded-xl border border-red-500/30 p-4 flex flex-col gap-2">
-                                <div className="flex items-center gap-2">
-                                    <Trash2 size={15} className="text-red-400" />
-                                    <span className="text-sm font-semibold text-red-400">Flush All Chats</span>
-                                </div>
-                                <p className="text-xs text-muted">Delete <strong>all conversations &amp; messages</strong> for every session, then re-download fresh from WhatsApp.</p>
-                                <button
-                                    className="btn btn-sm mt-1 self-start border border-red-500/40 text-red-400 hover:bg-red-500/10 bg-transparent"
-                                    onClick={handleFlushAll}
-                                    disabled={isFlushing || isResyncingAll || sessions.length === 0}
-                                >
-                                    {isFlushing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                                    {isFlushing ? 'Flushing…' : 'Flush & Resync All'}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Result feedback */}
-                        {bulkResult && (
-                            <p className="text-xs text-secondary bg-surface px-3 py-2 rounded-lg border border-theme">{bulkResult}</p>
-                        )}
-                    </div>
-                )}
             </div>
         </>
     );

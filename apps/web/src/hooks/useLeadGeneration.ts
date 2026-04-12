@@ -31,7 +31,8 @@ export function useLeadGenerationLists() {
     });
 
     const generateMutation = useMutation({
-        mutationFn: (query: string) => leadGenerationApi.generateLeads(query),
+        mutationFn: ({ query, fetchMaximum }: { query: string; fetchMaximum?: boolean }) =>
+            leadGenerationApi.generateLeads(query, fetchMaximum),
         onSuccess: (data) => {
             toast.success(data.message || 'Generation started! Please wait.');
             queryClient.invalidateQueries({ queryKey: ['leadLists'] });

@@ -45,10 +45,14 @@ import {
 import { ColumnDef } from '@tanstack/react-table';
 
 const contactSchema = z.object({
-    firstName: z.string().min(1, 'First name is required'),
-    lastName: z.string().optional(),
-    phone: z.string().min(5, 'Valid phone number is required'),
-    email: z.string().email('Invalid email address').optional().or(z.literal('')),
+    firstName: z.string().trim().min(1, 'First name is required'),
+    lastName:  z.string().trim().optional(),
+    phone:     z
+        .string()
+        .regex(/^\+[1-9]\d{6,14}$/, 'Must be E.164 format, e.g. +919876543210')
+        .optional()
+        .or(z.literal('')),
+    email:     z.string().email('Invalid email address').optional().or(z.literal('')),
 });
 
 type ContactFormValues = z.infer<typeof contactSchema>;
@@ -77,7 +81,13 @@ export default function ContactsPage() {
 
     const onSubmit = async (values: ContactFormValues) => {
         try {
-            await createContact(values);
+            await createContact({
+                ...values,
+                lastName:   values.lastName  || undefined,
+                email:      values.email     || undefined,
+                phone:      values.phone     || undefined,
+                customData: {},
+            } as any);
             setIsAddModalOpen(false);
             form.reset();
         } catch (error) {
@@ -277,7 +287,7 @@ export default function ContactsPage() {
                                                 <FormItem name="phone">
                                                     <FormLabel>Phone Number</FormLabel>
                                                     <FormControl>
-                                                        <Input placeholder="+123456789" {...field} />
+                                                        <Input placeholder="+919876543210" {...field} />
                                                     </FormControl>
                                                     <FormMessage />
                                                 </FormItem>

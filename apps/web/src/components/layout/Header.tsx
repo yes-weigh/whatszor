@@ -12,29 +12,146 @@ export function Header({ title, subtitle }: HeaderProps) {
     const { logout } = useAuthStore();
 
     return (
-        <header className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-black/40 backdrop-blur-md sticky top-0 z-30 transition-all">
+        <header style={{
+            height: '64px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingInline: '1.5rem',
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--bg-surface)',
+            position: 'sticky',
+            top: 0,
+            zIndex: 30,
+        }}>
             <div>
-                <h1 className="font-semibold text-lg text-white">{title}</h1>
-                {subtitle && <p className="text-sm text-zinc-400">{subtitle}</p>}
+                <h1 style={{
+                    fontWeight: 600,
+                    fontSize: '1.0625rem',
+                    color: 'var(--text-primary)',
+                    margin: 0,
+                    lineHeight: 1.3,
+                }}>{title}</h1>
+                {subtitle && (
+                    <p style={{
+                        fontSize: '0.8125rem',
+                        color: 'var(--text-muted)',
+                        margin: 0,
+                        lineHeight: 1.3,
+                    }}>{subtitle}</p>
+                )}
             </div>
 
-            <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-black/60 focus-within:border-emerald-500/50 focus-within:shadow-[0_0_10px_rgba(16,185,129,0.2)] focus-within:bg-black/90 transition-all duration-300">
-                    <Search size={16} className="text-zinc-500" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {/* Search */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.375rem 0.75rem',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-elevated)',
+                    transition: 'border-color 150ms ease, box-shadow 150ms ease',
+                }}>
+                    <Search size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                     <input
-                        className="bg-transparent text-sm outline-none w-48 text-white placeholder:text-zinc-600 transition-all"
+                        style={{
+                            background: 'transparent',
+                            fontSize: '0.8125rem',
+                            outline: 'none',
+                            width: '180px',
+                            color: 'var(--text-primary)',
+                            border: 'none',
+                            fontFamily: 'inherit',
+                        }}
                         placeholder="Search workspace..."
+                        onFocus={e => {
+                            const wrapper = e.currentTarget.parentElement!;
+                            wrapper.style.borderColor = 'var(--border-strong)';
+                            wrapper.style.boxShadow = '0 0 0 1px var(--border-strong)';
+                        }}
+                        onBlur={e => {
+                            const wrapper = e.currentTarget.parentElement!;
+                            wrapper.style.borderColor = 'var(--border)';
+                            wrapper.style.boxShadow = 'none';
+                        }}
                     />
                 </div>
-                <div className="flex items-center gap-2 border-l border-white/10 pl-4">
-                    <button aria-label="Notifications" className="btn btn-ghost p-2 relative hover:bg-black/40 rounded-lg transition-all active:scale-95">
-                        <Bell size={18} className="text-zinc-400 hover:text-white" />
-                        <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)] animate-pulse" />
-                    </button>
-                    <button aria-label="Log out" onClick={logout} className="btn btn-ghost p-2 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 rounded-lg transition-all active:scale-95">
-                        <LogOut size={18} className="text-zinc-400 transition-colors" />
-                    </button>
-                </div>
+
+                {/* Divider */}
+                <div style={{ width: '1px', height: '20px', background: 'var(--border)' }} />
+
+                {/* Notifications */}
+                <button
+                    aria-label="Notifications"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '8px',
+                        border: '1px solid transparent',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        position: 'relative',
+                        color: 'var(--text-secondary)',
+                        transition: 'background 120ms ease, color 120ms ease, border-color 120ms ease',
+                    }}
+                    onMouseEnter={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-hover)';
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+                    }}
+                    onMouseLeave={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent';
+                    }}
+                >
+                    <Bell size={17} />
+                    <span style={{
+                        position: 'absolute',
+                        top: '7px',
+                        right: '7px',
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: 'var(--accent)',
+                        boxShadow: '0 0 6px var(--accent-glow)',
+                        animation: 'badge-pulse 2s ease-in-out infinite',
+                    }} />
+                </button>
+
+                {/* Logout */}
+                <button
+                    aria-label="Log out"
+                    onClick={logout}
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '8px',
+                        border: '1px solid transparent',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: 'var(--text-secondary)',
+                        transition: 'background 120ms ease, color 120ms ease, border-color 120ms ease',
+                    }}
+                    onMouseEnter={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'rgba(220,38,38,0.08)';
+                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)';
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(220,38,38,0.2)';
+                    }}
+                    onMouseLeave={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                        (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent';
+                    }}
+                >
+                    <LogOut size={17} />
+                </button>
             </div>
         </header>
     );

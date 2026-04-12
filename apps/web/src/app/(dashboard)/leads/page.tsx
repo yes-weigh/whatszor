@@ -10,7 +10,8 @@ import {
     MapPin, 
     MoreHorizontal,
     Search,
-    Loader2
+    Loader2,
+    Zap
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -48,6 +49,7 @@ import { formatDistanceToNow } from 'date-fns';
 const searchSchema = z.object({
     keyword: z.string().min(1, 'Keyword is required'),
     location: z.string().min(1, 'Location is required'),
+    fetchMaximum: z.boolean().default(false),
 });
 
 type SearchFormValues = z.infer<typeof searchSchema>;
@@ -67,10 +69,12 @@ export default function LeadGenerationPage() {
     const [previewData, setPreviewData] = React.useState<SearchPreviewResult | null>(null);
 
     const form = useForm<SearchFormValues>({
-        resolver: zodResolver(searchSchema),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        resolver: zodResolver(searchSchema) as any,
         defaultValues: {
             keyword: '',
             location: '',
+            fetchMaximum: false,
         },
     });
 
@@ -102,7 +106,7 @@ export default function LeadGenerationPage() {
         const values = form.getValues();
         const query = `${values.keyword} in ${values.location}`;
         try {
-            const result = await generateLeads(query);
+            const result = await generateLeads({ query, fetchMaximum: values.fetchMaximum });
             setIsAddModalOpen(false);
             if (result.leadListId) {
                 router.push(`/leads/${result.leadListId}`);
@@ -292,6 +296,35 @@ export default function LeadGenerationPage() {
                                                     ))}
                                                 </ul>
                                             )}
+                                        </div>
+
+                                        {/* Fetch Maximum Toggle */}
+                                        <div
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => form.setValue('fetchMaximum', !form.watch('fetchMaximum'))}
+                                            onKeyDown={(e) => e.key === 'Enter' && form.setValue('fetchMaximum', !form.watch('fetchMaximum'))}
+                                            className={`flex items-center justify-between gap-3 p-3 rounded-lg border cursor-pointer select-none transition-colors ${
+                                                form.watch('fetchMaximum')
+                                                    ? 'bg-accent/10 border-accent/40'
+                                                    : 'bg-elevated border-theme hover:border-accent/30'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Zap size={15} className={form.watch('fetchMaximum') ? 'text-accent' : 'text-muted'} />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-primary">Fetch maximum contacts</p>
+                                                    <p className="text-xs text-muted">Fetch up to 100 results (uses more API quota)</p>
+                                                </div>
+                                            </div>
+                                            {/* Pill toggle */}
+                                            <div className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${
+                                                form.watch('fetchMaximum') ? 'bg-accent' : 'bg-muted/30'
+                                            }`}>
+                                                <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                                    form.watch('fetchMaximum') ? 'translate-x-5' : 'translate-x-0'
+                                                }`} />
+                                            </div>
                                         </div>
 
                                         <ModalFooter className="pt-4">

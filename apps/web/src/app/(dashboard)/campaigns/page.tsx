@@ -4,7 +4,7 @@ import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
-import { Megaphone, Play, Clock, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { Megaphone, Play, Clock, CheckCircle2, XCircle, Trash2, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -89,7 +89,6 @@ export default function CampaignsPage() {
                         const sentCount = stats?.sent ?? 0;
                         const failedCount = stats?.failed ?? 0;
                         const progress = stats ? Math.min(100, Math.max(0, Math.round(((sentCount + failedCount) / Math.max(c._count?.members || 1, 1)) * 100))) : 0;
-                        const progressStyle = { width: `${progress}%` };
                         return (
                             <div key={c.id} className="card flex flex-col gap-4">
                                 <div className="flex items-start justify-between">
@@ -110,8 +109,8 @@ export default function CampaignsPage() {
                                         {c.status === 'RUNNING' && (
                                             <div className="w-full bg-border rounded-full h-2 mb-2">
                                                 <div
-                                                    className="bg-primary h-2 rounded-full transition-all duration-500"
-                                                    style={progressStyle}
+                                                    className="campaign-progress bg-primary h-2 rounded-full transition-all duration-500"
+                                                    ref={el => { if (el) el.style.width = `${progress}%`; }}
                                                 ></div>
                                             </div>
                                         )}
@@ -140,11 +139,19 @@ export default function CampaignsPage() {
 
                                 <div className="flex gap-2">
                                     {c.status === 'DRAFT' && hasPermission('campaigns:update') && (
-                                        <button className="btn btn-primary self-start"
-                                            onClick={() => startMutation.mutate(c.id)}
-                                            disabled={startMutation.isPending}>
-                                            <Play size={14} /> Launch
-                                        </button>
+                                        <>
+                                            <button className="btn btn-primary self-start"
+                                                onClick={() => startMutation.mutate(c.id)}
+                                                disabled={startMutation.isPending}>
+                                                <Play size={14} /> Launch
+                                            </button>
+                                            <button
+                                                className="btn btn-ghost self-start"
+                                                onClick={() => router.push(`/campaigns/new?id=${c.id}`)}
+                                            >
+                                                <Pencil size={14} /> Edit
+                                            </button>
+                                        </>
                                     )}
                                     {c.status === 'RUNNING' && hasPermission('campaigns:update') && (
                                         <button className="btn btn-ghost text-yellow-500 self-start hover:bg-yellow-500/10"

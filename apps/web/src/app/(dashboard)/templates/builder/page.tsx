@@ -1,11 +1,61 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Info, Plus, Trash2, Smartphone, HelpCircle } from 'lucide-react';
+import {
+    ChevronLeft, Info, Plus, Trash2, Smartphone, HelpCircle,
+    Video, FileText, ImageIcon, ArrowUpRight, Phone, Zap, Save
+} from 'lucide-react';
 import Link from 'next/link';
+
+// ── Input primitives with the design system ───────────────────
+
+function Label({ children, optional }: { children: React.ReactNode; optional?: boolean }) {
+    return (
+        <label className="flex items-center gap-2 text-[12px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
+            {children}
+            {optional && <span className="font-normal normal-case tracking-normal text-[11px] text-muted">(optional)</span>}
+        </label>
+    );
+}
+
+function FormInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+    return (
+        <input
+            {...props}
+            className={`w-full px-3 py-2 rounded-md text-[13px] text-white bg-[#111111] border border-[rgba(255,255,255,0.06)] outline-none focus:border-[rgba(34,197,94,0.4)] focus:ring-1 focus:ring-[rgba(34,197,94,0.15)] placeholder:text-white/20 transition-all duration-[120ms] disabled:opacity-40 disabled:cursor-not-allowed ${props.className ?? ''}`}
+        />
+    );
+}
+
+function FormSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+    return (
+        <select
+            {...props}
+            className={`w-full px-3 py-2 rounded-md text-[13px] text-white bg-[#111111] border border-[rgba(255,255,255,0.06)] outline-none focus:border-[rgba(34,197,94,0.4)] transition-all duration-[120ms] ${props.className ?? ''}`}
+        />
+    );
+}
+
+function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+    return (
+        <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+                <h2 className="text-[13px] font-bold text-white/90 tracking-tight">{title}</h2>
+                {action}
+            </div>
+            {children}
+        </div>
+    );
+}
+
+function Divider() {
+    return <div className="h-px bg-[rgba(255,255,255,0.05)]" />;
+}
+
+// ── Builder ───────────────────────────────────────────────────
 
 function TemplateBuilder() {
     const router = useRouter();
@@ -25,6 +75,156 @@ function TemplateBuilder() {
     const [previewVars, setPreviewVars] = useState<Record<string, string>>({});
     const [testSessionId, setTestSessionId] = useState('');
     const [testPhoneNumber, setTestPhoneNumber] = useState('');
+    const previewRef = useRef<HTMLDivElement>(null);
+
+    /**
+     * For each <video> in the container:
+     *  1. Fetches the video file as a Blob so we can create a same-origin blob:// URL.
+     *     This sidesteps the browser's canvas-taint restriction that blocks ctx.drawImage()
+     *     on cross-origin video elements (localhost:3001 served via the API).
+     *  2. Loads a hidden off-screen video, seeks to 0.5 s, draws the frame.
+     *  3. Falls back to a dark placeholder + play-icon if fetch/seek times out.
+     *  4. Replaces the live <video> with the stub canvas in the DOM.
+     *  Returns a cleanup fn that restores the original DOM.
+     */
+    const substituteVideos = async (container: HTMLElement): Promise<() => void> => {
+        const restores: Array<() => void> = [];
+        const videos = Array.from(container.querySelectorAll<HTMLVideoElement>('video'));
+
+        for (const video of videos) {
+            const w = video.offsetWidth || 280;
+            const h = video.offsetHeight || 128;
+
+            // ── Try to grab a real video frame ───────────────────────────────
+            let frameDataUrl: string | null = null;
+            try {
+                // Token is already embedded in video.src as ?token=…
+                const resp = await fetch(video.src);
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    const blobUrl = URL.createObjectURL(blob); // same-origin → no canvas taint
+                    frameDataUrl = await new Promise<string | null>((resolve) => {
+                        const tmp = document.createElement('video');
+                        tmp.muted = true;
+                        tmp.playsInline = true;
+                        tmp.preload = 'auto';
+                        tmp.src = blobUrl;
+                        let done = false;
+                        const finish = (result: string | null) => {
+                            if (done) return;
+                            done = true;
+                            URL.revokeObjectURL(blobUrl);
+                            resolve(result);
+                        };
+                        tmp.onseeked = () => {
+                            try {
+                                const fc = document.createElement('canvas');
+                                fc.width = w * 2;
+                                fc.height = h * 2;
+                                const ctx = fc.getContext('2d');
+                                if (ctx) {
+                                    ctx.scale(2, 2);
+                                    ctx.drawImage(tmp, 0, 0, w, h);
+                                }
+                                finish(fc.toDataURL('image/jpeg', 0.85));
+                            } catch { finish(null); }
+                        };
+                        tmp.onerror = () => finish(null);
+                        // Timeout: if video takes > 6 s to seek, use placeholder
+                        setTimeout(() => finish(null), 6000);
+                        tmp.load();
+                        tmp.addEventListener('loadedmetadata', () => { tmp.currentTime = 0.5; });
+                    });
+                }
+            } catch { /* fall through to placeholder */ }
+
+            // ── Build the stub canvas ─────────────────────────────────────────
+            const stub = document.createElement('canvas');
+            stub.width = w * 2;
+            stub.height = h * 2;
+            stub.style.cssText = `display:block;width:${w}px;height:${h}px;`;
+
+            const ctx = stub.getContext('2d');
+            if (ctx) {
+                ctx.scale(2, 2);
+                if (frameDataUrl) {
+                    // Draw the real video frame
+                    const img = new Image();
+                    await new Promise<void>(res => { img.onload = () => res(); img.onerror = () => res(); img.src = frameDataUrl!; });
+                    ctx.drawImage(img, 0, 0, w, h);
+                    // Slight darkening overlay so the play icon pops
+                    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                    ctx.fillRect(0, 0, w, h);
+                } else {
+                    // Fallback: WA dark background
+                    ctx.fillStyle = '#000d15';
+                    ctx.fillRect(0, 0, w, h);
+                }
+                // Play-button circle
+                ctx.fillStyle = 'rgba(0,0,0,0.55)';
+                ctx.beginPath();
+                ctx.arc(w / 2, h / 2, 18, 0, Math.PI * 2);
+                ctx.fill();
+                // Play triangle
+                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                ctx.beginPath();
+                ctx.moveTo(w / 2 - 6, h / 2 - 9);
+                ctx.lineTo(w / 2 + 11, h / 2);
+                ctx.lineTo(w / 2 - 6, h / 2 + 9);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            video.insertAdjacentElement('beforebegin', stub);
+            const prevDisplay = video.style.display;
+            video.style.display = 'none';
+            restores.push(() => { stub.remove(); video.style.display = prevDisplay; });
+        }
+
+        return () => restores.forEach(r => r());
+    };
+
+    /**
+     * Captures the Live Preview WA bubble as a PNG blob.
+     * Must be called while the component is still mounted (previewRef is valid).
+     * Returns null on any failure — never throws.
+     */
+    const capturePreviewBlob = async (): Promise<Blob | null> => {
+        if (!previewRef.current) return null;
+        // substituteVideos is now async — must await before html2canvas runs
+        const restore = await substituteVideos(previewRef.current);
+        try {
+            const html2canvas = (await import('html2canvas')).default;
+            const canvas = await html2canvas(previewRef.current, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#0B1418',
+                logging: false,
+            });
+            return await new Promise<Blob>((res, rej) =>
+                canvas.toBlob(b => b ? res(b) : rej(new Error('toBlob returned null')), 'image/png', 0.92)
+            );
+        } catch (e) {
+            console.warn('[preview-capture] canvas capture failed:', e);
+            return null;
+        } finally {
+            restore(); // always restore the original <video> elements
+        }
+    };
+
+
+    /** Uploads a pre-captured blob to the API. Fire-and-forget safe. */
+    const uploadPreviewBlob = async (templateId: string, blob: Blob) => {
+        const fd = new FormData();
+        fd.append('file', blob, `preview-${templateId}.png`);
+        const token = localStorage.getItem('accessToken') ?? '';
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        await fetch(`${apiBase}/templates/${templateId}/preview-image`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: fd,
+        });
+    };
 
     const { data: whatsappSessions = [] } = useQuery({
         queryKey: ['whatsapp-sessions'],
@@ -39,7 +239,7 @@ function TemplateBuilder() {
     const { data: existingTemplate } = useQuery({
         queryKey: ['templates', existingId],
         queryFn: () => api.get(`/templates/${existingId}`).then(r => r.data),
-        enabled: !!existingId
+        enabled: !!existingId,
     });
 
     useEffect(() => {
@@ -59,47 +259,49 @@ function TemplateBuilder() {
 
     const saveMutation = useMutation({
         mutationFn: async () => {
+            // ── Capture BEFORE the API call so the DOM is still mounted ──────────
+            const previewBlob = await capturePreviewBlob();
+
             const payload = { ...form, buttons };
-            if (existingId) {
-                // Creates a new Version under the existing template
-                return api.put(`/templates/${existingId}/versions`, payload);
-            } else {
-                // Creates Root + Version 1
-                return api.post('/templates', payload);
-            }
+            const apiRes = existingId
+                ? await api.put(`/templates/${existingId}/versions`, payload)
+                : await api.post('/templates', payload);
+
+            return { apiRes, previewBlob };
         },
-        onSuccess: () => {
+        onSuccess: ({ apiRes, previewBlob }) => {
+            const templateId = existingId ?? apiRes.data?.data?.id ?? apiRes.data?.id;
+            if (templateId && previewBlob) {
+                // Fire-and-forget — blob is already in memory, navigation won't affect it
+                uploadPreviewBlob(templateId, previewBlob).catch(e =>
+                    console.warn('[preview-capture] upload failed:', e)
+                );
+            }
             qc.invalidateQueries({ queryKey: ['templates'] });
             router.push('/templates');
         },
         onError: (err: any) => {
             alert(err.response?.data?.message || 'Error saving template');
-        }
+        },
     });
 
     const testMutation = useMutation({
         mutationFn: async () => {
-            if (!existingId) throw new Error("Please save the template first before testing");
+            if (!existingId) throw new Error('Save the template first before testing');
             return api.post(`/templates/${existingId}/test`, {
                 sessionId: testSessionId,
                 phoneNumber: testPhoneNumber,
-                variables: previewVars
+                variables: previewVars,
             });
         },
-        onSuccess: () => {
-            alert('Test message enqueued successfully!');
-        },
-        onError: (err: any) => {
-            alert(err.response?.data?.message || 'Error sending test message');
-        }
+        onSuccess: () => alert('Test message enqueued successfully!'),
+        onError: (err: any) => alert(err.response?.data?.message || 'Error sending test message'),
     });
 
-    // Detect variables automatically for preview inputs
     useEffect(() => {
         const matches = [...form.messageText.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1]);
         const newVars: Record<string, string> = { ...previewVars };
         matches.forEach(m => { if (!(m in newVars)) newVars[m] = `{${m}}`; });
-        // Clean removed variables
         Object.keys(newVars).forEach(k => { if (!matches.includes(k)) delete newVars[k]; });
         setPreviewVars(newVars);
     }, [form.messageText]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -113,349 +315,366 @@ function TemplateBuilder() {
     };
 
     const selectedMedia = mediaList.find((m: any) => m.id === form.headerMediaId);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
+    const mediaUrl = selectedMedia ? `${apiBase}/media-gallery/${selectedMedia.id}/file?token=${token}` : null;
+
+    const canSave = !saveMutation.isPending && !!form.name && !!form.messageText;
 
     return (
-        <div className="flex flex-col h-full bg-surface">
-            <div className="flex items-center gap-4 p-4 border-b border-theme bg-elevated sticky top-0 z-10">
-                <Link href="/templates" className="btn text-muted hover:text-primary p-2"><ChevronLeft size={20} /></Link>
-                <div>
-                    <h1 className="text-xl font-bold text-primary">{existingId ? 'Edit Template' : 'Create Template'}</h1>
-                    <p className="text-sm text-muted">{existingId ? 'Saves will generate a new immutable version' : 'Design a reusable outbound message'}</p>
+        <div className="flex flex-col h-full bg-base">
+
+            {/* ── Top Bar ── */}
+            <div className="shrink-0 flex items-center gap-4 px-6 h-14 border-b border-[rgba(255,255,255,0.06)] z-20 bg-surface">
+                <Link href="/templates" className="interactive-press p-1.5 rounded-md text-muted hover:text-white hover:bg-hover transition-colors">
+                    <ChevronLeft size={18} />
+                </Link>
+                <div className="flex-1 min-w-0">
+                    <h1 className="text-[14px] font-bold text-white tracking-tight truncate">
+                        {existingId ? 'Edit Template' : 'Create Template'}
+                    </h1>
+                    <p className="text-[11px] text-muted leading-none mt-0.5">
+                        {existingId ? 'Saving creates a new immutable version' : 'Design a reusable outbound message'}
+                    </p>
                 </div>
-                <div className="ml-auto flex gap-3">
-                    <button className="btn btn-secondary" onClick={() => router.push('/templates')}>Cancel</button>
-                    <button 
-                        className="btn btn-primary" 
-                        onClick={() => saveMutation.mutate()} 
-                        disabled={saveMutation.isPending || !form.name || !form.messageText}
+                <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        onClick={() => router.push('/templates')}
+                        className="interactive-press px-3 py-1.5 rounded-md text-[13px] font-medium text-muted hover:text-white hover:bg-hover border border-[rgba(255,255,255,0.06)] transition-colors"
                     >
-                        {saveMutation.isPending ? 'Saving...' : 'Save Template'}
+                        Cancel
+                    </button>
+                    <button
+                        onClick={() => saveMutation.mutate()}
+                        disabled={!canSave}
+                        className="interactive-press flex items-center gap-2 px-4 py-1.5 rounded-md text-[13px] font-semibold bg-accent hover:bg-accent-hover text-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                    >
+                        <Save size={13} />
+                        {saveMutation.isPending ? 'Saving…' : 'Save Template'}
                     </button>
                 </div>
             </div>
 
+            {/* ── Two-panel layout ── */}
             <div className="flex-1 flex overflow-hidden">
-                {/* Editor Panel */}
-                <div className="flex-1 border-r border-theme overflow-y-auto p-6 space-y-8">
-                    
-                    {/* Basic Info */}
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold text-primary">Basic Settings</h2>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="form-group col-span-2">
-                                <label className="form-label text-sm text-secondary font-medium block mb-1">Template Name</label>
-                                <input 
-                                    className="input w-full p-2 border border-theme rounded-md bg-surface" 
-                                    placeholder="e.g. welcome_offer_01" 
-                                    value={form.name} 
-                                    onChange={e => setForm({...form, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_')})}
-                                    disabled={!!existingId} // Cannot change name of existing template
+
+                {/* LEFT: Form — scrollable */}
+                <div className="flex-1 overflow-y-auto border-r border-[rgba(255,255,255,0.05)]">
+                    <div className="max-w-2xl mx-auto px-8 py-8 flex flex-col gap-8">
+
+                        {/* Basic Settings */}
+                        <Section title="Basic Settings">
+                            <div>
+                                <Label>Template Name</Label>
+                                <FormInput
+                                    placeholder="e.g. welcome_offer_01"
+                                    value={form.name}
+                                    onChange={e => setForm({ ...form, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                                    disabled={!!existingId}
                                 />
-                                {existingId && <p className="text-[10px] text-muted mt-1">Name is immutable for existing templates.</p>}
+                                {existingId
+                                    ? <p className="text-[11px] text-muted mt-1.5">Name is immutable for existing templates.</p>
+                                    : <p className="text-[11px] text-muted mt-1.5">Lowercase, letters/numbers/underscores only.</p>
+                                }
                             </div>
-                        </div>
-                    </div>
+                        </Section>
 
-                    <hr className="border-theme" />
+                        <Divider />
 
-                    {/* Media Header */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-primary">Header Media</h2>
-                            <span className="text-xs text-muted">(Optional)</span>
-                        </div>
-                        <select 
-                            title="Select Header Media"
-                            className="input w-full p-2 border border-theme rounded-md bg-surface" 
-                            value={form.headerMediaId} 
-                            onChange={e => setForm({...form, headerMediaId: e.target.value})}
-                        >
-                            <option value="">No Media Attached</option>
-                            {mediaList.map((m: any) => (
-                                <option key={m.id} value={m.id}>{m.name} ({m.type.toUpperCase()})</option>
-                            ))}
-                        </select>
-                        {!mediaList.length && (
-                            <p className="text-xs text-yellow-500 mt-1 flex items-center gap-1"><Info size={12}/> No media available. Upload to the Media Gallery first.</p>
-                        )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-primary">Message Body</h2>
-                        </div>
-                        <div className="form-group border border-theme rounded-lg focus-within:border-accent transition-colors bg-surface overflow-hidden">
-                            <textarea 
-                                className="w-full p-3 bg-transparent resize-none min-h-[150px] outline-none" 
-                                placeholder="Hello {{contact.name}}, check out our new..."
-                                value={form.messageText}
-                                onChange={e => setForm({...form, messageText: e.target.value})}
-                            />
-                        </div>
-                        <div className="bg-elevated p-3 rounded-lg border border-theme text-xs text-muted flex items-start gap-2">
-                            <HelpCircle size={14} className="shrink-0 mt-0.5" />
+                        {/* Header Media */}
+                        <Section title="Header Media" action={<span className="text-[11px] text-muted">Optional</span>}>
                             <div>
-                                <p className="font-semibold text-secondary">Variables Guide</p>
-                                <p>Use syntax <code className="bg-theme px-1 rounded text-primary">{"{{"}namespace.field{"}}"}</code>. Allowed namespaces: <strong>contact, conversation, workspace, event</strong>.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold text-primary">Footer <span className="text-xs font-normal text-muted">(Optional)</span></h2>
-                        <input 
-                            className="input w-full p-2 border border-theme rounded-md bg-surface" 
-                            placeholder="e.g. Reply STOP to opt out" 
-                            value={form.footerText} 
-                            onChange={e => setForm({...form, footerText: e.target.value})}
-                            maxLength={60}
-                        />
-                    </div>
-
-                    <hr className="border-theme" />
-
-                    {/* Buttons */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-primary">Interactive Buttons</h2>
-                            <button 
-                                className="btn btn-secondary text-xs flex items-center gap-1 p-1 px-2"
-                                onClick={() => {
-                                    if(buttons.length >= 3) return alert('Max 3 buttons allowed');
-                                    setButtons([...buttons, { type: 'quick_reply', label: 'New Button', payload: '' }]);
-                                }}
-                            >
-                                <Plus size={12} /> Add Button
-                            </button>
-                        </div>
-
-                        {buttons.length === 0 ? (
-                            <p className="text-sm text-muted italic">No buttons added.</p>
-                        ) : (
-                            <div className="flex flex-col gap-3">
-                                {buttons.map((btn, idx) => (
-                                    <div key={idx} className="flex flex-col gap-2 bg-elevated p-2 rounded-lg border border-theme">
-                                        <div className="flex gap-2 items-center">
-                                            <select 
-                                                title="Select Button Type"
-                                                className="p-2 border border-theme rounded bg-surface w-32 shrink-0"
-                                                value={btn.type}
-                                                onChange={e => {
-                                                    const newB = [...buttons];
-                                                    newB[idx].type = e.target.value;
-                                                    setButtons(newB);
-                                                }}
-                                            >
-                                                <option value="quick_reply">Quick Reply</option>
-                                                <option value="url">URL Link</option>
-                                                <option value="call">Phone Call</option>
-                                            </select>
-                                            <input 
-                                                className="p-2 border border-theme rounded bg-surface flex-1"
-                                                placeholder="Label"
-                                                value={btn.label}
-                                                onChange={e => {
-                                                    const newB = [...buttons];
-                                                    newB[idx].label = e.target.value;
-                                                    setButtons(newB);
-                                                }}
-                                                maxLength={25}
-                                            />
-                                            <button 
-                                                title="Remove Button"
-                                                className="p-2 text-red-500 hover:bg-red-500/10 rounded-md transition-colors shrink-0"
-                                                onClick={() => setButtons(buttons.filter((_, i) => i !== idx))}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                        {(btn.type === 'url' || btn.type === 'call') && (
-                                            <div className="flex gap-2 items-center pl-1 mt-1">
-                                                <div className="w-32 shrink-0 text-xs text-muted font-medium pr-2 text-right">
-                                                    {btn.type === 'url' ? 'Link URL:' : 'Phone Number:'}
-                                                </div>
-                                                <input
-                                                    className="p-2 border border-theme rounded bg-surface border-dotted flex-1 text-sm bg-transparent"
-                                                    placeholder={btn.type === 'url' ? 'https://example.com' : '+1234567890'}
-                                                    value={btn.payload || ''}
-                                                    onChange={e => {
-                                                        const newB = [...buttons];
-                                                        newB[idx].payload = e.target.value;
-                                                        setButtons(newB);
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Live Preview Panel */}
-                <div className="w-[400px] bg-theme/50 p-6 flex flex-col hidden lg:flex">
-                    <h2 className="text-lg font-semibold text-primary mb-4 flex items-center gap-2"><Smartphone size={18}/> Realistic Preview</h2>
-                    
-                    {/* Send Test Panel */}
-                    <div className="mb-6 bg-surface p-4 rounded-xl border border-theme shadow-sm">
-                        <h3 className="text-xs font-bold text-muted uppercase mb-3 tracking-wider">Send Test Message</h3>
-                        
-                        <div className="flex flex-col gap-3">
-                            <div>
-                                <label className="text-xs text-secondary mb-1 block">WhatsApp Session</label>
-                                <select 
-                                    title="Select a WhatsApp session for testing"
-                                    className="w-full p-2 text-sm bg-elevated border border-theme rounded outline-none focus:border-accent"
-                                    value={testSessionId}
-                                    onChange={e => setTestSessionId(e.target.value)}
+                                <Label>Attached Media</Label>
+                                <FormSelect
+                                    title="Select Header Media"
+                                    value={form.headerMediaId}
+                                    onChange={e => setForm({ ...form, headerMediaId: e.target.value })}
                                 >
-                                    <option value="">Select a connected session</option>
-                                    {whatsappSessions.filter((s: any) => s.status === 'CONNECTED').map((s: any) => (
-                                        <option key={s.sessionId} value={s.sessionId}>{s.name} ({s.phoneNumber || s.sessionId})</option>
+                                    <option value="">No Media Attached</option>
+                                    {mediaList.map((m: any) => (
+                                        <option key={m.id} value={m.id}>{m.name} ({m.type.toUpperCase()})</option>
                                     ))}
-                                </select>
+                                </FormSelect>
+                                {!mediaList.length && (
+                                    <p className="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1">
+                                        <Info size={11} /> No media available — upload to the Media Gallery first.
+                                    </p>
+                                )}
                             </div>
+                        </Section>
+
+                        <Divider />
+
+                        {/* Message Body */}
+                        <Section title="Message Body">
                             <div>
-                                <label className="text-xs text-secondary mb-1 block">Recipient Phone Number</label>
-                                <input 
-                                    className="w-full p-2 text-sm bg-elevated border border-theme rounded outline-none focus:border-accent"
-                                    placeholder="e.g. +1234567890"
-                                    value={testPhoneNumber}
-                                    onChange={e => setTestPhoneNumber(e.target.value)}
-                                />
-                            </div>
-                            <button 
-                                className="btn btn-primary w-full py-2 text-sm mt-1"
-                                disabled={!existingId || !testSessionId || !testPhoneNumber || testMutation.isPending}
-                                onClick={() => testMutation.mutate()}
-                            >
-                                {testMutation.isPending ? 'Sending Test...' : 'Send Template Test'}
-                            </button>
-                            {!existingId && (
-                                <p className="text-[10px] text-yellow-600 leading-tight">You must save the template first before sending a test.</p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Variable Mock Editor */}
-                    {Object.keys(previewVars).length > 0 && (
-                        <div className="mb-6 bg-surface p-4 rounded-xl border border-theme shadow-sm">
-                            <h3 className="text-xs font-bold text-muted uppercase mb-3 tracking-wider">Simulate Variables</h3>
-                            <div className="flex flex-col gap-2">
-                                {Object.entries(previewVars).map(([key, value]) => (
-                                    <div key={key} className="flex flex-col">
-                                        <label className="text-xs text-secondary mb-1 truncate font-mono">{key}</label>
-                                        <input 
-                                            title={`Simulate value for ${key}`}
-                                            className="p-1.5 text-sm bg-elevated border border-theme rounded outline-none focus:border-accent"
-                                            value={value}
-                                            onChange={e => setPreviewVars({...previewVars, [key]: e.target.value})}
-                                        />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Mock Device */}
-                    <div className="flex-1 flex justify-center mt-4">
-                        <div className="w-[320px] bg-[#EFEAE2] rounded-3xl border-8 border-gray-800 shadow-xl overflow-hidden flex flex-col relative h-[520px]">
-                            {/* App Bar */}
-                            <div className="h-14 bg-[#00A884] text-white flex items-center px-4 shrink-0 shadow z-10">
-                                <span className="font-semibold">{form.name || 'Your Brand'}</span>
-                            </div>
-                            
-                            {/* Chat Thread */}
-                            <div className="flex-1 p-4 overflow-y-auto">
-                                <div className="bg-white rounded-lg rounded-tl-none p-1 shadow-sm max-w-[90%] relative break-words">
-                                    
-                                    {/* Media Attachment Preview */}
-                                    {selectedMedia && (() => {
-                                        const mediaUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'}/media-gallery/${selectedMedia.id}/file?token=${typeof window !== 'undefined' ? localStorage.getItem('accessToken') : ''}`;
-                                        if (selectedMedia.type === 'video') {
-                                            return (
-                                                <div className="w-full h-36 bg-black rounded mb-1 overflow-hidden relative">
-                                                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                                                    <video
-                                                        src={mediaUrl}
-                                                        preload="metadata"
-                                                        className="w-full h-full object-cover"
-                                                        onError={e => {
-                                                            (e.target as HTMLVideoElement).style.display = 'none';
-                                                            const fb = (e.target as HTMLVideoElement).parentElement?.querySelector('.video-fallback') as HTMLElement | null;
-                                                            if (fb) fb.style.display = 'flex';
-                                                        }}
-                                                    />
-                                                    <div className="video-fallback absolute inset-0 items-center justify-center bg-gray-800 hidden">
-                                                        <div className="text-center">
-                                                            <div className="text-3xl mb-1">🎬</div>
-                                                            <span className="text-xs text-gray-300 font-medium">{selectedMedia.name || 'Video'}</span>
-                                                        </div>
-                                                    </div>
-                                                    {/* Play overlay */}
-                                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                        <div className="w-10 h-10 bg-black/50 rounded-full flex items-center justify-center">
-                                                            <span className="text-white text-lg leading-none ml-0.5">▶</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        } else if (selectedMedia.type === 'document') {
-                                            return (
-                                                <div className="w-full rounded mb-1 bg-gray-50 border border-gray-200 flex items-center gap-3 p-3">
-                                                    <div className="w-10 h-12 bg-red-100 rounded flex items-center justify-center shrink-0 text-xl">
-                                                        📄
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-semibold text-gray-700 truncate">{selectedMedia.name || 'Document'}</p>
-                                                        <p className="text-[10px] text-gray-400 mt-0.5 uppercase">{selectedMedia.mimeType || 'PDF'}</p>
-                                                    </div>
-                                                </div>
-                                            );
-                                        } else {
-                                            return (
-                                                <div className="w-full h-36 bg-gray-100 rounded mb-1 overflow-hidden">
-                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                    <img
-                                                        src={mediaUrl}
-                                                        alt=""
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                </div>
-                                            );
-                                        }
-                                    })()}
-
-                                    {/* Text Body */}
-                                    <div className="px-2 py-1 text-sm text-gray-800 whitespace-pre-wrap">
-                                        {renderPreviewText() || <span className="text-gray-400 italic">Message goes here...</span>}
-                                    </div>
-                                    
-                                    {/* Footer */}
-                                    {form.footerText && (
-                                        <div className="px-2 pb-1 text-xs text-gray-400 mt-1">
-                                            {form.footerText}
-                                        </div>
-                                    )}
+                                <Label>Body Text</Label>
+                                <div className="rounded-md border border-[rgba(255,255,255,0.06)] focus-within:border-[rgba(34,197,94,0.4)] focus-within:ring-1 focus-within:ring-[rgba(34,197,94,0.15)] transition-all duration-[120ms] overflow-hidden bg-[#111111]">
+                                    <textarea
+                                        className="w-full px-3 py-2.5 bg-transparent resize-none min-h-[140px] outline-none text-[13px] text-white placeholder:text-white/20 leading-relaxed"
+                                        placeholder={"Hello {{contact.name}}, check out our new..."}
+                                        value={form.messageText}
+                                        onChange={e => setForm({ ...form, messageText: e.target.value })}
+                                    />
                                 </div>
+                            </div>
 
-                                {/* Buttons Preview */}
-                                {buttons.length > 0 && (
-                                    <div className="flex flex-col gap-1 mt-1 max-w-[90%]">
-                                        {buttons.map((b, i) => (
-                                            <div key={i} className="bg-white rounded-lg shadow-sm py-2 px-4 text-center text-[#00A884] text-sm font-medium border-t-0 hover:bg-gray-50 cursor-pointer flex items-center justify-center gap-2">
-                                                {b.type === 'url' ? '↗' : b.type === 'call' ? '📞' : ''} {b.label || 'Action'}
+                            {/* Variables guide */}
+                            <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-md border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.02)]">
+                                <HelpCircle size={13} className="text-muted shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-[11px] font-semibold text-white/50 mb-0.5">Variable Syntax</p>
+                                    <p className="text-[11px] text-muted leading-relaxed">
+                                        Use <code className="px-1 py-0.5 rounded text-[10px] font-mono text-accent bg-[rgba(34,197,94,0.08)]">{`{{namespace.field}}`}</code> — namespaces: <span className="text-white/50">contact, conversation, workspace, event</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Variable simulators */}
+                            {Object.keys(previewVars).length > 0 && (
+                                <div className="flex flex-col gap-2 p-3 rounded-md border border-[rgba(255,255,255,0.04)] bg-[rgba(255,255,255,0.02)]">
+                                    <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Simulate Variables</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {Object.entries(previewVars).map(([key, value]) => (
+                                            <div key={key}>
+                                                <Label>{key}</Label>
+                                                <FormInput
+                                                    title={`Simulate ${key}`}
+                                                    value={value}
+                                                    onChange={e => setPreviewVars({ ...previewVars, [key]: e.target.value })}
+                                                />
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+                        </Section>
+
+                        <Divider />
+
+                        {/* Footer */}
+                        <Section title="Footer" action={<span className="text-[11px] text-muted">Optional</span>}>
+                            <div>
+                                <Label>Footer Text</Label>
+                                <FormInput
+                                    placeholder="e.g. Reply STOP to opt out"
+                                    value={form.footerText}
+                                    onChange={e => setForm({ ...form, footerText: e.target.value })}
+                                    maxLength={60}
+                                />
+                                <p className="text-[11px] text-muted mt-1.5">{form.footerText.length}/60 characters</p>
+                            </div>
+                        </Section>
+
+                        <Divider />
+
+                        {/* Buttons */}
+                        <Section
+                            title="Interactive Buttons"
+                            action={
+                                <button
+                                    onClick={() => {
+                                        if (buttons.length >= 3) return alert('Max 3 buttons allowed');
+                                        setButtons([...buttons, { type: 'quick_reply', label: 'New Button', payload: '' }]);
+                                    }}
+                                    className="interactive-press flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] font-semibold text-accent border border-[rgba(34,197,94,0.2)] bg-[rgba(34,197,94,0.04)] hover:bg-[rgba(34,197,94,0.08)] transition-colors"
+                                >
+                                    <Plus size={12} /> Add Button
+                                </button>
+                            }
+                        >
+                            {buttons.length === 0 ? (
+                                <div className="flex items-center gap-2 px-3 py-3 rounded-md border border-dashed border-[rgba(255,255,255,0.06)] text-[12px] text-muted">
+                                    <Zap size={13} className="text-muted/50" />
+                                    No buttons yet — add quick replies, URL links, or phone call triggers.
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    {buttons.map((btn, idx) => (
+                                        <div key={idx} className="flex flex-col gap-2 p-3 rounded-md border border-[rgba(255,255,255,0.06)] bg-[#111111]">
+                                            <div className="flex gap-2 items-center">
+                                                <FormSelect
+                                                    title="Button type"
+                                                    className="w-32 shrink-0"
+                                                    value={btn.type}
+                                                    onChange={e => {
+                                                        const n = [...buttons]; n[idx].type = e.target.value; setButtons(n);
+                                                    }}
+                                                >
+                                                    <option value="quick_reply">Quick Reply</option>
+                                                    <option value="url">URL Link</option>
+                                                    <option value="call">Phone Call</option>
+                                                </FormSelect>
+                                                <FormInput
+                                                    placeholder="Button label"
+                                                    value={btn.label}
+                                                    onChange={e => {
+                                                        const n = [...buttons]; n[idx].label = e.target.value; setButtons(n);
+                                                    }}
+                                                    maxLength={25}
+                                                />
+                                                <button
+                                                    title="Remove"
+                                                    onClick={() => setButtons(buttons.filter((_, i) => i !== idx))}
+                                                    className="interactive-press p-1.5 text-red-400 hover:bg-red-500/10 rounded-md transition-colors shrink-0"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                            {(btn.type === 'url' || btn.type === 'call') && (
+                                                <FormInput
+                                                    placeholder={btn.type === 'url' ? 'https://example.com' : '+1234567890'}
+                                                    value={btn.payload || ''}
+                                                    onChange={e => {
+                                                        const n = [...buttons]; n[idx].payload = e.target.value; setButtons(n);
+                                                    }}
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </Section>
+
+                        {/* Bottom padding */}
+                        <div className="h-4" />
+                    </div>
+                </div>
+
+                {/* RIGHT: Preview — scrollable */}
+                <div className="w-[380px] shrink-0 overflow-y-auto bg-surface">
+                    <div className="p-6 flex flex-col gap-5">
+
+                        {/* Panel title */}
+                        <div className="flex items-center gap-2">
+                            <Smartphone size={15} className="text-muted" />
+                            <span className="text-[13px] font-bold text-white/80 tracking-tight">Live Preview</span>
+                        </div>
+
+                        {/* ── WA device mock — ref used by html2canvas for preview capture ── */}
+                        <div ref={previewRef} className="rounded-2xl overflow-hidden border border-[rgba(255,255,255,0.06)] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                            {/* WA App bar */}
+                            <div className="h-12 flex items-center px-4 gap-3 bg-[#00A884]">
+                                <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-[11px]">
+                                    {(form.name || 'B').charAt(0).toUpperCase()}
+                                </div>
+                                <span className="text-white font-semibold text-[13px] truncate">{form.name || 'Your Brand'}</span>
+                            </div>
+
+                            {/* Chat area */}
+                            <div className="p-3 min-h-[240px] bg-[#0B1418]">
+                                {/* Dot pattern */}
+                                <div className="absolute inset-0 opacity-[0.025] pointer-events-none bg-[radial-gradient(circle,#fff_1px,transparent_1px)] bg-[size:18px_18px]" />
+
+                                <div className="max-w-[88%] relative">
+                                    {/* Message bubble */}
+                                    <div className="rounded-[4px_12px_12px_12px] overflow-hidden bg-[#1F2C34]">
+                                        {/* Media */}
+                                        {selectedMedia && mediaUrl && (
+                                            <>
+                                                {selectedMedia.type === 'video' && (
+                                                    <div className="w-full h-32 bg-black/50 overflow-hidden relative flex items-center justify-center">
+                                                        <video src={mediaUrl} preload="metadata" className="w-full h-full object-cover opacity-70" />
+                                                        <div className="absolute w-9 h-9 bg-black/60 rounded-full flex items-center justify-center">
+                                                            <Video size={13} className="text-white" />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {selectedMedia.type === 'document' && (
+                                                    <div className="flex items-center gap-2 px-3 py-2.5 border-b border-white/5">
+                                                        <div className="w-8 h-9 bg-red-500/20 rounded flex items-center justify-center shrink-0">
+                                                            <FileText size={13} className="text-red-400" />
+                                                        </div>
+                                                        <span className="text-[11px] text-white/60 truncate">{selectedMedia.name || 'Document'}</span>
+                                                    </div>
+                                                )}
+                                                {selectedMedia.type !== 'video' && selectedMedia.type !== 'document' && (
+                                                    <div className="w-full h-32 overflow-hidden">
+                                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                        <img src={mediaUrl} alt="" className="w-full h-full object-cover" />
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                        {!selectedMedia && form.headerMediaId && (
+                                            <div className="w-full h-24 flex items-center justify-center border-b border-white/5 bg-[rgba(255,255,255,0.03)]">
+                                                <ImageIcon size={18} className="text-white/15" />
+                                            </div>
+                                        )}
+
+                                        {/* Body text */}
+                                        <div className="px-3 py-2.5">
+                                            <p className="text-[12px] text-white/85 whitespace-pre-wrap leading-relaxed">
+                                                {renderPreviewText() || <span className="text-white/25 italic">Message goes here...</span>}
+                                            </p>
+                                            {form.footerText && (
+                                                <p className="text-[10px] text-white/30 mt-1.5">{form.footerText}</p>
+                                            )}
+                                            <div className="flex justify-end mt-1.5">
+                                                <span className="text-[9px] text-white/25">12:00 ✓✓</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Buttons */}
+                                    {buttons.length > 0 && (
+                                        <div className="flex flex-col gap-0.5 mt-1">
+                                            {buttons.map((b, i) => (
+                                                <div key={i} className="rounded-xl py-1.5 px-3 text-center text-[11px] text-[#00D87C] font-medium flex items-center justify-center gap-1 shadow-sm bg-[#1F2C34]">
+                                                    {b.type === 'url' ? <ArrowUpRight size={10} /> : b.type === 'call' ? <Phone size={10} /> : null}
+                                                    {b.label || 'Action'}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ── Send Test ── */}
+                        <div className="rounded-xl border border-[rgba(255,255,255,0.06)] overflow-hidden bg-[#111111]">
+                            <div className="px-4 pt-3 pb-2 border-b border-[rgba(255,255,255,0.04)]">
+                                <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Send Test Message</p>
+                            </div>
+                            <div className="px-4 py-4 flex flex-col gap-3">
+                                <div>
+                                    <Label>WhatsApp Session</Label>
+                                    <FormSelect
+                                        title="Select session"
+                                        value={testSessionId}
+                                        onChange={e => setTestSessionId(e.target.value)}
+                                    >
+                                        <option value="">Select a connected session</option>
+                                        {(whatsappSessions as any[]).filter(s => s.status === 'CONNECTED').map((s: any) => (
+                                            <option key={s.sessionId} value={s.sessionId}>{s.name} ({s.phoneNumber || s.sessionId})</option>
+                                        ))}
+                                    </FormSelect>
+                                </div>
+                                <div>
+                                    <Label>Recipient Number</Label>
+                                    <FormInput
+                                        placeholder="+1234567890"
+                                        value={testPhoneNumber}
+                                        onChange={e => setTestPhoneNumber(e.target.value)}
+                                    />
+                                </div>
+                                <button
+                                    className="interactive-press w-full py-2 rounded-md text-[13px] font-semibold bg-accent hover:bg-accent-hover text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed mt-1"
+                                    disabled={!existingId || !testSessionId || !testPhoneNumber || testMutation.isPending}
+                                    onClick={() => testMutation.mutate()}
+                                >
+                                    {testMutation.isPending ? 'Sending…' : 'Send Test'}
+                                </button>
+                                {!existingId && (
+                                    <p className="text-[11px] text-amber-400 flex items-center gap-1">
+                                        <Info size={11} /> Save the template first before testing.
+                                    </p>
                                 )}
                             </div>
                         </div>
-                    </div>
 
+                        <div className="h-2" />
+                    </div>
                 </div>
             </div>
         </div>
@@ -464,9 +683,8 @@ function TemplateBuilder() {
 
 export default function TemplateBuilderPage() {
     return (
-        <Suspense fallback={<div className="p-8 text-center text-muted">Loading builder...</div>}>
+        <Suspense fallback={<div className="p-8 text-center text-muted">Loading builder…</div>}>
             <TemplateBuilder />
         </Suspense>
     );
 }
-

@@ -24,6 +24,7 @@ module.exports = {
                 },
                 // Semantic design tokens (reference CSS vars defined in globals.css)
                 accent: { DEFAULT: 'var(--accent)', hover: 'var(--accent-hover)', dim: 'var(--accent-dim)' },
+                'accent-ai': { DEFAULT: 'var(--accent-ai)', hover: 'var(--accent-ai-hover)', dim: 'var(--accent-ai-dim)' },
                 success: 'var(--success)',
                 warning: 'var(--warning)',
                 danger: 'var(--danger)',
@@ -33,6 +34,9 @@ module.exports = {
                 surface: 'var(--bg-surface)',
                 elevated: 'var(--bg-elevated)',
                 hover: 'var(--bg-hover)',
+                primary: 'var(--text-primary)',
+                secondary: 'var(--text-secondary)',
+                muted: 'var(--text-muted)',
             },
             textColor: {
                 primary: 'var(--text-primary)',

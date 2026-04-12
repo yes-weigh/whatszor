@@ -20,15 +20,15 @@ function StatCard({ title, value, icon: Icon, trend, colorClass }: StatCardProps
         <div className="glass-card glass-card-interactive flex flex-col gap-4">
             <div className="flex items-start justify-between">
                 <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{title}</p>
-                    <p className="text-3xl font-bold mt-1 text-white">{value}</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted">{title}</p>
+                    <p className="text-3xl font-bold mt-1 text-primary">{value}</p>
                 </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-black/40 border border-white/5 shadow-inner ${colorClass}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-elevated border border-theme shadow-inner ${colorClass}`}>
                     <Icon size={20} />
                 </div>
             </div>
             {trend && (
-                <p className="text-xs flex items-center gap-1 text-emerald-400">
+                <p className="text-xs flex items-center gap-1 text-accent">
                     <TrendingUp size={12} />
                     {trend}
                 </p>
@@ -79,7 +79,7 @@ export default function DashboardPage() {
                 <div className="glass-card">
                     <div className="flex items-center gap-2 mb-6">
                         <Activity className="text-emerald-500" size={18} />
-                        <h2 className="font-semibold text-sm text-zinc-300">Platform Activity (Last 7 Days)</h2>
+                        <h2 className="font-semibold text-sm text-secondary">Platform Activity (Last 7 Days)</h2>
                     </div>
                     <div className="h-[280px] w-full">
                         {mounted && chartData ? (
@@ -94,23 +94,19 @@ export default function DashboardPage() {
                                             <stop offset="5%" stopColor="#a1a1aa" stopOpacity={0.2} />
                                             <stop offset="95%" stopColor="#a1a1aa" stopOpacity={0} />
                                         </linearGradient>
-                                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                                            <feGaussianBlur stdDeviation="4" result="blur" />
-                                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                                        </filter>
                                     </defs>
-                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} />
+                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
                                     <Tooltip
-                                        contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', borderColor: 'rgba(16,185,129,0.3)', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}
-                                        itemStyle={{ fontSize: '14px', color: '#fff' }}
+                                        contentStyle={{ backgroundColor: 'var(--bg-elevated)', backdropFilter: 'blur(10px)', borderColor: 'var(--border-strong)', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.2)', color: 'var(--text-primary)' }}
+                                        itemStyle={{ fontSize: '14px', color: 'var(--text-primary)' }}
                                     />
-                                    <Area type="monotone" dataKey="messages" name="Messages" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorMessages)" filter="url(#glow)" />
+                                    <Area type="monotone" dataKey="messages" name="Messages" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorMessages)" />
                                     <Area type="monotone" dataKey="contacts" name="New Contacts" stroke="#a1a1aa" strokeWidth={2} fillOpacity={1} fill="url(#colorContacts)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         ) : (
-                            <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm">Loading chart data...</div>
+                            <div className="w-full h-full flex items-center justify-center text-muted text-sm">Loading chart data...</div>
                         )}
                     </div>
                 </div>
@@ -118,33 +114,33 @@ export default function DashboardPage() {
                 {/* Activity Feed & Quick Actions */}
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                     <div className="glass-card xl:col-span-2">
-                        <h2 className="font-semibold text-sm mb-4 text-zinc-300">Recent Activity</h2>
+                        <h2 className="font-semibold text-sm mb-4 text-secondary">Recent Activity</h2>
                         <div className="flex flex-col gap-3">
                             {activityLoading ? (
-                                <div className="text-sm text-zinc-500">Loading activity...</div>
+                                <div className="text-sm text-muted">Loading activity...</div>
                             ) : activityData?.length ? (
                                 activityData.map((item: any, i: number) => (
-                                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-black/20 border border-white/5 animate-in fade-in duration-500 delay-100 hover:bg-black/40 transition-colors">
+                                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-elevated border border-theme animate-in fade-in duration-500 delay-100 hover:bg-hover transition-colors">
                                         <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 shadow-[0_0_8px_currentColor] ${item.dot.replace('bg-accent', 'bg-emerald-500').replace('bg-success', 'bg-emerald-400')}`} />
                                         <div className="flex-1">
-                                            <p className="text-sm text-white">{item.msg}</p>
-                                            <p className="text-xs mt-0.5 text-zinc-500">{item.time}</p>
+                                            <p className="text-sm text-primary">{item.msg}</p>
+                                            <p className="text-xs mt-0.5 text-muted">{item.time}</p>
                                         </div>
                                     </div>
                                 ))
                             ) : (
-                                <div className="text-sm text-zinc-500">No recent activity.</div>
+                                <div className="text-sm text-muted">No recent activity.</div>
                             )}
                         </div>
                     </div>
 
                     <div className="glass-card">
-                        <h2 className="font-semibold text-sm mb-4 text-zinc-300">Quick Actions</h2>
+                        <h2 className="font-semibold text-sm mb-4 text-secondary">Quick Actions</h2>
                         <div className="flex flex-col gap-2">
                             {[
-                                { label: 'New Campaign', href: '/campaigns/new', cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]' },
-                                { label: 'Add Contact', href: '/contacts', cls: 'bg-zinc-800/40 text-zinc-300 border border-white/5 hover:bg-zinc-800/80 hover:text-white' },
-                                { label: 'Create Automation', href: '/automations', cls: 'bg-zinc-800/40 text-zinc-300 border border-white/5 hover:bg-zinc-800/80 hover:text-white' },
+                                { label: 'New Campaign', href: '/campaigns/new', cls: 'bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20' },
+                                { label: 'Add Contact', href: '/contacts', cls: 'bg-elevated text-secondary border border-theme hover:bg-hover hover:text-primary' },
+                                { label: 'Create Automation', href: '/automations', cls: 'bg-elevated text-secondary border border-theme hover:bg-hover hover:text-primary' },
                             ].map(a => (
                                 <a key={a.label} href={a.href}
                                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${a.cls}`}

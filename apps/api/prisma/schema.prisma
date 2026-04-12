@@ -887,6 +887,9 @@ model Template {
   language    String?
   status      String  @default("ACTIVE")
 
+  // Cached PNG snapshot captured by html2canvas on save — prevents live re-render on grid
+  previewImageUrl String? @map("preview_image_url")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

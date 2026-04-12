@@ -6,6 +6,8 @@ import { authenticate } from '../../middleware/authenticate';
 import { createOrGetConversation } from '../messaging/conversation.service';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 import { RenderContext } from './template-renderer';
+import { getStorageProvider } from '../../core/storage';
+import multipart from '@fastify/multipart';
 
 function buildRenderContext(flatVariables: Record<string, any> = {}): RenderContext {
     const context: any = {};
@@ -25,6 +27,9 @@ function buildRenderContext(flatVariables: Record<string, any> = {}): RenderCont
 }
 
 export default async function templateRoutes(fastify: FastifyInstance) {
+    // Register multipart for the preview-image upload endpoint
+    fastify.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } });
+
     fastify.addHook('preHandler', authenticate);
     /**
      * @route POST /api/v1/templates
@@ -272,5 +277,71 @@ export default async function templateRoutes(fastify: FastifyInstance) {
         });
 
         return reply.sendSuccess({ message: 'Test message enqueued successfully' });
+    });
+
+    /**
+     * @route POST /api/v1/templates/:id/preview-image
+     * @desc Accepts a PNG snapshot (from html2canvas) and stores it as the template thumbnail.
+     *       Creates a Media record and writes its URL back to templates.preview_image_url.
+     *       Skips quota enforcement — preview images are internal assets (~30–80 KB each).
+     */
+    fastify.post('/:id/preview-image', async (request, reply) => {
+        const workspaceId = request.user?.workspaceId;
+        const { id: templateId } = request.params as { id: string };
+
+        if (!workspaceId) {
+            return reply.sendError({ code: ErrorCodes.UNAUTHORIZED, message: 'Unauthorized' }, 401);
+        }
+
+        // Verify ownership
+        const template = await prisma.template.findUnique({
+            where: { id: templateId, workspaceId },
+            select: { id: true }
+        });
+        if (!template) {
+            return reply.sendError({ code: 'NOT_FOUND', message: 'Template not found' }, 404);
+        }
+
+        const data = await request.file();
+        if (!data) {
+            return reply.sendError({ code: 'BAD_REQUEST', message: 'No file uploaded' }, 400);
+        }
+
+        const buffer = await data.toBuffer();
+        const storageProvider = getStorageProvider();
+
+        // Upload to storage using the standard pipeline
+        const uploadResult = await storageProvider.upload(workspaceId, buffer, {
+            filename: `template-preview-${templateId}.png`,
+            mimeType: 'image/png',
+            size: buffer.length,
+        });
+
+        // Create a Media record so the file is streamable via /media-gallery/:id/file
+        const media = await prisma.media.create({
+            data: {
+                workspaceId,
+                name: `template-preview-${templateId}.png`,
+                storageProvider: 'local',
+                storageKey: uploadResult.storageKey,
+                url: uploadResult.url,
+                type: 'image',
+                mimeType: 'image/png',
+                size: buffer.length,
+                category: 'template_preview',
+            }
+        });
+
+        // Build the authenticated streaming URL
+        const apiBase = process.env.API_BASE_URL || 'http://localhost:3001/api/v1';
+        const previewImageUrl = `${apiBase}/media-gallery/${media.id}/file`;
+
+        // Persist the URL on the template root row
+        await prisma.template.update({
+            where: { id: templateId },
+            data: { previewImageUrl }
+        });
+
+        return reply.sendSuccess({ previewImageUrl, mediaId: media.id });
     });
 }

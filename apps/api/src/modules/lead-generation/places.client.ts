@@ -112,6 +112,7 @@ export async function previewPlaces(
 
 /**
  * Full text search — returns up to maxResults place summaries (IDs + names).
+ * Paginates via nextPageToken to fetch beyond the 20-result-per-page limit.
  * Used by the worker for the first stage of the processing pipeline.
  */
 export async function searchPlaces(
@@ -119,22 +120,48 @@ export async function searchPlaces(
     maxResults: number,
     apiKey: string,
 ): Promise<PlaceSummary[]> {
-    const capped = Math.min(maxResults, 20);
-    const res = await fetch(`${PLACES_BASE}/places:searchText`, buildFetchOptions(
-        apiKey,
-        'places.id,places.displayName',
-        { textQuery: query, maxResultCount: capped, languageCode: 'en' },
-    ));
+    const PAGE_SIZE = 20; // Google Places API max per request
+    const collected: PlaceSummary[] = [];
+    let pageToken: string | undefined;
 
-    const data = await assertOk(res, `searchPlaces("${query}")`);
-    const places: any[] = data.places || [];
+    do {
+        const body: Record<string, unknown> = {
+            textQuery: query,
+            maxResultCount: PAGE_SIZE,
+            languageCode: 'en',
+        };
+        if (pageToken) body.pageToken = pageToken;
 
-    log.debug({ query, returned: places.length }, 'Places text search complete');
+        const res = await fetch(`${PLACES_BASE}/places:searchText`, buildFetchOptions(
+            apiKey,
+            'places.id,places.displayName,nextPageToken',
+            body,
+        ));
 
-    return places.map((p: any) => ({
-        placeId: p.id,
-        displayName: resolveDisplayName(p),
-    }));
+        const data = await assertOk(res, `searchPlaces("${query}")`);
+        const places: any[] = data.places || [];
+
+        for (const p of places) {
+            if (collected.length >= maxResults) break;
+            collected.push({
+                placeId: p.id,
+                displayName: resolveDisplayName(p),
+            });
+        }
+
+        // nextPageToken is absent on last page or when results are exhausted
+        pageToken = data.nextPageToken;
+
+        // Brief pause required by Google between paginated requests
+        if (pageToken && collected.length < maxResults) {
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+    } while (pageToken && collected.length < maxResults);
+
+    log.debug({ query, returned: collected.length, maxResults }, 'Places text search complete (paginated)');
+
+    return collected;
 }
 
 /**
