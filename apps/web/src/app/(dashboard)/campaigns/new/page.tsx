@@ -704,7 +704,7 @@ export default function NewCampaignPage() {
                 buttons: composeButtons,
             };
             const res = await api.post('/templates', payload);
-            const apiRes = res.data?.data || res.data;
+            const apiRes = res.data;
             const templateId = apiRes?.id;
 
             let finalPreviewUrl: string | undefined;

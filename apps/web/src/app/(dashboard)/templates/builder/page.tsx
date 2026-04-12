@@ -270,7 +270,7 @@ function TemplateBuilder() {
             return { apiRes, previewBlob };
         },
         onSuccess: ({ apiRes, previewBlob }) => {
-            const templateId = existingId ?? apiRes.data?.data?.id ?? apiRes.data?.id;
+            const templateId = existingId ?? apiRes.data?.id;
             if (templateId && previewBlob) {
                 // Fire-and-forget — blob is already in memory, navigation won't affect it
                 uploadPreviewBlob(templateId, previewBlob).catch(e =>

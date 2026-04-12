@@ -183,7 +183,7 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
               className="interactive-press group text-left px-4 py-3 bg-[rgba(34,197,94,0.04)] hover:bg-[rgba(34,197,94,0.08)] border border-[rgba(34,197,94,0.12)] rounded-lg flex flex-col gap-2 relative overflow-hidden transition-all duration-[120ms] cursor-pointer shadow-sm"
             >
               <p className="text-[13px] font-medium text-primary leading-snug relative z-10">
-                "{reply}"
+                &quot;{reply}&quot;
               </p>
               
               <div className="flex items-center justify-end w-full mt-1 relative z-10">

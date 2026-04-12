@@ -69,7 +69,6 @@ export default function LeadGenerationPage() {
     const [previewData, setPreviewData] = React.useState<SearchPreviewResult | null>(null);
 
     const form = useForm<SearchFormValues>({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         resolver: zodResolver(searchSchema) as any,
         defaultValues: {
             keyword: '',
