@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -376,7 +376,7 @@ function PhoneSimulator({ draft, recipientCount, sessionName, mediaList = [], pr
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function NewCampaignPage() {
+function NewCampaignContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const editId = searchParams.get('id'); // present when editing an existing draft
@@ -2235,5 +2235,13 @@ export default function NewCampaignPage() {
                 </div>
             </div>
         </>
+    );
+}
+
+export default function NewCampaignPage() {
+    return (
+        <Suspense fallback={<div className="flex h-screen w-full items-center justify-center bg-[#111A20]"><Loader2 size={24} className="animate-spin text-white/30" /></div>}>
+            <NewCampaignContent />
+        </Suspense>
     );
 }
