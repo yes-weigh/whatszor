@@ -372,7 +372,7 @@ function FlowCanvasInner({ initialNodes: propsNodes, initialEdges: propsEdges, i
                                         return { ...node, data: cleanData };
                                     }));
                                 }}
-                                className="ml-2 hover:bg-amber-500/20 p-0.5 rounded"
+                                className="ml-2 hover:bg-amber-500/10 dark:bg-amber-500/20 p-0.5 rounded"
                             >
                                 <X size={12} />
                             </button>
@@ -382,12 +382,12 @@ function FlowCanvasInner({ initialNodes: propsNodes, initialEdges: propsEdges, i
                 
                 <div className="flex items-center gap-4">
                     {errorMsg && (
-                        <div className="flex items-center gap-2 text-red-400 text-sm">
+                        <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
                             <AlertCircle size={16} />
                             <span>{errorMsg}</span>
                         </div>
                     )}
-                    <button onClick={clearAllNodes} className="btn bg-body border border-theme text-red-500 hover:text-red-400">
+                    <button onClick={clearAllNodes} className="btn bg-body border border-theme text-red-500 hover:text-red-600 dark:text-red-400">
                         Clear Canvas
                     </button>
                     {savedRuleId && (
@@ -400,7 +400,7 @@ function FlowCanvasInner({ initialNodes: propsNodes, initialEdges: propsEdges, i
                         {isSimulating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
                         Test Flow
                     </button>
-                    <button onClick={() => setShowAIGenerator(true)} className="btn bg-elevated border border-blue-500/30 text-blue-400 hover:text-blue-300 flex items-center gap-2">
+                    <button onClick={() => setShowAIGenerator(true)} className="btn bg-elevated border border-blue-500/30 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-300 flex items-center gap-2">
                         <Sparkles size={16} />
                         AI Generate
                     </button>

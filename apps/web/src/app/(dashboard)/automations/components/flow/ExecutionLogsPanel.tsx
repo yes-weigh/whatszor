@@ -100,7 +100,7 @@ export function ExecutionLogsPanel({ ruleId, onClose, onLogsLoaded }: { ruleId: 
                                             </div>
                                             
                                             {log.error && (
-                                                <div className="mt-2 text-xs text-red-400 bg-red-400/10 p-2 rounded border border-red-500/20 break-words">
+                                                <div className="mt-2 text-xs text-red-600 dark:text-red-400 bg-red-400/10 p-2 rounded border border-red-500/20 break-words">
                                                     {log.error}
                                                 </div>
                                             )}

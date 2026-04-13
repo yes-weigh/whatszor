@@ -22,13 +22,13 @@ const EventIconMap: Record<string, any> = {
 
 const EventColorMap: Record<string, string> = {
     message_received: 'text-blue-500 bg-blue-500/10',
-    message_sent: 'text-blue-400 bg-blue-400/10',
+    message_sent: 'text-blue-600 dark:text-blue-400 bg-blue-400/10',
     webhook_received: 'text-purple-500 bg-purple-500/10',
     automation_triggered: 'text-yellow-500 bg-yellow-500/10',
     node_executed: 'text-green-500 bg-green-500/10',
     node_failed: 'text-red-500 bg-red-500/10',
     contact_created: 'text-emerald-500 bg-emerald-500/10',
-    contact_updated: 'text-emerald-400 bg-emerald-400/10',
+    contact_updated: 'text-emerald-600 dark:text-emerald-400 bg-emerald-400/10',
     campaign_sent: 'text-indigo-500 bg-indigo-500/10',
 };
 

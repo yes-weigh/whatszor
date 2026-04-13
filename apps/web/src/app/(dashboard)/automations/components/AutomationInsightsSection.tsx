@@ -22,17 +22,17 @@ interface AutomationInsight {
 
 // ── Intent display config ─────────────────────────────────────────────────────
 const INTENT_CONFIG: Record<string, { label: string; color: string; emoji: string }> = {
-    pricing:        { label: 'Pricing Inquiry',   color: 'bg-emerald-500/15 text-emerald-300',  emoji: '💰' },
-    demo_request:   { label: 'Demo Request',      color: 'bg-blue-500/15 text-blue-300',        emoji: '🎯' },
-    purchase_intent:{ label: 'Purchase Intent',   color: 'bg-purple-500/15 text-purple-300',    emoji: '🛒' },
-    delivery_inquiry:{ label: 'Delivery Inquiry', color: 'bg-orange-500/15 text-orange-300',    emoji: '🚚' },
+    pricing:        { label: 'Pricing Inquiry',   color: 'bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',  emoji: '💰' },
+    demo_request:   { label: 'Demo Request',      color: 'bg-blue-500/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300',        emoji: '🎯' },
+    purchase_intent:{ label: 'Purchase Intent',   color: 'bg-purple-500/10 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300',    emoji: '🛒' },
+    delivery_inquiry:{ label: 'Delivery Inquiry', color: 'bg-orange-500/10 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300',    emoji: '🚚' },
     availability:   { label: 'Stock Check',       color: 'bg-yellow-500/15 text-yellow-300',    emoji: '📦' },
-    discount:       { label: 'Discount Inquiry',  color: 'bg-pink-500/15 text-pink-300',        emoji: '🏷️' },
-    support:        { label: 'Support Request',   color: 'bg-red-500/15 text-red-300',          emoji: '🆘' },
-    refund:         { label: 'Refund Request',    color: 'bg-red-500/15 text-red-300',          emoji: '↩️' },
+    discount:       { label: 'Discount Inquiry',  color: 'bg-pink-500/10 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300',        emoji: '🏷️' },
+    support:        { label: 'Support Request',   color: 'bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-300',          emoji: '🆘' },
+    refund:         { label: 'Refund Request',    color: 'bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-300',          emoji: '↩️' },
     contact_info:   { label: 'Contact Info',      color: 'bg-zinc-500/15 text-zinc-300',        emoji: '📞' },
     business_hours: { label: 'Business Hours',    color: 'bg-indigo-500/15 text-indigo-300',    emoji: '🕐' },
-    general_inquiry:{ label: 'General Inquiry',   color: 'bg-zinc-500/15 text-zinc-400',        emoji: '💬' },
+    general_inquiry:{ label: 'General Inquiry',   color: 'bg-zinc-500/15 text-muted',        emoji: '💬' },
 };
 
 function InsightCard({ insight, onAccept, onDismiss, isAccepting, isDismissing }: {
@@ -74,16 +74,16 @@ function InsightCard({ insight, onAccept, onDismiss, isAccepting, isDismissing }
                     </div>
 
                     {/* Stats */}
-                    <p className="text-xs text-zinc-500 mb-3">
+                    <p className="text-xs text-secondary mb-3">
                         <TrendingUp size={10} className="inline mr-1 text-yellow-500" />
                         Detected <strong className="text-yellow-400">{insight.frequency} times</strong> in the last 3 days —
                         this keyword has no automation yet.
                     </p>
 
                     {/* AI suggested reply */}
-                    <div className="rounded-lg border border-white/8 bg-white/[0.02] p-3 mb-3">
+                    <div className="rounded-lg border border-theme bg-white/[0.02] p-3 mb-3">
                         <div className="flex items-center justify-between mb-2">
-                            <p className="text-[10px] font-medium text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                            <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
                                 <Brain size={10} />
                                 AI Suggested Reply
                             </p>
@@ -110,7 +110,7 @@ function InsightCard({ insight, onAccept, onDismiss, isAccepting, isDismissing }
                                 title="Toggle example messages"
                                 aria-label="Toggle example messages"
                                 onClick={() => setShowExamples(!showExamples)}
-                                className="flex items-center gap-1 text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors"
+                                className="flex items-center gap-1 text-[10px] text-zinc-600 hover:text-muted transition-colors"
                             >
                                 <MessageSquare size={9} />
                                 {showExamples ? 'Hide' : 'Show'} {examples.length} example messages
@@ -121,7 +121,7 @@ function InsightCard({ insight, onAccept, onDismiss, isAccepting, isDismissing }
                                     {examples.slice(0, 4).map((ex, i) => (
                                         <div key={i} className="flex items-start gap-2">
                                             <span className="text-[10px] text-zinc-600 shrink-0 mt-0.5">#{i + 1}</span>
-                                            <p className="text-[11px] text-zinc-500 italic truncate">&quot;{ex}&quot;</p>
+                                            <p className="text-[11px] text-secondary italic truncate">&quot;{ex}&quot;</p>
                                         </div>
                                     ))}
                                 </div>
@@ -148,7 +148,7 @@ function InsightCard({ insight, onAccept, onDismiss, isAccepting, isDismissing }
                             disabled={isAccepting || isDismissing}
                             title="Dismiss suggestion"
                             aria-label="Dismiss this insight"
-                            className="px-3 py-2 rounded-lg bg-white/5 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-white/10 transition-colors disabled:opacity-50"
+                            className="px-3 py-2 rounded-lg bg-elevated text-xs text-secondary hover:text-zinc-300 hover:bg-elevated transition-colors disabled:opacity-50"
                         >
                             {isDismissing ? <Loader2 size={12} className="animate-spin" /> : <X size={12} />}
                         </button>
@@ -209,7 +209,7 @@ export function AutomationInsightsSection() {
     if (!isLoading && pendingCount === 0 && !scanMutation.isPending && !isFetching) {
         // Render a subtle collapsed state when no insights are ready yet
         return (
-            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-5">
+            <div className="rounded-xl border border-theme bg-white/[0.02] p-5">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-xl bg-yellow-500/10 flex items-center justify-center">
@@ -229,7 +229,7 @@ export function AutomationInsightsSection() {
                         disabled={scanMutation.isPending}
                         title="Scan conversations now"
                         aria-label="Scan conversations for patterns now"
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-white/10 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-elevated text-xs text-secondary hover:text-zinc-300 hover:bg-elevated transition-colors disabled:opacity-50"
                     >
                         {scanMutation.isPending
                             ? <Loader2 size={12} className="animate-spin" />
@@ -238,7 +238,7 @@ export function AutomationInsightsSection() {
                     </button>
                 </div>
                 {scanMutation.isSuccess && (
-                    <div className="mt-3 text-xs text-emerald-400 flex items-center gap-1.5">
+                    <div className="mt-3 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                         <CheckCircle2 size={12} />
                         Scan complete — {(scanMutation.data as any)?.newInsights ?? 0} new insights found
                     </div>
@@ -257,14 +257,14 @@ export function AutomationInsightsSection() {
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-semibold text-white">AI Automation Suggestions</h3>
+                            <h3 className="text-sm font-semibold text-primary">AI Automation Suggestions</h3>
                             {pendingCount > 0 && (
                                 <span className="text-[10px] font-bold bg-yellow-500 text-black px-1.5 py-0.5 rounded-full">
                                     {pendingCount}
                                 </span>
                             )}
                         </div>
-                        <p className="text-xs text-zinc-500 mt-0.5">
+                        <p className="text-xs text-secondary mt-0.5">
                             Patterns detected from real conversations — click to automate instantly
                         </p>
                     </div>
@@ -275,7 +275,7 @@ export function AutomationInsightsSection() {
                     disabled={scanMutation.isPending || isFetching}
                     title="Scan conversations now"
                     aria-label="Scan conversations for patterns now"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-xs text-zinc-500 hover:text-zinc-300 hover:bg-white/10 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-elevated text-xs text-secondary hover:text-zinc-300 hover:bg-elevated transition-colors disabled:opacity-50"
                 >
                     {(scanMutation.isPending || isFetching)
                         ? <Loader2 size={12} className="animate-spin text-yellow-400" />
@@ -287,7 +287,7 @@ export function AutomationInsightsSection() {
             {/* Revenue framing banner */}
             <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 px-4 py-3 flex items-center gap-3">
                 <Brain size={16} className="text-yellow-400 shrink-0" />
-                <p className="text-xs text-zinc-400 leading-relaxed">
+                <p className="text-xs text-muted leading-relaxed">
                     <span className="text-yellow-300 font-medium">The system scanned your conversations</span> and
                     found keywords that repeat without an automation. Each one below is a revenue opportunity —
                     one click turns a manual response into instant automation.

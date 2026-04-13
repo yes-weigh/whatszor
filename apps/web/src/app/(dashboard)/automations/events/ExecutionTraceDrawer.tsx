@@ -71,7 +71,7 @@ export function ExecutionTraceDrawer({ event, onClose, onReplay }: TraceDrawerPr
                             {onReplay && event.payloadMetadata?.ruleId && event.payloadMetadata?.executionId && (
                                 <button 
                                     onClick={() => onReplay(event.payloadMetadata.executionId, event.payloadMetadata.ruleId)}
-                                    className="text-xs flex items-center gap-1.5 text-blue-500 hover:text-blue-400 bg-blue-500/10 px-2 py-1 rounded"
+                                    className="text-xs flex items-center gap-1.5 text-blue-500 hover:text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-1 rounded"
                                 >
                                     <PlayCircle size={14} />
                                     Replay on Canvas
@@ -109,7 +109,7 @@ export function ExecutionTraceDrawer({ event, onClose, onReplay }: TraceDrawerPr
                                             </div>
                                             
                                             {log.error && (
-                                                <div className="mt-2 text-xs text-red-400 bg-red-400/10 p-2 rounded border border-red-500/20 break-words">
+                                                <div className="mt-2 text-xs text-red-600 dark:text-red-400 bg-red-400/10 p-2 rounded border border-red-500/20 break-words">
                                                     {log.error}
                                                 </div>
                                             )}

@@ -4,15 +4,15 @@ import { Zap, Play, Clock, Tag, Globe, MessageSquare, Split, Bot, UserPlus, File
 const iconMap: Record<string, React.ReactNode> = {
     'CONTACT_CREATED': <Zap size={16} className="text-yellow-400" />,
     'CONTACT_UPDATED': <Zap size={16} className="text-yellow-400" />,
-    'MESSAGE_RECEIVED': <MessageSquare size={16} className="text-blue-400" />,
-    'TAG_ADDED': <Tag size={16} className="text-purple-400" />,
+    'MESSAGE_RECEIVED': <MessageSquare size={16} className="text-blue-600 dark:text-blue-400" />,
+    'TAG_ADDED': <Tag size={16} className="text-purple-600 dark:text-purple-400" />,
     'SEND_WHATSAPP': <MessageSquare size={16} className="text-green-400" />,
-    'DELAY': <Clock size={16} className="text-orange-400" />,
-    'ADD_TAG': <Tag size={16} className="text-purple-400" />,
+    'DELAY': <Clock size={16} className="text-orange-600 dark:text-orange-400" />,
+    'ADD_TAG': <Tag size={16} className="text-purple-600 dark:text-purple-400" />,
     'WEBHOOK': <Globe size={16} className="text-blue-500" />,
-    'CONDITION': <Split size={16} className="text-pink-400" />,
-    'AI_REPLY': <Bot size={16} className="text-emerald-400" />,
-    'AI_INTENT': <Bot size={16} className="text-emerald-400" />,
+    'CONDITION': <Split size={16} className="text-pink-600 dark:text-pink-400" />,
+    'AI_REPLY': <Bot size={16} className="text-emerald-600 dark:text-emerald-400" />,
+    'AI_INTENT': <Bot size={16} className="text-emerald-600 dark:text-emerald-400" />,
     'HUMAN_HANDOFF': <UserPlus size={16} className="text-indigo-400" />,
     'HTTP_REQUEST': <FileJson size={16} className="text-cyan-400" />
 };
@@ -37,7 +37,7 @@ export function NodeStatusBadge({ status, error }: { status?: string, error?: st
                     <div className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500/10 text-red-500 border border-red-500/30 cursor-help shadow-sm">
                         <AlertCircle size={12} />
                     </div>
-                    <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-red-500 text-white text-[10px] font-medium leading-tight rounded border border-red-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none break-words shadow-xl">
+                    <div className="absolute bottom-full right-0 mb-2 w-48 p-2 bg-red-500 text-primary text-[10px] font-medium leading-tight rounded border border-red-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none break-words shadow-xl">
                         {error}
                         <div className="absolute top-full right-1.5 w-2 h-2 bg-red-500 border-r border-b border-red-400 transform rotate-45 -mt-1.5" />
                     </div>
@@ -91,7 +91,7 @@ export function ActionNode({ data, selected }: NodeProps) {
             
             <div className="px-4 py-3 flex items-center gap-3 min-w-[220px]">
                 <div className="w-8 h-8 rounded-lg bg-body flex items-center justify-center border border-theme">
-                    {iconMap[type] || <Play size={16} className="text-blue-400" />}
+                    {iconMap[type] || <Play size={16} className="text-blue-600 dark:text-blue-400" />}
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold text-secondary tracking-wider">Action</span>
@@ -118,7 +118,7 @@ export function ConditionNode({ data, selected }: NodeProps) {
             
             <div className="px-4 py-3 flex items-center gap-3 min-w-[220px]">
                 <div className="w-8 h-8 rounded-lg bg-body flex items-center justify-center border border-theme">
-                    <Split size={16} className="text-pink-400" />
+                    <Split size={16} className="text-pink-600 dark:text-pink-400" />
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold text-secondary tracking-wider">Condition</span>
@@ -146,7 +146,7 @@ export function DelayNode({ data, selected }: NodeProps) {
             <Handle type="target" position={Position.Top} className="w-3 h-3 bg-body border-2 border-theme" />
             <div className="px-4 py-3 flex items-center gap-3 min-w-[220px]">
                 <div className="w-8 h-8 rounded-lg bg-body flex items-center justify-center border border-theme">
-                    <Clock size={16} className="text-orange-400" />
+                    <Clock size={16} className="text-orange-600 dark:text-orange-400" />
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold text-secondary tracking-wider">Wait</span>
@@ -168,7 +168,7 @@ export function AINode({ data, selected }: NodeProps) {
             <Handle type="target" position={Position.Top} className="w-3 h-3 bg-body border-2 border-theme" />
             <div className="px-4 py-3 flex items-center gap-3 min-w-[220px]">
                 <div className="w-8 h-8 rounded-lg bg-body flex items-center justify-center border border-theme">
-                    {iconMap[type] || <Bot size={16} className="text-emerald-400" />}
+                    {iconMap[type] || <Bot size={16} className="text-emerald-600 dark:text-emerald-400" />}
                 </div>
                 <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold text-secondary tracking-wider">AI Model</span>

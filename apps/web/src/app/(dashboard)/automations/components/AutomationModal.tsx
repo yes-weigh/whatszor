@@ -48,7 +48,7 @@ export function AutomationModal({ isOpen, onClose }: AutomationModalProps) {
                 <div className="flex items-center justify-between p-4 border-b border-theme">
                     <h3 className="font-bold text-lg text-primary">New Automation Rule</h3>
                     <button onClick={onClose} 
-                                    className="p-2 text-secondary hover:text-white transition-colors"
+                                    className="p-2 text-secondary hover:text-primary transition-colors"
                                     title="Close Automation Rule Modal">
                         <X size={20} />
                     </button>

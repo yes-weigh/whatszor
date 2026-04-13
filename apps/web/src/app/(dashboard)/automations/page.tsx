@@ -87,7 +87,7 @@ export default function AutomationsPage() {
                 <div className="flex items-center gap-3">
                     {hasPermission('automation:create') && (
                         <>
-                            <button onClick={() => router.push('/automations/create?ai=1')} className="btn bg-elevated border border-blue-500/30 text-blue-400 hover:text-blue-300 flex items-center gap-2">
+                            <button onClick={() => router.push('/automations/create?ai=1')} className="btn bg-elevated border border-blue-500/30 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-300 flex items-center gap-2">
                                 <Sparkles size={16} />
                                 AI Generate
                             </button>
@@ -137,10 +137,10 @@ export default function AutomationsPage() {
                         className="card p-4 flex items-center justify-between border-theme bg-surface hover:bg-elevated/80 hover:border-blue-500/30 cursor-pointer transition-all group"
                     >
                         <div className="flex flex-col gap-1">
-                            <span className="text-xs text-blue-400 font-bold uppercase tracking-wider">Event Timeline</span>
+                            <span className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider">Event Timeline</span>
                             <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors">View global platform tracing &rarr;</span>
                         </div>
-                        <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+                        <div className="w-10 h-10 rounded-full bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
                             <Activity size={20} />
                         </div>
                     </div>
@@ -211,7 +211,7 @@ export default function AutomationsPage() {
                                                  onClick={() => router.push(`/automations/create?ruleId=${r.id}`)}
                                                  className="btn btn-ghost p-2"
                                              >
-                                                 <Pencil size={18} className="text-blue-400 hover:text-blue-300" />
+                                                 <Pencil size={18} className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-300" />
                                              </button>
                                              <button
                                                  aria-label={isActive ? 'Disable rule' : 'Enable rule'}
@@ -243,7 +243,7 @@ export default function AutomationsPage() {
                                                  onClick={() => setConfirmingId(r.id)}
                                                  className="btn btn-ghost p-2"
                                              >
-                                                 <Trash2 size={15} className="text-danger hover:text-red-400" />
+                                                 <Trash2 size={15} className="text-danger hover:text-red-600 dark:text-red-400" />
                                              </button>
                                          )}
                                          </div>

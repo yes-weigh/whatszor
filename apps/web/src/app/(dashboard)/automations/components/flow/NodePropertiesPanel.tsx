@@ -135,7 +135,7 @@ function ConditionRow({ cond, index, onUpdate, onRemove, showRemove }: {
             <div className="flex items-center justify-between">
                 <span className="text-xs text-muted font-semibold uppercase">Condition {index + 1}</span>
                 {showRemove && (
-                    <button onClick={() => onRemove(index)} className="p-1 text-red-400 hover:text-red-300 transition-colors" title="Remove condition">
+                    <button onClick={() => onRemove(index)} className="p-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:text-red-300 transition-colors" title="Remove condition">
                         <Minus size={14} />
                     </button>
                 )}
@@ -473,11 +473,11 @@ export function NodePropertiesPanel({ selectedNode, onClose, onUpdateNodeData, o
                                         <div className="flex items-center gap-1 bg-body border border-theme rounded-lg p-1">
                                             <button
                                                 onClick={() => handleUpdate('conditionLogic', 'AND')}
-                                                className={`text-xs px-2 py-1 rounded-md transition-colors font-medium ${conditionLogic === 'AND' ? 'bg-primary text-white' : 'text-secondary hover:text-primary'}`}
+                                                className={`text-xs px-2 py-1 rounded-md transition-colors font-medium ${conditionLogic === 'AND' ? 'bg-primary text-primary' : 'text-secondary hover:text-primary'}`}
                                             >AND</button>
                                             <button
                                                 onClick={() => handleUpdate('conditionLogic', 'OR')}
-                                                className={`text-xs px-2 py-1 rounded-md transition-colors font-medium ${conditionLogic === 'OR' ? 'bg-blue-500 text-white' : 'text-secondary hover:text-primary'}`}
+                                                className={`text-xs px-2 py-1 rounded-md transition-colors font-medium ${conditionLogic === 'OR' ? 'bg-blue-500 text-primary' : 'text-secondary hover:text-primary'}`}
                                             >OR</button>
                                         </div>
                                     </div>
@@ -498,7 +498,7 @@ export function NodePropertiesPanel({ selectedNode, onClose, onUpdateNodeData, o
 
                                     <button
                                         onClick={addCondition}
-                                        className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors py-1"
+                                        className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-300 transition-colors py-1"
                                     >
                                         <Plus size={14} />
                                         Add Condition
@@ -523,7 +523,7 @@ export function NodePropertiesPanel({ selectedNode, onClose, onUpdateNodeData, o
                             {onDelete && (
                                 <button
                                     onClick={() => onDelete(selectedNode.id)}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors font-medium text-sm border border-red-500/20"
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/10 dark:bg-red-500/20 transition-colors font-medium text-sm border border-red-500/20"
                                 >
                                     <Trash2 size={16} />
                                     Delete Node

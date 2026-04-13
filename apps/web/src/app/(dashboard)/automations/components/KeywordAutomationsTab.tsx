@@ -148,12 +148,12 @@ function AutomationModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="w-full max-w-lg rounded-2xl border border-white/10 shadow-2xl bg-surface max-h-[90vh] overflow-y-auto">
+            <div className="w-full max-w-lg rounded-2xl border border-theme shadow-2xl bg-surface max-h-[90vh] overflow-y-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-white/8 sticky top-0 z-10 bg-surface">
+                <div className="flex items-center justify-between p-6 border-b border-theme sticky top-0 z-10 bg-surface">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-                            <Zap size={18} className="text-emerald-400" />
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 flex items-center justify-center">
+                            <Zap size={18} className="text-emerald-600 dark:text-emerald-400" />
                         </div>
                         <div>
                             <h2 className="text-base font-semibold text-primary">
@@ -162,7 +162,7 @@ function AutomationModal({
                             <p className="text-xs text-muted">Auto-reply when message matches keyword</p>
                         </div>
                     </div>
-                    <button onClick={onClose} title="Close" aria-label="Close modal" className="text-zinc-500 hover:text-white transition-colors">
+                    <button onClick={onClose} title="Close" aria-label="Close modal" className="text-secondary hover:text-primary transition-colors">
                         <X size={18} />
                     </button>
                 </div>
@@ -176,7 +176,7 @@ function AutomationModal({
                             <button 
                                 type="button" 
                                 onClick={() => setShowMatchInfo(!showMatchInfo)}
-                                className="text-zinc-500 hover:text-emerald-400 transition-colors flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider"
+                                className="text-secondary hover:text-emerald-600 dark:text-emerald-400 transition-colors flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider"
                             >
                                 <HelpCircle size={12} />
                                 Match Types
@@ -188,7 +188,7 @@ function AutomationModal({
                             <div className="absolute top-7 right-0 min-w-[340px] max-w-[420px] z-[60] bg-surface border border-theme rounded-xl shadow-2xl p-4 animate-in fade-in zoom-in-95 duration-200">
                                 <div className="flex items-center justify-between mb-3 border-b border-theme pb-2">
                                     <h3 className="text-sm font-semibold text-primary flex items-center gap-2">
-                                        <Zap size={14} className="text-emerald-400"/> Match Types Explained
+                                        <Zap size={14} className="text-emerald-600 dark:text-emerald-400"/> Match Types Explained
                                     </h3>
                                     <button type="button" aria-label="Close" title="Close" onClick={() => setShowMatchInfo(false)} className="text-muted hover:text-primary">
                                         <X size={14} />
@@ -196,7 +196,7 @@ function AutomationModal({
                                 </div>
                                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
                                     <div>
-                                        <div className="flex items-center gap-1.5 text-blue-400 text-xs font-bold mb-1">
+                                        <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 text-xs font-bold mb-1">
                                             <MessageSquare size={12} /> Contains (Default)
                                         </div>
                                         <p className="text-[11px] text-muted leading-relaxed">
@@ -205,7 +205,7 @@ function AutomationModal({
                                         </p>
                                     </div>
                                     <div>
-                                        <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold mb-1">
+                                        <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 text-xs font-bold mb-1">
                                             <Check size={12} /> Exact
                                         </div>
                                         <p className="text-[11px] text-muted leading-relaxed">
@@ -214,7 +214,7 @@ function AutomationModal({
                                         </p>
                                     </div>
                                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                                        <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold mb-2">
+                                        <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 text-xs font-bold mb-2">
                                             <Regex size={12} /> Regex Reference
                                         </div>
                                         <p className="text-[11px] text-muted leading-relaxed mb-2.5">
@@ -222,21 +222,21 @@ function AutomationModal({
                                         </p>
                                         <div className="text-[10px] text-muted space-y-2">
                                             <div className="bg-elevated p-2 rounded border border-theme">
-                                                <code className="text-amber-300 font-mono tracking-wider">\b(buy|purchase|order)\b</code>
+                                                <code className="text-amber-700 dark:text-amber-300 font-mono tracking-wider">\b(buy|purchase|order)\b</code>
                                                 <p className="mt-1 leading-relaxed">Matches any of those exact words, but ignores variations like &quot;buying&quot; or &quot;preorder&quot;.</p>
                                             </div>
                                             <div className="bg-elevated p-2 rounded border border-theme">
-                                                <code className="text-amber-300 font-mono tracking-wider">{"^start.*"}</code>
+                                                <code className="text-amber-700 dark:text-amber-300 font-mono tracking-wider">{"^start.*"}</code>
                                                 <p className="mt-1 leading-relaxed">Matches any message that <em>begins</em> with the word &quot;start&quot;.</p>
                                             </div>
                                             <div className="bg-elevated p-2 rounded border border-theme">
-                                                <code className="text-amber-300 font-mono tracking-wider">{"\\d{5}"}</code>
+                                                <code className="text-amber-700 dark:text-amber-300 font-mono tracking-wider">{"\\d{5}"}</code>
                                                 <p className="mt-1 leading-relaxed">Matches if the message contains exactly a 5-digit number (e.g., zip codes).</p>
                                             </div>
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="flex items-center gap-1.5 text-pink-400 text-xs font-bold mb-1">
+                                        <div className="flex items-center gap-1.5 text-pink-600 dark:text-pink-400 text-xs font-bold mb-1">
                                             <Brain size={12} /> AI Intent
                                         </div>
                                         <p className="text-[11px] text-muted leading-relaxed">
@@ -306,7 +306,7 @@ function AutomationModal({
                                 onClick={() => setReplyMode('standard')}
                                 className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-md transition-all ${replyMode === 'standard'
                                     ? 'bg-emerald-500 text-black'
-                                    : 'text-zinc-400 hover:text-white'
+                                    : 'text-muted hover:text-primary'
                                     }`}
                             >
                                 <MessageSquare size={12} />
@@ -317,7 +317,7 @@ function AutomationModal({
                                 onClick={() => setReplyMode('template')}
                                 className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-md transition-all ${replyMode === 'template'
                                     ? 'bg-emerald-500 text-black'
-                                    : 'text-zinc-400 hover:text-white'
+                                    : 'text-muted hover:text-primary'
                                     }`}
                             >
                                 <Layout size={12} />
@@ -349,11 +349,11 @@ function AutomationModal({
                                 </label>
                                 {selectedMedia ? (
                                     <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                                        <div className="w-8 h-8 rounded-md bg-emerald-500/20 flex items-center justify-center">
-                                            <ImageIcon size={14} className="text-emerald-400" />
+                                        <div className="w-8 h-8 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center">
+                                            <ImageIcon size={14} className="text-emerald-600 dark:text-emerald-400" />
                                         </div>
-                                        <span className="text-sm text-emerald-300 flex-1 truncate">{selectedMedia.name}</span>
-                                        <button type="button" title="Remove media" onClick={() => setSelectedMedia(null)} className="text-muted hover:text-red-400 transition-colors">
+                                        <span className="text-sm text-emerald-700 dark:text-emerald-300 flex-1 truncate">{selectedMedia.name}</span>
+                                        <button type="button" title="Remove media" onClick={() => setSelectedMedia(null)} className="text-muted hover:text-red-600 dark:text-red-400 transition-colors">
                                             <X size={14} />
                                         </button>
                                     </div>
@@ -399,11 +399,11 @@ function AutomationModal({
                             <label className="block text-xs font-medium text-muted mb-2">Select Template</label>
                             {selectedTemplate ? (
                                 <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/30">
-                                    <div className="w-8 h-8 rounded-md bg-purple-500/20 flex items-center justify-center">
-                                        <Layout size={14} className="text-purple-400" />
+                                    <div className="w-8 h-8 rounded-md bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center">
+                                        <Layout size={14} className="text-purple-600 dark:text-purple-400" />
                                     </div>
-                                    <span className="text-sm text-purple-300 flex-1 truncate">{selectedTemplate.name}</span>
-                                    <button type="button" title="Remove template" onClick={() => setSelectedTemplate(null)} className="text-muted hover:text-red-400 transition-colors">
+                                    <span className="text-sm text-purple-700 dark:text-purple-300 flex-1 truncate">{selectedTemplate.name}</span>
+                                    <button type="button" title="Remove template" onClick={() => setSelectedTemplate(null)} className="text-muted hover:text-red-600 dark:text-red-400 transition-colors">
                                         <X size={14} />
                                     </button>
                                 </div>
@@ -481,14 +481,14 @@ function AutomationModal({
                         <div className="flex items-start gap-2">
                             <div className="text-xs text-muted mt-0.5">When:</div>
                             <div>
-                                <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                                <span className="text-xs bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-mono">
                                     {keyword || 'keyword'}
                                 </span>
                                 <span className="text-xs text-muted mx-1.5">
                                     ({matchType.toLowerCase()} match)
                                 </span>
                                 {priority > 0 && (
-                                    <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+                                    <span className="text-xs bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
                                         P{priority}
                                     </span>
                                 )}
@@ -498,14 +498,14 @@ function AutomationModal({
                             <div className="text-xs text-muted mt-0.5">Sends:</div>
                             <div className="text-xs text-secondary flex-1">
                                 {replyMode === 'template' ? (
-                                    <span className="text-purple-400 flex items-center gap-1">
+                                    <span className="text-purple-600 dark:text-purple-400 flex items-center gap-1">
                                         <Layout size={10} />
                                         {selectedTemplate?.name || 'Rich Template'}
                                     </span>
                                 ) : (
                                     <>
                                         {replyText ? <>&quot;{replyText.substring(0, 60)}{replyText.length > 60 ? '...' : ''}&quot;</> : 'reply text'}
-                                        {selectedMedia && <span className="ml-1 text-emerald-400">+ {selectedMedia.name}</span>}
+                                        {selectedMedia && <span className="ml-1 text-emerald-600 dark:text-emerald-400">+ {selectedMedia.name}</span>}
                                     </>
                                 )}
                             </div>
@@ -514,7 +514,7 @@ function AutomationModal({
 
                     {/* Error */}
                     {isError && (
-                        <p className="text-xs text-red-400">Failed to save automation. Please try again.</p>
+                        <p className="text-xs text-red-600 dark:text-red-400">Failed to save automation. Please try again.</p>
                     )}
 
                     {/* Actions */}
@@ -554,7 +554,7 @@ function StatsBadge({ automationId }: { automationId: string }) {
     if (!data) return null;
 
     return (
-        <div className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+        <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
             <TrendingUp size={10} />
             {data.triggerCount} triggers
         </div>
@@ -591,10 +591,10 @@ export function KeywordAutomationsTab() {
     const automations = Array.isArray(data) ? data : [];
 
     const matchTypeStyles: Record<string, string> = {
-        CONTAINS: 'bg-blue-500/15 text-blue-300',
-        EXACT: 'bg-purple-500/15 text-purple-300',
-        REGEX: 'bg-amber-500/15 text-amber-300',
-        AI_INTENT: 'bg-pink-500/15 text-pink-300',
+        CONTAINS: 'bg-blue-500/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300',
+        EXACT: 'bg-purple-500/10 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300',
+        REGEX: 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300',
+        AI_INTENT: 'bg-pink-500/10 dark:bg-pink-500/15 text-pink-700 dark:text-pink-300',
     };
 
     const matchTypeIcons: Record<string, React.ReactNode> = {
@@ -627,15 +627,15 @@ export function KeywordAutomationsTab() {
             {/* How it works */}
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
                 <div className="flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                        <Zap size={14} className="text-emerald-400" />
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <Zap size={14} className="text-emerald-600 dark:text-emerald-400" />
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-emerald-300">Unified Automation Engine</p>
-                        <p className="text-xs text-zinc-500 mt-0.5 leading-relaxed">
+                        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Unified Automation Engine</p>
+                        <p className="text-xs text-secondary mt-0.5 leading-relaxed">
                             Lead sends &quot;PRICE&quot; → System instantly replies with your pricing card or rich template → AI follows up → You close.
                             <br />
-                            <span className="text-emerald-400">Supports text, media, and interactive button templates in one place.</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">Supports text, media, and interactive button templates in one place.</span>
                         </p>
                     </div>
                 </div>
@@ -652,7 +652,7 @@ export function KeywordAutomationsTab() {
             {!isLoading && automations.length === 0 && (
                 <div className="rounded-xl border border-theme p-10 text-center bg-elevated">
                     <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
-                        <Zap size={22} className="text-emerald-400" />
+                        <Zap size={22} className="text-emerald-600 dark:text-emerald-400" />
                     </div>
                     <p className="text-sm font-medium text-primary mb-1">No keyword automations yet</p>
                     <p className="text-xs text-muted mb-4">
@@ -680,12 +680,12 @@ export function KeywordAutomationsTab() {
                         <div className="flex items-start gap-4">
                             {/* Icon */}
                             <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${auto.isActive
-                                ? auto.template ? 'bg-purple-500/20' : 'bg-emerald-500/20'
-                                : 'bg-white/5'
+                                ? auto.template ? 'bg-purple-500/10 dark:bg-purple-500/20' : 'bg-emerald-500/10 dark:bg-emerald-500/20'
+                                : 'bg-elevated'
                                 }`}>
                                 {auto.template
-                                    ? <Layout size={16} className={auto.isActive ? 'text-purple-400' : 'text-zinc-600'} />
-                                    : <Zap size={16} className={auto.isActive ? 'text-emerald-400' : 'text-zinc-600'} />
+                                    ? <Layout size={16} className={auto.isActive ? 'text-purple-600 dark:text-purple-400' : 'text-zinc-600'} />
+                                    : <Zap size={16} className={auto.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-600'} />
                                 }
                             </div>
 
@@ -702,20 +702,20 @@ export function KeywordAutomationsTab() {
                                     </span>
                                     {/* Priority badge — only shown if > 0 */}
                                     {auto.priority > 0 && (
-                                        <span className="text-[10px] bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <span className="text-[10px] bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                                             <ArrowUpDown size={8} />
                                             P{auto.priority}
                                         </span>
                                     )}
                                     {/* Reply mode badge */}
                                     {auto.template ? (
-                                        <span className="text-[10px] bg-purple-500/15 text-purple-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <span className="text-[10px] bg-purple-500/10 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full flex items-center gap-1">
                                             <Layout size={8} />
                                             Template
                                         </span>
                                     ) : null}
                                     {auto.intent && (
-                                        <span className="text-[10px] bg-orange-500/15 text-orange-300 px-2 py-0.5 rounded-full">
+                                        <span className="text-[10px] bg-orange-500/10 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 px-2 py-0.5 rounded-full">
                                             {auto.intent}
                                         </span>
                                     )}
@@ -725,7 +725,7 @@ export function KeywordAutomationsTab() {
                                 {/* Reply preview */}
                                 <p className="text-xs text-muted mt-1.5 line-clamp-2 leading-relaxed">
                                     {auto.template ? (
-                                        <span className="flex items-center gap-1 text-purple-400">
+                                        <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
                                             <Layout size={10} className="shrink-0" />
                                             {auto.template.name}
                                         </span>
@@ -759,7 +759,7 @@ export function KeywordAutomationsTab() {
                                     onClick={() => { setEditingRule(auto); setShowModal(true); }}
                                     className="p-1.5 rounded-lg hover:bg-hover transition-colors"
                                 >
-                                    <Pencil size={15} className="text-zinc-500 hover:text-white transition-colors" />
+                                    <Pencil size={15} className="text-secondary hover:text-primary transition-colors" />
                                 </button>
                                 <button
                                     title={auto.isActive ? 'Disable' : 'Enable'}
@@ -767,7 +767,7 @@ export function KeywordAutomationsTab() {
                                     className="p-1.5 rounded-lg hover:bg-hover transition-colors"
                                 >
                                     {auto.isActive
-                                        ? <ToggleRight size={18} className="text-emerald-400" />
+                                        ? <ToggleRight size={18} className="text-emerald-600 dark:text-emerald-400" />
                                         : <ToggleLeft size={18} className="text-muted" />}
                                 </button>
                                 {confirmDelete === auto.id ? (
@@ -776,9 +776,9 @@ export function KeywordAutomationsTab() {
                                             title="Confirm delete"
                                             aria-label="Confirm delete automation"
                                             onClick={() => deleteMutation.mutate(auto.id)}
-                                            className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 transition-colors"
+                                            className="p-1.5 rounded-lg bg-red-500/10 dark:bg-red-500/20 hover:bg-red-500/30 transition-colors"
                                         >
-                                            <Check size={14} className="text-red-400" />
+                                            <Check size={14} className="text-red-600 dark:text-red-400" />
                                         </button>
                                         <button
                                             title="Cancel delete"
@@ -795,7 +795,7 @@ export function KeywordAutomationsTab() {
                                         onClick={() => setConfirmDelete(auto.id)}
                                         className="p-1.5 rounded-lg hover:bg-hover transition-colors"
                                     >
-                                        <Trash2 size={15} className="text-muted/70 hover:text-red-400 transition-colors" />
+                                        <Trash2 size={15} className="text-muted/70 hover:text-red-600 dark:text-red-400 transition-colors" />
                                     </button>
                                 )}
                             </div>

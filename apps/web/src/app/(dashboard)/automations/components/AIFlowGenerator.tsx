@@ -60,8 +60,8 @@ export function AIFlowGenerator({ onClose, onFlowGenerated }: AIFlowGeneratorPro
             <div className="bg-surface border border-theme rounded-2xl shadow-2xl w-full max-w-lg flex flex-col gap-0 overflow-hidden">
                 {/* Header */}
                 <div className="px-6 py-5 border-b border-theme flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
-                        <Sparkles size={18} className="text-blue-400" />
+                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 dark:bg-blue-500/15 flex items-center justify-center">
+                        <Sparkles size={18} className="text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex flex-col flex-1">
                         <h2 className="font-bold text-primary text-base">AI Flow Generator</h2>
@@ -119,7 +119,7 @@ export function AIFlowGenerator({ onClose, onFlowGenerated }: AIFlowGeneratorPro
                     </div>
 
                     {error && (
-                        <div className="text-xs text-red-400 bg-red-400/10 border border-red-500/20 px-3 py-2 rounded-lg">
+                        <div className="text-xs text-red-600 dark:text-red-400 bg-red-400/10 border border-red-500/20 px-3 py-2 rounded-lg">
                             {error}
                         </div>
                     )}

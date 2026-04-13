@@ -12,10 +12,10 @@ import {
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
     lead_capture:  { label: 'Lead Capture',       icon: <Zap size={16} />,          color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/20' },
-    support:       { label: 'Customer Support',    icon: <MessageSquare size={16} />, color: 'text-blue-400',   bg: 'bg-blue-400/10 border-blue-400/20' },
-    dealer:        { label: 'Dealer Inquiry',      icon: <Tag size={16} />,           color: 'text-purple-400', bg: 'bg-purple-400/10 border-purple-400/20' },
-    campaign:      { label: 'Campaign Follow-Up',  icon: <Clock size={16} />,         color: 'text-orange-400', bg: 'bg-orange-400/10 border-orange-400/20' },
-    appointment:   { label: 'Appointment Booking', icon: <CalendarClock size={16} />, color: 'text-emerald-400',bg: 'bg-emerald-400/10 border-emerald-400/20' },
+    support:       { label: 'Customer Support',    icon: <MessageSquare size={16} />, color: 'text-blue-600 dark:text-blue-400',   bg: 'bg-blue-400/10 border-blue-400/20' },
+    dealer:        { label: 'Dealer Inquiry',      icon: <Tag size={16} />,           color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-400/10 border-purple-400/20' },
+    campaign:      { label: 'Campaign Follow-Up',  icon: <Clock size={16} />,         color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-400/10 border-orange-400/20' },
+    appointment:   { label: 'Appointment Booking', icon: <CalendarClock size={16} />, color: 'text-emerald-600 dark:text-emerald-400',bg: 'bg-emerald-400/10 border-emerald-400/20' },
 };
 
 const ALL_CATEGORIES = ['all', ...Object.keys(CATEGORY_META)];
@@ -137,7 +137,7 @@ export default function TemplateGalleryPage() {
                                 onClick={() => setActiveCategory(cat)}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                                     activeCategory === cat
-                                        ? 'bg-primary text-white border-primary shadow-sm shadow-primary/20'
+                                        ? 'bg-primary text-primary border-primary shadow-sm shadow-primary/20'
                                         : 'bg-elevated border-theme text-secondary hover:text-primary hover:border-blue-500/30'
                                 }`}
                             >
@@ -150,8 +150,8 @@ export default function TemplateGalleryPage() {
 
                 {/* AI Generator CTA */}
                 <div className="rounded-xl border border-dashed border-blue-500/30 bg-blue-500/5 p-4 flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center shrink-0">
-                        <Sparkles size={20} className="text-blue-400" />
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 dark:bg-blue-500/15 flex items-center justify-center shrink-0">
+                        <Sparkles size={20} className="text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex-1">
                         <h4 className="font-semibold text-primary text-sm">Can&apos;t find what you need?</h4>

@@ -159,7 +159,7 @@ export function AutoRepliesTab() {
                 {!showForm && (
                     <button
                         onClick={startCreate}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg border-none bg-gradient-to-br from-indigo-500 to-violet-500 text-white text-[13px] font-semibold cursor-pointer"
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg border-none bg-gradient-to-br from-indigo-500 to-violet-500 text-primary text-[13px] font-semibold cursor-pointer"
                     >
                         <Plus size={15} /> New Auto Reply
                     </button>
@@ -193,7 +193,7 @@ export function AutoRepliesTab() {
                             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium border cursor-pointer transition-all ${
                                 mode === 'standard'
                                     ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
-                                    : 'bg-transparent border-white/10 text-slate-500'
+                                    : 'bg-transparent border-theme text-slate-500'
                             }`}
                         >
                             <MessageSquare size={13} /> Standard Message
@@ -203,7 +203,7 @@ export function AutoRepliesTab() {
                             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium border cursor-pointer transition-all ${
                                 mode === 'template'
                                     ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
-                                    : 'bg-transparent border-white/10 text-slate-500'
+                                    : 'bg-transparent border-theme text-slate-500'
                             }`}
                         >
                             <LayoutTemplate size={13} /> Rich Template
@@ -322,7 +322,7 @@ export function AutoRepliesTab() {
                         <button
                             onClick={handleSave}
                             disabled={saving || !canSave}
-                            className={`flex items-center gap-1.5 px-5 py-2 rounded-lg border-none text-white text-[13px] font-semibold cursor-pointer ${
+                            className={`flex items-center gap-1.5 px-5 py-2 rounded-lg border-none text-primary text-[13px] font-semibold cursor-pointer ${
                                 saving || !canSave
                                     ? 'bg-indigo-500/40 cursor-not-allowed'
                                     : 'bg-gradient-to-br from-indigo-500 to-violet-500'
@@ -352,7 +352,7 @@ export function AutoRepliesTab() {
                     <p className="text-muted text-sm m-0">No auto replies yet</p>
                     <button
                         onClick={startCreate}
-                        className="mt-1 px-5 py-2 rounded-lg border-none bg-gradient-to-br from-indigo-500 to-violet-500 text-white text-[13px] font-semibold cursor-pointer"
+                        className="mt-1 px-5 py-2 rounded-lg border-none bg-gradient-to-br from-indigo-500 to-violet-500 text-primary text-[13px] font-semibold cursor-pointer"
                     >
                         Create first auto reply
                     </button>
@@ -367,7 +367,7 @@ export function AutoRepliesTab() {
                             }`}
                         >
                             {/* Keyword badge */}
-                            <div className="px-2.5 py-1 rounded-md flex-shrink-0 bg-emerald-500/15 border border-emerald-500/25 text-xs font-bold text-emerald-400 font-mono">
+                            <div className="px-2.5 py-1 rounded-md flex-shrink-0 bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                                 {ar.keyword}
                             </div>
 
