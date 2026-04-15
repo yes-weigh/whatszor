@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
 import api from '@/lib/api';
-import { Bot, Loader2 } from 'lucide-react';
+import { Bot, Loader2, ArrowLeft } from 'lucide-react';
 
 export default function RegisterPage() {
     const [form, setForm] = useState({ name: '', email: '', password: '', workspaceName: '', workspaceSlug: '' });
@@ -63,7 +64,13 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-base">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-base relative">
+            {/* Back to Home UI */}
+            <Link href="/" className="absolute top-6 left-6 flex items-center gap-2 text-sm text-muted hover:text-primary transition-colors">
+                <ArrowLeft size={16} />
+                <span>Back to Home</span>
+            </Link>
+
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full opacity-20 bg-glow-purple" />
             </div>

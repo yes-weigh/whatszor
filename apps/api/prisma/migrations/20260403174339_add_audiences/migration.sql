@@ -25,10 +25,11 @@ ADD COLUMN     "audience_id" TEXT;
 ALTER TABLE "keyword_automations" ADD COLUMN     "legacy_id" TEXT,
 ADD COLUMN     "priority" INTEGER NOT NULL DEFAULT 0,
 ADD COLUMN     "template_id" TEXT,
-ALTER COLUMN "match_type" TYPE "MatchType" USING UPPER("match_type"::text)::"MatchType",
-ALTER COLUMN "match_type" SET DEFAULT 'CONTAINS',
 ALTER COLUMN "reply_text" DROP NOT NULL,
 ALTER COLUMN "updated_at" DROP DEFAULT;
+ALTER TABLE "keyword_automations" ALTER COLUMN "match_type" DROP DEFAULT;
+ALTER TABLE "keyword_automations" ALTER COLUMN "match_type" TYPE "MatchType" USING UPPER("match_type"::text)::"MatchType";
+ALTER TABLE "keyword_automations" ALTER COLUMN "match_type" SET DEFAULT 'CONTAINS';
 
 -- CreateTable
 CREATE TABLE "audiences" (
@@ -86,8 +87,7 @@ ALTER TABLE "keyword_automations" ADD CONSTRAINT "keyword_automations_template_i
 -- AddForeignKey
 ALTER TABLE "audiences" ADD CONSTRAINT "audiences_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
-ALTER TABLE "audiences" ADD CONSTRAINT "audiences_lead_list_id_fkey" FOREIGN KEY ("lead_list_id") REFERENCES "lead_lists"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- NOTE: audiences_lead_list_id_fkey is added in the next migration (20260403211729) after lead_lists is created
 
 -- AddForeignKey
 ALTER TABLE "audience_members" ADD CONSTRAINT "audience_members_audience_id_fkey" FOREIGN KEY ("audience_id") REFERENCES "audiences"("id") ON DELETE CASCADE ON UPDATE CASCADE;

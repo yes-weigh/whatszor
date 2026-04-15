@@ -74,3 +74,6 @@ ALTER TABLE "leads" ADD CONSTRAINT "leads_workspace_id_fkey" FOREIGN KEY ("works
 
 -- AddForeignKey
 ALTER TABLE "leads" ADD CONSTRAINT "leads_contact_id_fkey" FOREIGN KEY ("contact_id") REFERENCES "contacts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey (deferred from previous migration — lead_lists didn't exist yet)
+ALTER TABLE "audiences" ADD CONSTRAINT "audiences_lead_list_id_fkey" FOREIGN KEY ("lead_list_id") REFERENCES "lead_lists"("id") ON DELETE SET NULL ON UPDATE CASCADE;

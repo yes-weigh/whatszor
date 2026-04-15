@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { motion, useScroll, useTransform, useMotionTemplate, useMotionValue } from 'framer-motion';
-import { MouseEvent } from 'react';
+import { MouseEvent, useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
 import { 
     ArrowRight, Bot, Zap, ImageIcon, Users, MessageSquare, 
     TrendingUp, ShieldCheck, CheckCircle2, 
     BarChart3, Database, Play, AlertCircle, PhoneMissed, 
-    Clock, Store, Building2, MonitorSmartphone, Briefcase, Star
+    Clock, Store, Building2, MonitorSmartphone, Briefcase, Star,
+    Sun, Moon
 } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
@@ -27,10 +29,10 @@ function GlowCard({ children, className = "" }: { children: React.ReactNode, cla
     return (
         <div 
             onMouseMove={handleMouseMove}
-            className={`group relative overflow-hidden rounded-2xl bg-zinc-900/40 border border-white/5 backdrop-blur-md ${className}`}
+            className={`group relative overflow-hidden rounded-2xl bg-surface border border-theme hover:border-strong backdrop-blur-md transition-colors ${className}`}
         >
             <motion.div
-                className="pointer-events-none absolute -inset-px rounded-xl opacity-0 transition duration-500 group-hover:opacity-100"
+                className="pointer-events-none absolute -inset-px rounded-xl opacity-0 transition duration-500 group-hover:opacity-100 dark:block hidden"
                 style={{
                     background: useMotionTemplate`
                         radial-gradient(
@@ -48,6 +50,23 @@ function GlowCard({ children, className = "" }: { children: React.ReactNode, cla
     );
 }
 
+function LandingThemeToggle() {
+    const { theme, setTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+    if (!mounted) return null;
+    const isDark = theme === 'dark';
+    return (
+        <button 
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+            className="p-2 rounded-full text-muted hover:text-primary hover:bg-hover transition-colors"
+            aria-label="Toggle theme"
+        >
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+    );
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               MAIN PAGE COMPONENT                          */
 /* -------------------------------------------------------------------------- */
@@ -58,7 +77,7 @@ export default function LandingPage() {
     const opacityHero = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
 
     return (
-        <div className="min-h-screen bg-black font-sans text-zinc-300 selection:bg-emerald-500/30 selection:text-emerald-200 overflow-x-hidden">
+        <div className="min-h-screen bg-base font-sans text-secondary selection:bg-emerald-500/30 selection:text-emerald-200 overflow-x-hidden transition-colors">
             
             {/* Animated Background Gradients & Particles */}
             <div className="fixed inset-0 z-0 pointer-events-none">
@@ -69,22 +88,23 @@ export default function LandingPage() {
             </div>
 
             {/* Navbar */}
-            <header className="fixed inset-x-0 top-0 z-50 bg-black/50 backdrop-blur-xl border-b border-white/5">
+            <header className="fixed inset-x-0 top-0 z-50 bg-base/80 backdrop-blur-xl border-b border-theme transition-colors">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         <div className="flex items-center gap-2">
                             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 text-black">
                                 <MessageSquare className="h-5 w-5" />
                             </div>
-                            <span className="text-xl font-bold tracking-tight text-white">WhatsVue</span>
+                            <span className="text-xl font-bold tracking-tight text-primary">WhatsVue</span>
                         </div>
-                        <div className="flex items-center gap-6">
-                            <Link href="/login" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors hidden sm:block">
+                        <div className="flex items-center gap-4 sm:gap-6">
+                            <LandingThemeToggle />
+                            <Link href="/login" className="text-sm font-medium text-muted hover:text-primary transition-colors hidden sm:block">
                                 Sign In
                             </Link>
                             <Link
                                 href="/register"
-                                className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2 text-sm font-semibold text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 transition-all"
+                                className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2 text-sm font-semibold text-white sm:text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 transition-all"
                             >
                                 Start Free Trial
                             </Link>
@@ -118,14 +138,14 @@ export default function LandingPage() {
                                 
                                 <motion.h1 
                                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
-                                    className="text-5xl font-extrabold tracking-tight text-white sm:text-6xl lg:text-7xl leading-[1.1]"
+                                    className="text-5xl font-extrabold tracking-tight text-primary sm:text-6xl lg:text-7xl leading-[1.1]"
                                 >
-                                    Turn WhatsApp into Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Sales Engine</span>
+                                    Turn WhatsApp into Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-cyan-500 dark:from-emerald-400 dark:to-cyan-400">Sales Engine</span>
                                 </motion.h1>
                                 
                                 <motion.p 
                                     initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
-                                    className="mt-6 text-xl leading-8 text-zinc-400"
+                                    className="mt-6 text-xl leading-8 text-secondary"
                                 >
                                     Stop losing leads from unread messages. Automate your ad replies, launch bulk campaigns in seconds, and close deals faster with AI.
                                 </motion.p>
@@ -136,14 +156,14 @@ export default function LandingPage() {
                                 >
                                     <Link
                                         href="/register"
-                                        className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-emerald-500 px-8 py-4 text-base font-bold text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:scale-105 transition-all"
+                                        className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-emerald-500 px-8 py-4 text-base font-bold text-white dark:text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:scale-105 transition-all"
                                     >
                                         Start Campaign in 2 Minutes
                                         <ArrowRight className="h-5 w-5" />
                                     </Link>
                                     <a
                                         href="#demo"
-                                        className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-zinc-900 border border-zinc-700 px-8 py-4 text-base font-semibold text-white hover:bg-zinc-800 transition-colors"
+                                        className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-surface border border-strong px-8 py-4 text-base font-semibold text-primary hover:bg-hover transition-colors"
                                     >
                                         <Play className="h-4 w-4 fill-current" />
                                         See Demo
@@ -152,7 +172,7 @@ export default function LandingPage() {
                                 
                                 <motion.div 
                                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} 
-                                    className="mt-8 flex items-center gap-6 text-sm text-zinc-500 font-medium"
+                                    className="mt-8 flex flex-wrap items-center gap-6 text-sm text-muted font-medium"
                                 >
                                     <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Bulk campaigns</div>
                                     <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Auto replies from ads</div>
@@ -165,39 +185,38 @@ export default function LandingPage() {
                                 initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8, delay: 0.2 }}
                                 className="relative hidden lg:block"
                             >
-                                {/* Abstract automation flow visual */}
-                                <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/10 to-transparent blur-3xl opacity-50 rounded-full" />
-                                <div className="relative h-[500px] w-full rounded-2xl border border-white/10 bg-zinc-950/50 backdrop-blur-xl shadow-2xl p-6 flex flex-col justify-center">
+                                <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/10 to-transparent blur-3xl opacity-50 rounded-full dark:opacity-50 opacity-20" />
+                                <div className="relative h-[500px] w-full rounded-2xl border border-theme bg-surface/80 backdrop-blur-xl shadow-2xl p-6 flex flex-col justify-center">
                                     
                                     {/* Animated Nodes */}
                                     <div className="space-y-6 relative z-10 w-full max-w-sm mx-auto">
-                                        <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.5 }} className="bg-zinc-900 p-4 rounded-xl border border-white/5 shadow-lg flex items-center gap-4">
-                                            <div className="bg-blue-500/20 text-blue-400 p-3 rounded-lg"><MonitorSmartphone className="h-6 w-6" /></div>
+                                        <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.5 }} className="bg-elevated p-4 rounded-xl border border-theme shadow-lg flex items-center gap-4">
+                                            <div className="bg-blue-500/20 text-blue-500 p-3 rounded-lg"><MonitorSmartphone className="h-6 w-6" /></div>
                                             <div>
-                                                <p className="text-white text-sm font-semibold">User clicked FB Ad</p>
-                                                <p className="text-zinc-500 text-xs">&quot;Interested in catalog&quot;</p>
+                                                <p className="text-primary text-sm font-semibold">User clicked FB Ad</p>
+                                                <p className="text-muted text-xs">&quot;Interested in catalog&quot;</p>
                                             </div>
                                         </motion.div>
                                         
                                         {/* Connector */}
-                                        <div className="w-1 h-8 bg-gradient-to-b from-zinc-800 to-emerald-500/50 ml-10 rounded-full"></div>
+                                        <div className="w-1 h-8 bg-gradient-to-b from-theme to-emerald-500/50 ml-10 rounded-full"></div>
                                         
-                                        <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.8 }} className="bg-emerald-950/40 p-4 rounded-xl border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)] flex items-center gap-4 relative ml-8">
-                                            <div className="bg-emerald-500 text-black p-3 rounded-lg"><Zap className="h-6 w-6" /></div>
+                                        <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.8 }} className="bg-emerald-500/10 p-4 rounded-xl border border-emerald-500/30 shadow-lg flex items-center gap-4 relative ml-8">
+                                            <div className="bg-emerald-500 text-white dark:text-black p-3 rounded-lg"><Zap className="h-6 w-6" /></div>
                                             <div>
-                                                <p className="text-emerald-100 text-sm font-semibold">Auto-Reply Triggered</p>
-                                                <p className="text-emerald-500/80 text-xs">Instantly sent PDF + Pricing</p>
+                                                <p className="text-emerald-700 dark:text-emerald-100 text-sm font-semibold">Auto-Reply Triggered</p>
+                                                <p className="text-emerald-600 dark:text-emerald-500 text-xs">Instantly sent PDF + Pricing</p>
                                             </div>
                                         </motion.div>
 
                                         {/* Connector */}
-                                        <div className="w-1 h-8 bg-gradient-to-b from-emerald-500/50 to-emerald-400 ml-16 rounded-full"></div>
+                                        <div className="w-1 h-8 bg-gradient-to-b from-emerald-500/50 to-emerald-500 ml-16 rounded-full"></div>
 
-                                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1.1 }} className="bg-zinc-900 p-4 rounded-xl border border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.2)] flex items-center gap-4 relative ml-12">
-                                            <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 text-black p-3 rounded-full"><TrendingUp className="h-6 w-6" /></div>
+                                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1.1 }} className="bg-elevated p-4 rounded-xl border border-emerald-500/50 shadow-xl flex items-center gap-4 relative ml-12">
+                                            <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 text-white dark:text-black p-3 rounded-full"><TrendingUp className="h-6 w-6" /></div>
                                             <div>
-                                                <p className="text-white text-sm font-bold">Deal Closed!</p>
-                                                <p className="text-zinc-400 text-xs">Collected ₹1,500 automatically</p>
+                                                <p className="text-primary text-sm font-bold">Deal Closed!</p>
+                                                <p className="text-muted text-xs">Collected ₹1,500 automatically</p>
                                             </div>
                                         </motion.div>
                                     </div>
@@ -210,7 +229,7 @@ export default function LandingPage() {
                 </section>
 
                 {/* 2. STORY FLOW: Problem -> Solution */}
-                <section className="py-24 border-y border-white/5 bg-zinc-950">
+                <section className="py-24 border-y border-theme bg-surface transition-colors">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
                             
@@ -218,15 +237,15 @@ export default function LandingPage() {
                             <motion.div 
                                 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}
                             >
-                                <div className="text-red-400 text-sm font-bold tracking-wider uppercase mb-2">The Old Way</div>
-                                <h2 className="text-3xl font-bold text-white mb-6">Leads coming from ads<br/>→ no response<br/>→ lost sales.</h2>
-                                <GlowCard className="p-6 bg-red-950/10 border-red-900/30">
+                                <div className="text-red-500 text-sm font-bold tracking-wider uppercase mb-2">The Old Way</div>
+                                <h2 className="text-3xl font-bold text-primary mb-6">Leads coming from ads<br/>→ no response<br/>→ lost sales.</h2>
+                                <GlowCard className="p-6 bg-red-500/5 border border-red-500/20">
                                     <div className="space-y-4">
-                                        <div className="flex items-center gap-3 opacity-50"><PhoneMissed className="text-red-400 h-5 w-5" /> <span className="text-zinc-400">Customer 1: Left waiting 4 hrs</span></div>
-                                        <div className="flex items-center gap-3 opacity-50"><AlertCircle className="text-red-400 h-5 w-5" /> <span className="text-zinc-400">Customer 2: Ignored on Facebook</span></div>
-                                        <div className="flex items-center gap-3 opacity-50"><Clock className="text-red-400 h-5 w-5" /> <span className="text-zinc-400">Customer 3: Saw ad, got bored</span></div>
+                                        <div className="flex items-center gap-3 opacity-60"><PhoneMissed className="text-red-500 h-5 w-5" /> <span className="text-secondary">Customer 1: Left waiting 4 hrs</span></div>
+                                        <div className="flex items-center gap-3 opacity-60"><AlertCircle className="text-red-500 h-5 w-5" /> <span className="text-secondary">Customer 2: Ignored on Facebook</span></div>
+                                        <div className="flex items-center gap-3 opacity-60"><Clock className="text-red-500 h-5 w-5" /> <span className="text-secondary">Customer 3: Saw ad, got bored</span></div>
                                     </div>
-                                    <div className="mt-6 pt-6 border-t border-red-900/30 text-red-200/80 text-sm">
+                                    <div className="mt-6 pt-6 border-t border-red-500/20 text-red-600 dark:text-red-300 text-sm">
                                         You are paying for ads, but throwing the leads away because manual WhatsApp is too slow.
                                     </div>
                                 </GlowCard>
@@ -236,23 +255,23 @@ export default function LandingPage() {
                             <motion.div 
                                 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.2 }}
                             >
-                                <div className="text-emerald-400 text-sm font-bold tracking-wider uppercase mb-2">The WhatsVue Way</div>
-                                <h2 className="text-3xl font-bold text-white mb-6">Zero delays. Total automation. Maximum conversion.</h2>
+                                <div className="text-emerald-500 text-sm font-bold tracking-wider uppercase mb-2">The WhatsVue Way</div>
+                                <h2 className="text-3xl font-bold text-primary mb-6">Zero delays. Total automation. Maximum conversion.</h2>
                                 <GlowCard className="p-6">
                                     <div className="flex flex-col gap-2">
-                                        <div className="flex items-center gap-4 bg-zinc-900/80 p-3 rounded-lg border border-white/5">
-                                            <span className="flex-shrink-0 bg-emerald-500/20 text-emerald-400 text-xs font-bold px-2 py-1 rounded">1. ADS</span>
-                                            <span className="text-sm">User clicks Facebook or Insta Ad</span>
+                                        <div className="flex items-center gap-4 bg-elevated/80 p-3 rounded-lg border border-theme">
+                                            <span className="flex-shrink-0 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold px-2 py-1 rounded">1. ADS</span>
+                                            <span className="text-sm text-primary">User clicks Facebook or Insta Ad</span>
                                         </div>
-                                        <div className="flex justify-center"><ArrowRight className="h-4 w-4 text-zinc-600 rotate-90" /></div>
-                                        <div className="flex items-center gap-4 bg-zinc-900/80 p-3 rounded-lg border border-white/5">
-                                            <span className="flex-shrink-0 bg-emerald-500/20 text-emerald-400 text-xs font-bold px-2 py-1 rounded">2. KEYWORD</span>
-                                            <span className="text-sm">Sends automated trigger (&quot;Hi!&quot;)</span>
+                                        <div className="flex justify-center"><ArrowRight className="h-4 w-4 text-muted rotate-90" /></div>
+                                        <div className="flex items-center gap-4 bg-elevated/80 p-3 rounded-lg border border-theme">
+                                            <span className="flex-shrink-0 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold px-2 py-1 rounded">2. KEYWORD</span>
+                                            <span className="text-sm text-primary">Sends automated trigger (&quot;Hi!&quot;)</span>
                                         </div>
-                                        <div className="flex justify-center"><ArrowRight className="h-4 w-4 text-zinc-600 rotate-90" /></div>
-                                        <div className="flex items-center gap-4 bg-emerald-900/20 p-3 rounded-lg border border-emerald-500/20">
-                                            <span className="flex-shrink-0 bg-emerald-500 text-black text-xs font-bold px-2 py-1 rounded">3. CONVERT</span>
-                                            <span className="text-sm font-semibold text-emerald-50">Instant AI response & Media sharing</span>
+                                        <div className="flex justify-center"><ArrowRight className="h-4 w-4 text-muted rotate-90" /></div>
+                                        <div className="flex items-center gap-4 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
+                                            <span className="flex-shrink-0 bg-emerald-500 text-white dark:text-black text-xs font-bold px-2 py-1 rounded">3. CONVERT</span>
+                                            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Instant AI response & Media sharing</span>
                                         </div>
                                     </div>
                                 </GlowCard>
@@ -263,21 +282,21 @@ export default function LandingPage() {
                 </section>
 
                 {/* 3. BUSINESS VALUE FEATURES */}
-                <section className="py-24 bg-black relative">
+                <section className="py-24 bg-base relative transition-colors">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="text-center max-w-3xl mx-auto mb-16">
-                            <h2 className="text-3xl font-bold text-white sm:text-4xl mb-4">Features built strictly to increase your revenue</h2>
-                            <p className="text-zinc-400 text-lg">We didn&apos;t build vanity metrics. We built tools that directly map to closing more sales on WhatsApp.</p>
+                            <h2 className="text-3xl font-bold text-primary sm:text-4xl mb-4">Features built strictly to increase your revenue</h2>
+                            <p className="text-muted text-lg">We didn&apos;t build vanity metrics. We built tools that directly map to closing more sales on WhatsApp.</p>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <GlowCard className="p-8">
                                 <div className="flex gap-4 items-start">
-                                    <div className="bg-zinc-800 p-3 rounded-xl text-emerald-400"><Users className="h-6 w-6" /></div>
+                                    <div className="bg-elevated p-3 rounded-xl border border-theme text-emerald-500"><Users className="h-6 w-6" /></div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-white mb-2">Bulk WhatsApp Campaigns</h3>
-                                        <p className="text-zinc-400 mb-4">Send personalized offers and festival greetings instantly.</p>
-                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
+                                        <h3 className="text-xl font-bold text-primary mb-2">Bulk WhatsApp Campaigns</h3>
+                                        <p className="text-secondary mb-4">Send personalized offers and festival greetings instantly.</p>
+                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
                                             Outcome: Reach 1000+ customers instantly
                                         </div>
                                     </div>
@@ -286,11 +305,11 @@ export default function LandingPage() {
 
                             <GlowCard className="p-8">
                                 <div className="flex gap-4 items-start">
-                                    <div className="bg-zinc-800 p-3 rounded-xl text-emerald-400"><Zap className="h-6 w-6" /></div>
+                                    <div className="bg-elevated p-3 rounded-xl border border-theme text-emerald-500"><Zap className="h-6 w-6" /></div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-white mb-2">Keyword Auto Replies</h3>
-                                        <p className="text-zinc-400 mb-4">Target specific keywords to trigger exact PDF menus or pricing.</p>
-                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
+                                        <h3 className="text-xl font-bold text-primary mb-2">Keyword Auto Replies</h3>
+                                        <p className="text-secondary mb-4">Target specific keywords to trigger exact PDF menus or pricing.</p>
+                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
                                             Outcome: Never miss a targeted lead
                                         </div>
                                     </div>
@@ -299,11 +318,11 @@ export default function LandingPage() {
 
                             <GlowCard className="p-8">
                                 <div className="flex gap-4 items-start">
-                                    <div className="bg-zinc-800 p-3 rounded-xl text-emerald-400"><Bot className="h-6 w-6" /></div>
+                                    <div className="bg-elevated p-3 rounded-xl border border-theme text-emerald-500"><Bot className="h-6 w-6" /></div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-white mb-2">AI Reply Suggestions</h3>
-                                        <p className="text-zinc-400 mb-4">Empower your staff with 1-click intelligent responses to FAQs.</p>
-                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
+                                        <h3 className="text-xl font-bold text-primary mb-2">AI Reply Suggestions</h3>
+                                        <p className="text-secondary mb-4">Empower your staff with 1-click intelligent responses to FAQs.</p>
+                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
                                             Outcome: Faster closing times
                                         </div>
                                     </div>
@@ -312,11 +331,11 @@ export default function LandingPage() {
 
                             <GlowCard className="p-8">
                                 <div className="flex gap-4 items-start">
-                                    <div className="bg-zinc-800 p-3 rounded-xl text-emerald-400"><ImageIcon className="h-6 w-6" /></div>
+                                    <div className="bg-elevated p-3 rounded-xl border border-theme text-emerald-500"><ImageIcon className="h-6 w-6" /></div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-white mb-2">Automated Media Storage</h3>
-                                        <p className="text-zinc-400 mb-4">Store catalogs and videos once, send via automation forever.</p>
-                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
+                                        <h3 className="text-xl font-bold text-primary mb-2">Automated Media Storage</h3>
+                                        <p className="text-secondary mb-4">Store catalogs and videos once, send via automation forever.</p>
+                                        <div className="inline-block bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-sm font-semibold">
                                             Outcome: Instant product sharing
                                         </div>
                                     </div>
@@ -326,13 +345,13 @@ export default function LandingPage() {
                     </div>
                 </section>
 
-                {/* 4. PRODUCT PREVIEW (CSS MOCKUP) */}
-                <section className="py-24 bg-zinc-950 relative overflow-hidden" id="demo">
-                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+                {/* 4. PRODUCT PREVIEW (CSS MOCKUP) - Force dark mode look for this mock to mimic SaaS UI */}
+                <section className="py-24 bg-surface relative overflow-hidden transition-colors" id="demo">
+                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-theme to-transparent"></div>
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="text-left mb-12">
-                            <h2 className="text-3xl font-bold text-white sm:text-4xl mb-4">Command your business from a single pane of glass.</h2>
-                            <p className="text-zinc-400 text-lg">No more passing phones around. Your team, analytics, and chats live here.</p>
+                            <h2 className="text-3xl font-bold text-primary sm:text-4xl mb-4">Command your business from a single pane of glass.</h2>
+                            <p className="text-muted text-lg">No more passing phones around. Your team, analytics, and chats live here.</p>
                         </div>
                         
                         <motion.div 
@@ -435,6 +454,7 @@ export default function LandingPage() {
                                             </div>
                                         </div>
                                     </div>
+                                {/* Hardcoded product UI mocking dark mode SaaS */}
                                 </div>
                             </div>
                         </motion.div>
@@ -442,79 +462,79 @@ export default function LandingPage() {
                 </section>
 
                 {/* 5. TRUST & CONVERSION LAYER */}
-                <section className="py-24 bg-black border-t border-white/5">
+                <section className="py-24 bg-base border-t border-theme transition-colors">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="text-center mb-16">
-                            <h2 className="text-3xl font-bold text-white mb-4">Built strictly for Indian Businesses</h2>
-                            <p className="text-zinc-400">Robust, reliable, and natively integrated with the Official Meta WhatsApp API.</p>
+                            <h2 className="text-3xl font-bold text-primary mb-4">Built strictly for Indian Businesses</h2>
+                            <p className="text-muted">Robust, reliable, and natively integrated with the Official Meta WhatsApp API.</p>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-                            <div className="flex flex-col items-center text-center p-6 bg-zinc-900/30 rounded-2xl border border-white/5">
-                                <Store className="h-10 w-10 text-zinc-500 mb-4" />
-                                <h3 className="text-white font-bold mb-2">Retail & E-commerce</h3>
-                                <p className="text-sm text-zinc-400">Automate catalog sharing and payment follow-ups instantly.</p>
+                            <div className="flex flex-col items-center text-center p-6 bg-surface rounded-2xl border border-theme shadow-sm shadow-theme/30">
+                                <Store className="h-10 w-10 text-muted mb-4" />
+                                <h3 className="text-primary font-bold mb-2">Retail & E-commerce</h3>
+                                <p className="text-sm text-secondary">Automate catalog sharing and payment follow-ups instantly.</p>
                             </div>
-                            <div className="flex flex-col items-center text-center p-6 bg-zinc-900/30 rounded-2xl border border-white/5">
-                                <Building2 className="h-10 w-10 text-zinc-500 mb-4" />
-                                <h3 className="text-white font-bold mb-2">Real Estate</h3>
-                                <p className="text-sm text-zinc-400">Capture leads 24/7 and send property PDFs automatically.</p>
+                            <div className="flex flex-col items-center text-center p-6 bg-surface rounded-2xl border border-theme shadow-sm shadow-theme/30">
+                                <Building2 className="h-10 w-10 text-muted mb-4" />
+                                <h3 className="text-primary font-bold mb-2">Real Estate</h3>
+                                <p className="text-sm text-secondary">Capture leads 24/7 and send property PDFs automatically.</p>
                             </div>
-                            <div className="flex flex-col items-center text-center p-6 bg-zinc-900/30 rounded-2xl border border-white/5">
-                                <Briefcase className="h-10 w-10 text-zinc-500 mb-4" />
-                                <h3 className="text-white font-bold mb-2">Service Agencies</h3>
-                                <p className="text-sm text-zinc-400">Screen leads, book appointments, and collect feedback on autopilot.</p>
+                            <div className="flex flex-col items-center text-center p-6 bg-surface rounded-2xl border border-theme shadow-sm shadow-theme/30">
+                                <Briefcase className="h-10 w-10 text-muted mb-4" />
+                                <h3 className="text-primary font-bold mb-2">Service Agencies</h3>
+                                <p className="text-sm text-secondary">Screen leads, book appointments, and collect feedback on autopilot.</p>
                             </div>
                         </div>
 
                         {/* Testimonial & Credibility */}
-                        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center gap-8 bg-zinc-900/50 rounded-2xl border border-emerald-500/20 p-8 shadow-[0_0_40px_rgba(16,185,129,0.05)]">
+                        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center gap-8 bg-surface rounded-2xl border border-emerald-500/20 p-8 shadow-[0_0_40px_rgba(16,185,129,0.05)]">
                             <div className="flex-1 text-left">
-                                <div className="flex items-center gap-1 mb-4 text-emerald-400">
+                                <div className="flex items-center gap-1 mb-4 text-emerald-500">
                                     {[1,2,3,4,5].map(i => <Star key={i} className="h-5 w-5 fill-current" />)}
                                 </div>
-                                <p className="text-xl text-zinc-300 font-medium italic leading-relaxed mb-6">
+                                <p className="text-xl text-secondary font-medium italic leading-relaxed mb-6">
                                     &quot;Since switching to WhatsVue, our ad spend ROI doubled. We instantly reply to every Facebook lead with a catalog, and the team handles chats from a single dashboard instead of fighting over a phone.&quot;
                                 </p>
                                 <div>
-                                    <p className="text-white font-bold">Arun Sharma</p>
-                                    <p className="text-zinc-500 text-sm">Owner, Prime Retails Mumbai</p>
+                                    <p className="text-primary font-bold">Arun Sharma</p>
+                                    <p className="text-muted text-sm">Owner, Prime Retails Mumbai</p>
                                 </div>
                             </div>
-                            <div className="w-px h-32 bg-white/10 hidden md:block"></div>
+                            <div className="w-px h-32 bg-theme hidden md:block"></div>
                             <div className="flex-shrink-0 text-center flex flex-col items-center justify-center p-4">
                                 <ShieldCheck className="h-12 w-12 text-emerald-500 mb-2" />
-                                <span className="text-white font-semibold text-sm">Powered by</span>
-                                <span className="text-zinc-400 text-xs">Official Cloud API</span>
+                                <span className="text-primary font-semibold text-sm">Powered by</span>
+                                <span className="text-muted text-xs">Official Cloud API</span>
                             </div>
                         </div>
                     </div>
                 </section>
 
                 {/* 6. FINAL CTA (STRONG CLOSE) */}
-                <section className="relative py-32 bg-zinc-950 overflow-hidden border-t border-white/10">
-                    <div className="absolute inset-0 bg-emerald-900/20 blur-3xl rounded-full scale-150 transform translate-y-1/2"></div>
+                <section className="relative py-32 bg-surface overflow-hidden border-t border-theme transition-colors">
+                    <div className="absolute inset-0 bg-emerald-500/10 dark:bg-emerald-900/20 blur-3xl rounded-full scale-150 transform translate-y-1/2"></div>
                     
                     <div className="relative z-10 mx-auto max-w-4xl px-4 text-center">
-                        <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white mb-6">
+                        <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight text-primary mb-6">
                             Stop losing leads. <br/>
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Automate your WhatsApp today.</span>
+                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-cyan-500">Automate your WhatsApp today.</span>
                         </h2>
-                        <p className="mt-4 text-xl text-emerald-100/70 mb-10">
+                        <p className="mt-4 text-xl text-secondary mb-10">
                             Give your business the operational machine it deserves. Set up in 2 minutes.
                         </p>
                         
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                             <Link
                                 href="/register"
-                                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-emerald-500 px-10 py-5 text-lg font-bold text-black shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] hover:bg-emerald-400 focus-visible:outline transition-all scale-100 hover:scale-105"
+                                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-emerald-500 px-10 py-5 text-lg font-bold text-white dark:text-black shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] hover:bg-emerald-400 focus-visible:outline transition-all scale-100 hover:scale-105"
                             >
                                 Start Free Trial
                                 <ArrowRight className="h-5 w-5" />
                             </Link>
                             <a
                                 href="#demo"
-                                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-transparent border border-zinc-600 px-10 py-5 text-lg font-semibold text-white hover:bg-zinc-800 transition-colors"
+                                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-transparent border border-strong px-10 py-5 text-lg font-semibold text-primary hover:bg-hover transition-colors"
                             >
                                 Book Demo
                             </a>
@@ -525,18 +545,18 @@ export default function LandingPage() {
             </main>
 
             {/* Footer */}
-            <footer className="bg-black py-12 border-t border-white/10 text-center text-zinc-600">
+            <footer className="bg-base py-12 border-t border-theme text-center text-muted transition-colors">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded bg-zinc-800 text-emerald-500 border border-white/5">
+                        <div className="flex h-6 w-6 items-center justify-center rounded bg-elevated text-emerald-500 border border-theme">
                             <MessageSquare className="h-4 w-4" />
                         </div>
-                        <span className="font-semibold text-white">WhatsVue</span>
+                        <span className="font-semibold text-primary">WhatsVue</span>
                     </div>
                     <p className="text-sm" suppressHydrationWarning>© {new Date().getFullYear()} WhatsVue. All rights reserved.</p>
                     <div className="flex gap-6 text-sm">
-                        <Link href="/terms" className="hover:text-zinc-400">Terms</Link>
-                        <Link href="/privacy" className="hover:text-zinc-400">Privacy</Link>
+                        <Link href="/terms" className="hover:text-secondary transition-colors">Terms</Link>
+                        <Link href="/privacy" className="hover:text-secondary transition-colors">Privacy</Link>
                     </div>
                 </div>
             </footer>

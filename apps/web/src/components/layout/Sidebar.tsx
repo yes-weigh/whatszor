@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Users2, Megaphone, Zap, LayoutDashboard,
-    Settings, ChevronLeft, ChevronRight, Image, LayoutTemplate, MapPin,
-    LogOut, Plus, ChevronDown, UserPlus
+    Settings, Image, LayoutTemplate, MapPin,
+    LogOut, PanelLeftClose, PanelLeft
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 import NextImage from 'next/image';
-import { AddContactModal } from '@/components/contacts/AddContactModal';
+
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
@@ -104,7 +104,7 @@ function LiveBadge({ label }: { label: string }) {
 export function Sidebar() {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
-    const [isAddContactOpen, setIsAddContactOpen] = useState(false);
+
     const { user, hasPermission, logout } = useAuthStore();
     const [isMounted, setIsMounted] = useState(false);
 
@@ -128,20 +128,25 @@ export function Sidebar() {
         <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : 'sidebar--expanded'}`}>
 
             {/* ── Workspace header (branding + switcher) ─────────────────── */}
-            <div className="sidebar-header">
+            <div className="sidebar-header" onClick={() => collapsed && setCollapsed(false)}>
                 <div className="sidebar-logo-mark">
                     <NextImage src="/logo.png" alt="WhatsVue" width={18} height={18} className="object-contain" />
                 </div>
                 {!collapsed && (
-                    <div className="sidebar-workspace-info">
-                        <span className="sidebar-workspace-name">WhatsVue</span>
-                        <span className="sidebar-workspace-plan">Pro</span>
-                    </div>
-                )}
-                {!collapsed && (
-                    <button className="sidebar-workspace-chevron" aria-label="Switch workspace">
-                        <ChevronDown size={12} />
-                    </button>
+                    <>
+                        <div className="sidebar-workspace-info">
+                            <span className="sidebar-workspace-name">WhatsVue</span>
+                            <span className="sidebar-workspace-plan">Pro</span>
+                        </div>
+                        <button 
+                            className="sidebar-collapse-btn" 
+                            aria-label="Collapse sidebar"
+                            title="Collapse sidebar"
+                            onClick={(e) => { e.stopPropagation(); setCollapsed(true); }}
+                        >
+                            <PanelLeftClose size={15} />
+                        </button>
+                    </>
                 )}
             </div>
 
@@ -213,24 +218,7 @@ export function Sidebar() {
                 })}
             </nav>
 
-            {/* ── Quick Actions ──────────────────────────────────────────── */}
-            {!collapsed && (
-                <div className="sidebar-quick-actions">
-                    <span className="sidebar-section-label">QUICK ADD</span>
-                    <Link href="/campaigns?new=1" className="sidebar-quick-btn">
-                        <Plus size={13} />
-                        <span>New Campaign</span>
-                    </Link>
-                    <button
-                        type="button"
-                        className="sidebar-quick-btn"
-                        onClick={() => setIsAddContactOpen(true)}
-                    >
-                        <UserPlus size={13} />
-                        <span>Add Contact</span>
-                    </button>
-                </div>
-            )}
+
 
             {/* ── Bottom zone ────────────────────────────────────────────── */}
             <div className="sidebar-bottom">
@@ -270,20 +258,9 @@ export function Sidebar() {
                 )}
             </div>
 
-            {/* ── Collapse toggle ────────────────────────────────────────── */}
-            <button
-                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                onClick={() => setCollapsed(c => !c)}
-                className="sidebar-toggle"
-            >
-                {collapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
-            </button>
 
-            {/* Global modals mounted inside sidebar so they're always available */}
-            <AddContactModal
-                open={isAddContactOpen}
-                onOpenChange={setIsAddContactOpen}
-            />
+
+
         </aside>
     );
 }

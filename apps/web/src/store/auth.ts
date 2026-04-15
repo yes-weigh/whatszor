@@ -81,7 +81,7 @@ export const useAuthStore = create<AuthState>()(
                 // Clear the cookie too
                 document.cookie = 'accessToken=; path=/; max-age=0';
                 set({ user: null, accessToken: null, refreshToken: null });
-                window.location.href = '/login';
+                window.location.href = '/';
             },
             isAuthenticated: () => !!get().accessToken,
             hasPermission: (permission: string) => {
