@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Users2, Megaphone, Zap, LayoutDashboard,
     Settings, Image, LayoutTemplate, MapPin,
-    LogOut, PanelLeftClose, PanelLeft
+    LogOut, PanelLeftClose
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
