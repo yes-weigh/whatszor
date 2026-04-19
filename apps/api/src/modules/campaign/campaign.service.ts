@@ -4,6 +4,7 @@ import type { CreateCampaignInput, AddCampaignMembersInput, UpdateCampaignInput 
 import { ErrorCodes } from '@whatszor/shared';
 import { logEvent } from '../../core/event-logger';
 import { QueueName, getQueue } from '../../queues';
+import { PLAN_LIMITS } from '../../core/config/pricing';
 
 export async function createCampaign(workspaceId: string, input: CreateCampaignInput) {
     const campaign = await prisma.campaign.create({
@@ -194,13 +195,46 @@ export async function startCampaign(workspaceId: string, campaignId: string, isF
         throw { statusCode: 400, code: ErrorCodes.BAD_REQUEST, message: 'Campaign is already running or completed' };
     }
 
-    // Mark as running
-    const updated = await prisma.campaign.update({
-        where: { id: campaignId },
-        data: {
-            status: 'RUNNING',
-            startedAt: new Date(),
-        }
+    // ── Pre-flight Broadcast Usage Enforcement ────────────────────────────────
+    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+    if (!workspace) throw new Error('Workspace not found');
+
+    const nowStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM' format
+    let currentUsage = workspace.broadcastUsageCurrentMonth;
+
+    // Reset if month rolled over
+    if (workspace.broadcastUsageMonth !== nowStr) {
+        currentUsage = 0;
+    }
+
+    const memberCount = await prisma.campaignMember.count({ where: { campaignId } });
+    const limit = PLAN_LIMITS[workspace.planTier].maxBroadcastMessagesPerMonth;
+
+    if (currentUsage + memberCount > limit) {
+        throw Object.assign(
+            new Error(`Broadcast limit exceeded for the current month (${limit.toLocaleString()}). You have ${(limit - currentUsage).toLocaleString()} left, but this campaign has ${memberCount.toLocaleString()} recipients. Please upgrade your plan.`),
+            { statusCode: 403, code: 'LIMIT_EXCEEDED' }
+        );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Mark as running and deduct quota atomically
+    const updated = await prisma.$transaction(async (tx) => {
+        await tx.workspace.update({
+            where: { id: workspaceId },
+            data: {
+                broadcastUsageMonth: nowStr,
+                broadcastUsageCurrentMonth: currentUsage + memberCount
+            }
+        });
+
+        return tx.campaign.update({
+            where: { id: campaignId },
+            data: {
+                status: 'RUNNING',
+                startedAt: new Date(),
+            }
+        });
     });
 
     // Enqueue job. The worker will paginate through CampaignMembers and push them to outbound routing.

@@ -21,6 +21,7 @@ import { initializeWorkers } from './core/queue';
 import { createServer } from './core/server';
 import { waManager } from './modules/whatsapp/whatsapp.service';
 import { flushMessageBuffer } from './core/message-buffer';
+import { processExpirySweep } from './core/workers/expiry.worker';
 
 const log = createLogger({ module: 'bootstrap' });
 
@@ -90,6 +91,14 @@ async function bootstrap() {
     } catch (err) {
         log.warn({ err }, 'Failed to schedule insight scan — non-fatal');
     }
+
+    // 4.7. Schedule Daily Workspace Expiry Sweep
+    // Runs every 12 hours reliably via JS interval to automatically downgrade `status` 
+    // of passed `expiresAt` deadlines to EXPIRED.
+    processExpirySweep(); // run instantly on startup
+    setInterval(() => {
+        processExpirySweep().catch(e => log.error({ err: e }, 'Expiry sweep failed'));
+    }, 12 * 60 * 60 * 1000); // every 12 hours
 
     // 5. Create Fastify server
     const server = await createServer();

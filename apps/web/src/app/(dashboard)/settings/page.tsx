@@ -8,6 +8,7 @@ import { GeneralTab } from './components/GeneralTab';
 import { WhatsAppTab } from './components/WhatsAppTab';
 import { MembersTab } from './components/MembersTab';
 import { KnowledgeBotTab } from './components/KnowledgeBotTab';
+import { BillingTab } from './components/BillingTab';
 import { useRouter } from 'next/navigation';
 
 type Tab = 'general' | 'whatsapp' | 'ai' | 'billing' | 'members' | 'knowledgebot';
@@ -47,7 +48,7 @@ export default function SettingsPage() {
             {activeTab === 'general'      && <GeneralTab />}
             {activeTab === 'whatsapp'     && <WhatsAppTab />}
             {activeTab === 'ai'           && <div className="flex items-center justify-center h-40 text-muted text-sm">AI Configuration coming soon...</div>}
-            {activeTab === 'billing'      && <div className="flex items-center justify-center h-40 text-muted text-sm">Billing capabilities coming soon...</div>}
+            {activeTab === 'billing'      && <BillingTab />}
             {activeTab === 'members'      && <MembersTab />}
             {activeTab === 'knowledgebot' && <KnowledgeBotTab />}
         </>

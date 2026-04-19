@@ -21,6 +21,25 @@ export const adminRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) 
         return reply.status(200).send({ success: true, data: tokens });
     });
 
+    // ── System Config ─────────────────────────────────────────────────────────
+    fastify.get('/config', { preHandler: authenticateAdmin }, async (_req, reply) => {
+        const { getAllSystemConfigs } = await import('./config.service');
+        const configs = await getAllSystemConfigs();
+        return reply.status(200).send({ success: true, data: configs });
+    });
+
+    fastify.put('/config', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        const { setSystemConfig } = await import('./config.service');
+        const updates = req.body as Record<string, any>;
+        
+        for (const [key, value] of Object.entries(updates)) {
+            await setSystemConfig(key, value);
+        }
+        
+        return reply.status(200).send({ success: true, message: 'Configuration updated.' });
+    });
+
+
     // ── Workspace Management ──────────────────────────────────────────────────
     fastify.get('/workspaces', { preHandler: authenticateAdmin }, async (_req, reply) => {
         const workspaces = await adminService.getWorkspaces();

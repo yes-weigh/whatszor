@@ -174,3 +174,86 @@ export async function getRecentActivity(req: FastifyRequest, reply: FastifyReply
 
     return reply.sendSuccess(formattedActivities);
 }
+
+export async function getSalesAnalytics(req: FastifyRequest, reply: FastifyReply) {
+    const workspaceId = req.user.workspaceId;
+    
+    // We fetch metrics for the last 30 days
+    const thirtyDaysAgo = startOfDay(subDays(new Date(), 30));
+
+    // 1. Fetch raw metrics
+    const metrics = await prisma.agentDailyMetric.findMany({
+        where: {
+            workspaceId,
+            date: { gte: thirtyDaysAgo }
+        }
+    });
+
+    // 2. Fetch User instances manually to bypass missing relation
+    const agentIds = Array.from(new Set(metrics.map(m => m.agentId)));
+    const agents = await prisma.user.findMany({
+        where: { id: { in: agentIds } },
+        select: { id: true, name: true, email: true }
+    });
+    
+    const agentDataMap = new Map(agents.map(a => [a.id, a]));
+
+    // 3. Aggregate per-agent
+    const agentStatsMap = new Map<string, any>();
+
+    for (const metric of metrics) {
+        if (!agentStatsMap.has(metric.agentId)) {
+            const user = agentDataMap.get(metric.agentId);
+            agentStatsMap.set(metric.agentId, {
+                agentId: metric.agentId,
+                name: user?.name || user?.email || metric.agentId,
+                totalMessagesSent: 0,
+                avgResponseTimeSum: 0,
+                daysActive: 0
+            });
+        }
+        
+        const stat = agentStatsMap.get(metric.agentId);
+        stat.totalMessagesSent += metric.messagesSent;
+        if (metric.avgResponseSeconds > 0) {
+            stat.avgResponseTimeSum += metric.avgResponseSeconds;
+            stat.daysActive += 1;
+        }
+    }
+
+    // 4. Format final data structure
+    const agentLeaderboard = Array.from(agentStatsMap.values()).map(stat => {
+        return {
+            agentId: stat.agentId,
+            name: stat.name,
+            totalMessagesSent: stat.totalMessagesSent,
+            avgResponseTimeStr: stat.daysActive > 0 
+                ? formatDurationHumanReadable((stat.avgResponseTimeSum / stat.daysActive) * 1000)
+                : 'N/A'
+        };
+    });
+
+    // Sort by most active
+    agentLeaderboard.sort((a, b) => b.totalMessagesSent - a.totalMessagesSent);
+
+    // Provide global sum
+    const totalWorkspaceMessages = agentLeaderboard.reduce((acc, curr) => acc + curr.totalMessagesSent, 0);
+
+    return reply.sendSuccess({
+        leaderboard: agentLeaderboard,
+        totalMessagesSent: totalWorkspaceMessages
+    });
+}
+
+// Utility to convert ms to human readable "Xm Ys"
+function formatDurationHumanReadable(ms: number) {
+    if (!ms || ms < 0) return 'N/A';
+    if (ms < 1000) return '< 1s';
+    
+    let totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}

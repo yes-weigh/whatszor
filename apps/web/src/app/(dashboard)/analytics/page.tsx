@@ -59,6 +59,12 @@ export default function DashboardPage() {
         retry: false,
     });
 
+    const { data: salesData, isLoading: salesLoading } = useQuery({
+        queryKey: ['dashboard-sales'],
+        queryFn: () => api.get('/dashboard/sales').then(r => r.data),
+        retry: false,
+    });
+
     const cards = [
         { title: 'Total Contacts', value: stats?.totalContacts ?? '—', icon: Users, colorClass: 'text-zinc-300', trend: '+12 this week' },
         { title: 'Active Conversations', value: stats?.activeConversations ?? '—', icon: MessageSquare, colorClass: 'text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]', trend: '3 unread' },
@@ -150,6 +156,67 @@ export default function DashboardPage() {
                             ))}
                         </div>
                     </div>
+                </div>
+
+                {/* Sales Team Performance Leaderboard */}
+                <div className="glass-card mt-2">
+                    <div className="flex items-center justify-between mb-4 sm:mb-6">
+                        <div className="flex items-center gap-2">
+                            <Users size={18} className="text-accent" />
+                            <h2 className="font-semibold text-sm text-secondary">Sales Team Leaderboard (30 Days)</h2>
+                        </div>
+                        {salesData?.totalMessagesSent !== undefined && (
+                            <span className="text-xs text-muted font-medium bg-elevated px-2 py-1 rounded border border-theme">
+                                {salesData.totalMessagesSent} total messages shipped
+                            </span>
+                        )}
+                    </div>
+                    {salesLoading ? (
+                        <div className="w-full h-24 flex items-center justify-center text-muted text-sm">Loading leaderboard...</div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-theme text-xs text-muted uppercase tracking-wider">
+                                        <th className="pb-3 px-2 font-medium">Rank</th>
+                                        <th className="pb-3 px-2 font-medium">Agent</th>
+                                        <th className="pb-3 px-2 font-medium">Replies Sent</th>
+                                        <th className="pb-3 px-2 font-medium">Avg Response</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {salesData?.leaderboard?.length > 0 ? (
+                                        salesData.leaderboard.map((agent: any, index: number) => (
+                                            <tr key={agent.agentId} className="border-b border-theme/50 last:border-0 hover:bg-hover/30 transition-colors">
+                                                <td className="py-3 px-2 text-sm">
+                                                    <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${index === 0 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' : index === 1 ? 'bg-zinc-300/20 text-zinc-300 border border-zinc-300/30' : index === 2 ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-elevated text-muted'}`}>
+                                                        {index + 1}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-2 text-sm font-medium text-primary">{agent.name}</td>
+                                                <td className="py-3 px-2 text-sm text-secondary">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <MessageSquare size={14} className="text-emerald-500" />
+                                                        {agent.totalMessagesSent}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-2 text-sm text-secondary">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Zap size={14} className="text-purple-400" />
+                                                        {agent.avgResponseTimeStr}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={4} className="py-6 text-center text-sm text-muted">No sales activity recorded in the last 30 days.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

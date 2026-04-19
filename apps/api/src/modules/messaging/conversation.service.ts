@@ -351,8 +351,58 @@ export async function sendMessage(
         // Update conversation summary atomically with message creation
         await tx.conversation.update({
             where: { id: conversationId },
-            data: { lastMessageAt: new Date(), lastMessage: contentPreview },
+            data: { lastMessageAt: new Date(), lastMessage: contentPreview, unreadCount: 0 },
         });
+
+        // ==========================================
+        // ANALYTICS HOOK: AgentDailyMetric
+        // ==========================================
+        if (userId) {
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            const date = new Date(dateStr); // Midnight UTC date
+
+            // Find last INBOUND message to calculate response time
+            const lastInbound = await tx.message.findFirst({
+                where: { conversationId, direction: 'INBOUND' },
+                orderBy: { createdAt: 'desc' }
+            });
+
+            let responseSecs: number | null = null;
+            if (lastInbound && lastInbound.createdAt > new Date(now.getTime() - 24 * 3600 * 1000)) {
+                responseSecs = Math.floor((now.getTime() - lastInbound.createdAt.getTime()) / 1000);
+            }
+
+            const metric = await tx.agentDailyMetric.findUnique({
+                where: { workspaceId_agentId_date: { workspaceId, agentId: userId, date } }
+            });
+
+            if (metric) {
+                let newAvg = metric.avgResponseSeconds;
+                let newCount = metric.responsesReceived;
+                if (responseSecs !== null) {
+                    newAvg = Math.floor(((metric.avgResponseSeconds * metric.responsesReceived) + responseSecs) / (metric.responsesReceived + 1));
+                    newCount += 1;
+                }
+                await tx.agentDailyMetric.update({
+                    where: { id: metric.id },
+                    data: {
+                        messagesSent: { increment: 1 },
+                        avgResponseSeconds: newAvg,
+                        responsesReceived: newCount,
+                    }
+                });
+            } else {
+                await tx.agentDailyMetric.create({
+                    data: {
+                        workspaceId, agentId: userId, date,
+                        messagesSent: 1,
+                        avgResponseSeconds: responseSecs ?? 0,
+                        responsesReceived: responseSecs !== null ? 1 : 0
+                    }
+                });
+            }
+        }
 
         return msg;
     });

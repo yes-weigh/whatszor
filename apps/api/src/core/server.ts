@@ -40,6 +40,7 @@ import { licenseRoutes } from '../modules/license/license.routes';
 import { keywordAutomationRoutes } from '../modules/automation/keyword-automation.route';
 import { automationInsightRoutes } from '../modules/automation/automation-insights.route';
 import { leadGenerationRoutes } from '../modules/lead-generation/lead-generation.route';
+import { billingRoutes } from '../modules/billing/billing.route';
 import { startMonitor, getMonitorSnapshot } from './monitor';
 
 /**
@@ -206,6 +207,7 @@ export async function createServer(): Promise<FastifyInstance> {
             await api.register(adminRoutes, { prefix: '/admin' });
             await api.register(licenseRoutes, { prefix: '/licenses' });
             await api.register(workspaceRoutes, { prefix: '/workspaces' });
+            await api.register(billingRoutes, { prefix: '/billing' });
 
             // CRM
             await api.register(

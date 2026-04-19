@@ -84,21 +84,19 @@ export async function requireActiveWorkspace(
         workspace = result;
     }
 
-    if (workspace.status === 'SUSPENDED' || workspace.status === 'EXPIRED') {
+    if (workspace.status === 'SUSPENDED') {
         return reply.status(402).send({
             success: false,
-            error: { code: 'PAYMENT_REQUIRED', message: `Workspace is ${workspace.status.toLowerCase()}. Please activate a license key.` }
+            error: { code: 'PAYMENT_REQUIRED', message: `Workspace is suspended. Please contact support.` }
         });
     }
 
-    if (workspace.status === 'TRIAL') {
-        // Block only if an expiry date IS set AND it has already passed
-        if (workspace.expiresAt && workspace.expiresAt < new Date()) {
-            return reply.status(402).send({
-                success: false,
-                error: { code: 'PAYMENT_REQUIRED', message: 'Workspace trial has expired. Please activate a license key.' }
-            });
-        }
+    // STRICT EXPIRY CHECK: If ANY license expiry date is set AND it has passed, instantly lock.
+    if (workspace.expiresAt && workspace.expiresAt < new Date()) {
+        return reply.status(402).send({
+            success: false,
+            error: { code: 'PAYMENT_REQUIRED', message: 'Workspace subscription has expired. Please activate a new license key.' }
+        });
     }
 }
 

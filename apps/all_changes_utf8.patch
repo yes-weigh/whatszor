@@ -1,0 +1,2970 @@
+﻿diff --git a/apps/api/prisma/migrations/20260419120000_billing_sysconfig/migration.sql b/apps/api/prisma/migrations/20260419120000_billing_sysconfig/migration.sql
+new file mode 100644
+index 0000000..0c5447d
+--- /dev/null
++++ b/apps/api/prisma/migrations/20260419120000_billing_sysconfig/migration.sql
+@@ -0,0 +1,74 @@
++-- CreateEnum
++CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
++
++-- AlterTable
++ALTER TABLE "workspaces" ADD COLUMN "broadcast_usage_month" TEXT NOT NULL DEFAULT '',
++ADD COLUMN "broadcast_usage_current_month" INTEGER NOT NULL DEFAULT 0;
++
++-- CreateTable
++CREATE TABLE "payment_requests" (
++    "id" TEXT NOT NULL,
++    "workspace_id" TEXT NOT NULL,
++    "plan_tier" "PlanTier" NOT NULL,
++    "duration_days" INTEGER NOT NULL,
++    "amount_paid" TEXT NOT NULL,
++    "transaction_ref" TEXT NOT NULL,
++    "receipt_url" TEXT,
++    "status" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
++    "admin_note" TEXT,
++    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++    "updated_at" TIMESTAMP(3) NOT NULL,
++
++    CONSTRAINT "payment_requests_pkey" PRIMARY KEY ("id")
++);
++
++-- CreateTable
++CREATE TABLE "conversation_tags" (
++    "id" TEXT NOT NULL,
++    "workspace_id" TEXT NOT NULL,
++    "conversation_id" TEXT NOT NULL,
++    "tag" TEXT NOT NULL,
++    "created_by_agent_id" TEXT,
++    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++
++    CONSTRAINT "conversation_tags_pkey" PRIMARY KEY ("id")
++);
++
++-- CreateTable
++CREATE TABLE "agent_daily_metrics" (
++    "id" TEXT NOT NULL,
++    "workspace_id" TEXT NOT NULL,
++    "agent_id" TEXT NOT NULL,
++    "date" DATE NOT NULL,
++    "messages_sent" INTEGER NOT NULL DEFAULT 0,
++    "responses_received" INTEGER NOT NULL DEFAULT 0,
++    "avg_response_seconds" INTEGER NOT NULL DEFAULT 0,
++    "missed_chats" INTEGER NOT NULL DEFAULT 0,
++    "tags_applied" JSONB NOT NULL DEFAULT '{}',
++
++    CONSTRAINT "agent_daily_metrics_pkey" PRIMARY KEY ("id")
++);
++
++-- CreateTable
++CREATE TABLE "system_configs" (
++    "key" TEXT NOT NULL,
++    "value" JSONB NOT NULL,
++    "updated_at" TIMESTAMP(3) NOT NULL,
++
++    CONSTRAINT "system_configs_pkey" PRIMARY KEY ("key")
++);
++
++-- AddForeignKey
++ALTER TABLE "payment_requests" ADD CONSTRAINT "payment_requests_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
++
++-- AddForeignKey
++ALTER TABLE "conversation_tags" ADD CONSTRAINT "conversation_tags_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
++
++-- AddForeignKey
++ALTER TABLE "conversation_tags" ADD CONSTRAINT "conversation_tags_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
++
++-- AddForeignKey
++ALTER TABLE "agent_daily_metrics" ADD CONSTRAINT "agent_daily_metrics_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
++
++-- AddForeignKey
++ALTER TABLE "agent_daily_metrics" ADD CONSTRAINT "agent_daily_metrics_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+diff --git a/apps/api/prisma/schema.prisma b/apps/api/prisma/schema.prisma
+index 9d6981b..49f9c68 100644
+--- a/apps/api/prisma/schema.prisma
++++ b/apps/api/prisma/schema.prisma
+@@ -47,6 +47,12 @@ enum KeyStatus {
+   REVOKED
+ }
+ 
++enum PaymentStatus {
++  PENDING
++  APPROVED
++  REJECTED
++}
++
+ enum SessionStatus {
+   CONNECTING
+   QR_PENDING
+@@ -150,6 +156,10 @@ model Workspace {
+   storageUsedBytes  BigInt          @default(0) @map("storage_used_bytes")
+   // 0 = use plan-tier default from StorageLimits config (src/core/config/storage.ts)
+   storageLimitBytes BigInt          @default(0) @map("storage_limit_bytes")
++  
++  // Broadcast tracking
++  broadcastUsageMonth        String   @default("") @map("broadcast_usage_month") // YYYY-MM
++  broadcastUsageCurrentMonth Int      @default(0) @map("broadcast_usage_current_month")
+   // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+   createdAt         DateTime        @default(now()) @map("created_at")
+   updatedAt         DateTime        @updatedAt @map("updated_at")
+@@ -181,6 +191,9 @@ model Workspace {
+   ContactProduct     ContactProduct[]
+   AccountAccess      AccountAccess[]
+   deadLetterJobs     DeadLetterJob[]
++  paymentRequests    PaymentRequest[]
++  conversationTags   ConversationTag[]
++  agentDailyMetrics  AgentDailyMetric[]
+ 
+   @@map("workspaces")
+ }
+@@ -205,6 +218,8 @@ model User {
+   refreshTokens    RefreshToken[]
+   whatsAppAccounts WhatsAppAccount[]
+   accountAccesses  AccountAccess[]
++  createdTags      ConversationTag[]
++  dailyMetrics     AgentDailyMetric[]
+ 
+   @@map("users")
+ }
+@@ -430,6 +445,7 @@ model Conversation {
+   contactId String?   @map("contact_id")
+ 
+   messages Message[]
++  tags     ConversationTag[]
+ 
+   @@unique([workspaceId, provider, providerId, sessionId])
+   @@index([workspaceId, lastMessageAt])
+@@ -804,6 +820,66 @@ model NodeExecutionLog {
+   @@map("node_execution_logs")
+ }
+ 
++// ============================================================
++// BILLING AND ANALYTICS
++// ============================================================
++
++model PaymentRequest {
++  id             String        @id @default(cuid())
++  workspaceId    String        @map("workspace_id")
++  planTier       PlanTier      @map("plan_tier")
++  durationDays   Int           @map("duration_days")
++  amountPaid     String        @map("amount_paid")
++  transactionRef String        @map("transaction_ref")
++  receiptUrl     String?       @map("receipt_url")
++  status         PaymentStatus @default(PENDING)
++  adminNote      String?       @map("admin_note")
++
++  createdAt      DateTime      @default(now()) @map("created_at")
++  updatedAt      DateTime      @updatedAt @map("updated_at")
++
++  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++
++  @@index([workspaceId])
++  @@index([status])
++  @@map("payment_requests")
++}
++
++model ConversationTag {
++  id               String   @id @default(cuid())
++  workspaceId      String   @map("workspace_id")
++  conversationId   String   @map("conversation_id")
++  tag              String
++  createdByAgentId String?  @map("created_by_agent_id")
++  createdAt        DateTime @default(now()) @map("created_at")
++
++  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
++  agent            User?        @relation(fields: [createdByAgentId], references: [id], onDelete: SetNull)
++
++  @@index([workspaceId])
++  @@index([conversationId])
++  @@map("conversation_tags")
++}
++
++model AgentDailyMetric {
++  id                 String   @id @default(cuid())
++  workspaceId        String   @map("workspace_id")
++  agentId            String   @map("agent_id")
++  date               DateTime @db.Date
++  messagesSent       Int      @default(0) @map("messages_sent")
++  responsesReceived  Int      @default(0) @map("responses_received")
++  avgResponseSeconds Int      @default(0) @map("avg_response_seconds")
++  missedChats        Int      @default(0) @map("missed_chats")
++  tagsApplied        Json     @default("{}") @map("tags_applied")
++
++  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  agent              User      @relation(fields: [agentId], references: [id], onDelete: Cascade)
++
++  @@unique([workspaceId, agentId, date])
++  @@map("agent_daily_metrics")
++}
++
+ // ΓöÇΓöÇ Automation Template Library ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+ // Global catalog ΓÇö not workspace-scoped; cloned into AutomationRule on install
+ 
+@@ -1336,3 +1412,17 @@ model DeadLetterJob {
+   @@map("dead_letter_jobs")
+ }
+ 
++// ============================================================
++// SYSTEM CONFIGURATION
++// Used for global configurations like UPI VPA mappings configurable by Admins
++// ============================================================
++
++model SystemConfig {
++  key       String   @id
++  value     Json
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  @@map("system_configs")
++}
++
++
+diff --git a/apps/api/prisma/schema_old.prisma b/apps/api/prisma/schema_old.prisma
+new file mode 100644
+index 0000000..49f9c68
+--- /dev/null
++++ b/apps/api/prisma/schema_old.prisma
+@@ -0,0 +1,1428 @@
++// This is your Prisma schema file.
++// Learn more: https://pris.ly/d/prisma-schema
++
++generator client {
++  provider = "prisma-client-js"
++}
++
++datasource db {
++  provider = "postgresql"
++  url      = env("DATABASE_URL")
++}
++
++// ============================================================
++// ENUMERATIONS
++// ============================================================
++
++enum UserRole {
++  OWNER
++  ADMIN
++  MEMBER
++  VIEWER
++}
++
++enum WorkspaceStatus {
++  ACTIVE
++  SUSPENDED
++  TRIAL
++  CANCELLED
++  EXPIRED
++}
++
++enum GlobalRole {
++  SUPER_ADMIN
++  STAFF
++}
++
++enum PlanTier {
++  FREE
++  STARTER
++  PRO
++  AGENCY
++}
++
++enum KeyStatus {
++  AVAILABLE
++  REDEEMED
++  REVOKED
++}
++
++enum PaymentStatus {
++  PENDING
++  APPROVED
++  REJECTED
++}
++
++enum SessionStatus {
++  CONNECTING
++  QR_PENDING
++  CONNECTED
++  DISCONNECTED
++  ERROR
++  RATE_LIMITED
++}
++
++enum BotMode {
++  INTERNAL
++  EXTERNAL
++  HYBRID
++}
++
++enum MatchType {
++  EXACT
++  CONTAINS
++  REGEX
++  AI_INTENT
++}
++
++// ============================================================
++// GLOBAL ADMIN AND LICENSES
++// ============================================================
++
++model GlobalUser {
++  id        String     @id @default(cuid())
++  email     String     @unique
++  password  String
++  name      String?
++  role      GlobalRole @default(STAFF)
++  createdAt DateTime   @default(now()) @map("created_at")
++  updatedAt DateTime   @updatedAt @map("updated_at")
++
++  @@map("global_users")
++}
++
++model LicenseKey {
++  id            String    @id @default(cuid())
++  key           String    @unique
++  planTier      PlanTier  @map("plan_tier")
++  durationDays  Int       @map("duration_days")
++  status        KeyStatus @default(AVAILABLE)
++  workspaceId   String?   @map("workspace_id")
++  generatedById String?   @map("generated_by_id")
++  redeemedAt    DateTime? @map("redeemed_at")
++  createdAt     DateTime  @default(now()) @map("created_at")
++
++  workspace Workspace? @relation(fields: [workspaceId], references: [id])
++
++  @@index([key])
++  @@index([status])
++  @@map("license_keys")
++}
++
++// ============================================================
++// IMPERSONATION AUDIT LOG
++// Records every super-admin impersonation event for compliance.
++// Tokens are short-lived (30m default via IMPERSONATION_TTL env)
++// and revocable via the revokedAt field.
++// ============================================================
++
++model ImpersonationLog {
++  id           String    @id @default(cuid())
++  globalUserId String    @map("global_user_id") // GlobalUser who performed the action
++  workspaceId  String    @map("workspace_id") // Target workspace
++  targetRole   String    @default("OWNER") // Impersonated role (always OWNER)
++  tokenJti     String    @unique @map("token_jti") // JWT jti ΓÇö used for revocation checks
++  issuedAt     DateTime  @default(now()) @map("issued_at")
++  expiresAt    DateTime  @map("expires_at")
++  revokedAt    DateTime? @map("revoked_at") // Set to instantly invalidate token
++  ipAddress    String?   @map("ip_address")
++  userAgent    String?   @map("user_agent")
++
++  @@index([globalUserId])
++  @@index([workspaceId])
++  @@index([tokenJti])
++  @@map("impersonation_logs")
++}
++
++// ============================================================
++// WORKSPACE (Tenant)
++// Every entity in the system MUST include workspace_id.
++// ============================================================
++
++model Workspace {
++  audiences Audience[]
++
++  id                String          @id @default(cuid())
++  name              String
++  slug              String          @unique
++  status            WorkspaceStatus @default(TRIAL)
++  plan              String          @default("free")
++  planTier          PlanTier        @default(FREE) @map("plan_tier")
++  expiresAt         DateTime?       @map("expires_at")
++  settings          Json            @default("{}")
++  // ΓöÇΓöÇ Storage Governance (P4) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++  // Bytes used by all uploaded media files in this workspace.
++  // Incremented on upload, decremented (with negative guard) on deletion.
++  storageUsedBytes  BigInt          @default(0) @map("storage_used_bytes")
++  // 0 = use plan-tier default from StorageLimits config (src/core/config/storage.ts)
++  storageLimitBytes BigInt          @default(0) @map("storage_limit_bytes")
++  
++  // Broadcast tracking
++  broadcastUsageMonth        String   @default("") @map("broadcast_usage_month") // YYYY-MM
++  broadcastUsageCurrentMonth Int      @default(0) @map("broadcast_usage_current_month")
++  // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++  createdAt         DateTime        @default(now()) @map("created_at")
++  updatedAt         DateTime        @updatedAt @map("updated_at")
++
++  // Relations
++  licenses           LicenseKey[]
++  members            WorkspaceMember[]
++  contacts           Contact[]
++  organizations      Organization[]
++  pipelines          Pipeline[]
++  records            Record[]
++  conversations      Conversation[]
++  messages           Message[]
++  whatsAppSessions   WhatsAppSession[]
++  whatsAppAccounts   WhatsAppAccount[]
++  campaigns          Campaign[]
++  automationRules    AutomationRule[]
++  eventLogs          EventLog[]
++  media              Media[]
++  templates          Template[]
++  QuickReply         QuickReply[]
++  productKnowledge   ProductKnowledge[]
++  allowedNumbers     AllowedNumber[]
++  keywordAutomations KeywordAutomation[]
++  automationLogs     AutomationLog[]
++  automationInsights AutomationInsight[]
++  leadLists          LeadList[]
++  leads              Lead[]
++  ContactProduct     ContactProduct[]
++  AccountAccess      AccountAccess[]
++  deadLetterJobs     DeadLetterJob[]
++  paymentRequests    PaymentRequest[]
++  conversationTags   ConversationTag[]
++  agentDailyMetrics  AgentDailyMetric[]
++
++  @@map("workspaces")
++}
++
++// ============================================================
++// USER
++// ============================================================
++
++model User {
++  id           String    @id @default(cuid())
++  email        String    @unique
++  name         String
++  passwordHash String    @map("password_hash")
++  avatarUrl    String?   @map("avatar_url")
++  isVerified   Boolean   @default(false) @map("is_verified")
++  lastLoginAt  DateTime? @map("last_login_at")
++  createdAt    DateTime  @default(now()) @map("created_at")
++  updatedAt    DateTime  @updatedAt @map("updated_at")
++
++  // Relations
++  memberships      WorkspaceMember[]
++  refreshTokens    RefreshToken[]
++  whatsAppAccounts WhatsAppAccount[]
++  accountAccesses  AccountAccess[]
++  createdTags      ConversationTag[]
++  dailyMetrics     AgentDailyMetric[]
++
++  @@map("users")
++}
++
++// ============================================================
++// WORKSPACE MEMBER (User Γåö Workspace)
++// Handles multi-workspace membership
++// ============================================================
++
++model WorkspaceMember {
++  id          String   @id @default(cuid())
++  workspaceId String   @map("workspace_id")
++  userId      String   @map("user_id")
++  role        UserRole @default(MEMBER)
++  joinedAt    DateTime @default(now()) @map("joined_at")
++
++  // Relations
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
++
++  @@unique([workspaceId, userId])
++  @@index([workspaceId])
++  @@index([userId])
++  @@map("workspace_members")
++}
++
++// ============================================================
++// REFRESH TOKEN
++// Stored server-side for revocation support.
++// ============================================================
++
++model RefreshToken {
++  id          String    @id @default(cuid())
++  userId      String    @map("user_id")
++  workspaceId String    @map("workspace_id")
++  tokenHash   String    @unique @map("token_hash") // SHA-256 of the raw token
++  expiresAt   DateTime  @map("expires_at")
++  revokedAt   DateTime? @map("revoked_at")
++  userAgent   String?   @map("user_agent")
++  ipAddress   String?   @map("ip_address")
++  createdAt   DateTime  @default(now()) @map("created_at")
++
++  // Relations
++  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
++
++  @@index([userId])
++  @@index([tokenHash])
++  @@map("refresh_tokens")
++}
++
++// ============================================================
++// CORE CRM ENTITIES
++// ============================================================
++
++model Contact {
++  audienceMembers AudienceMember[]
++
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  firstName String  @map("first_name")
++  lastName  String? @map("last_name")
++  email     String?
++  phone     String?
++
++  // Custom Fields (JSONB) allows generic extensibility
++  customData Json @default("{}") @map("custom_data")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relationships
++  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  organization         Organization?         @relation(fields: [orgId], references: [id], onDelete: SetNull)
++  orgId                String?               @map("org_id")
++  records              Record[]
++  conversations        Conversation[]
++  campaigns            CampaignMember[]
++  automationExecutions AutomationExecution[]
++  leads                Lead[]
++  contactProducts      ContactProduct[]
++
++  @@unique([workspaceId, email])
++  @@unique([workspaceId, phone])
++  @@index([workspaceId])
++  @@map("contacts")
++}
++
++model Organization {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  name     String
++  website  String?
++  industry String?
++
++  customData Json @default("{}") @map("custom_data")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relationships
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  contacts  Contact[]
++  records   Record[]
++
++  @@index([workspaceId])
++  @@map("organizations")
++}
++
++// ============================================================
++// PIPELINES & RECORDS
++// ============================================================
++
++model Pipeline {
++  id          String  @id @default(cuid())
++  workspaceId String  @map("workspace_id")
++  name        String
++  description String?
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relationships
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  stages    Stage[]
++  records   Record[]
++
++  @@index([workspaceId])
++  @@map("pipelines")
++}
++
++model Stage {
++  id         String @id @default(cuid())
++  pipelineId String @map("pipeline_id")
++  name       String
++  order      Int    @default(0)
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relationships
++  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
++  records  Record[]
++
++  @@index([pipelineId])
++  @@map("stages")
++}
++
++model Record {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++  pipelineId  String @map("pipeline_id")
++  stageId     String @map("stage_id")
++
++  title    String // e.g., "100x Widget Order", "Onboarding Help"
++  value    Decimal?     @db.Decimal(10, 2)
++  currency String?      @default("USD")
++  status   RecordStatus @default(OPEN)
++
++  customData Json @default("{}") @map("custom_data")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relationships
++  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
++  stage        Stage         @relation(fields: [stageId], references: [id], onDelete: Cascade)
++  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
++  contactId    String?       @map("contact_id")
++  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
++  orgId        String?       @map("org_id")
++
++  @@index([workspaceId])
++  @@index([pipelineId])
++  @@index([stageId])
++  @@map("records")
++}
++
++enum RecordStatus {
++  OPEN
++  WON
++  LOST
++  ABANDONED
++}
++
++// ============================================================
++// MESSAGING & CONVERSATIONS
++// ============================================================
++
++model Conversation {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  // E.g., "WHATSAPP", "EMAIL", "SMS"
++  provider   String
++  // Remote identifier, e.g., the WhatsApp JID (phone number) "919876543210@s.whatsapp.net"
++  providerId String @map("provider_id")
++
++  // Which WhatsApp session (account) owns this conversation
++  sessionId       String?          @map("session_id")
++  whatsAppAccount WhatsAppAccount? @relation(fields: [sessionId], references: [sessionId])
++
++  assignedToUserId String? @map("assigned_to_user_id")
++  assignedTeamId   String? @map("assigned_team_id")
++
++  waContactName String? @map("wa_contact_name")
++
++  status ConversationStatus @default(ACTIVE)
++
++  lastMessageAt DateTime @default(now()) @map("last_message_at")
++  lastMessage   String?  @map("last_message")
++  unreadCount   Int      @default(0) @map("unread_count")
++
++  deletedAt DateTime? @map("deleted_at")
++  createdAt DateTime  @default(now()) @map("created_at")
++  updatedAt DateTime  @updatedAt @map("updated_at")
++
++  // Relationships
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
++  contactId String?   @map("contact_id")
++
++  messages Message[]
++  tags     ConversationTag[]
++
++  @@unique([workspaceId, provider, providerId, sessionId])
++  @@index([workspaceId, lastMessageAt])
++  @@index([workspaceId, sessionId])
++  @@index([workspaceId, assignedToUserId])
++  @@index([workspaceId, assignedTeamId])
++  @@map("conversations")
++}
++
++model AllowedNumber {
++  id          String   @id @default(cuid())
++  workspaceId String   @map("workspace_id")
++  phoneNumber String   @map("phone_number")
++  label       String?
++  isActive    Boolean  @default(true) @map("is_active")
++  createdAt   DateTime @default(now()) @map("created_at")
++
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++
++  @@unique([workspaceId, phoneNumber])
++  @@map("allowed_numbers")
++}
++
++model Message {
++  id             String @id @default(cuid())
++  workspaceId    String @map("workspace_id")
++  conversationId String @map("conversation_id")
++
++  // The remote message ID generated by WhatsApp/Provider for delivery tracking
++  remoteId        String? @map("remote_id")
++  clientMessageId String? @map("client_message_id")
++  sequenceNumber  Int     @default(autoincrement()) @map("sequence_number")
++
++  direction MessageDirection
++  type      MessageType      @default(TEXT)
++
++  // Standard text content
++  content String?
++
++  // Complex content like media URLs, templates, contacts (JSONB)
++  mediaData Json? @map("media_data")
++
++  status MessageStatus @default(PENDING)
++
++  deletedAt DateTime? @map("deleted_at")
++  createdAt DateTime  @default(now()) @map("created_at")
++  updatedAt DateTime  @updatedAt @map("updated_at")
++
++  // Relationships
++  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
++
++  // Track if this message was sent from the Media Gallery
++  mediaId String? @map("media_id")
++
++  // Tracking who sent an outbound message (AI, System, or a specific User)
++  senderUserId String? @map("sender_user_id")
++
++  campaignMembers CampaignMember[]
++
++  @@unique([clientMessageId, workspaceId])
++  @@unique([conversationId, remoteId])
++  @@index([conversationId, createdAt])
++  @@map("messages")
++}
++
++enum ConversationStatus {
++  ACTIVE
++  ARCHIVED
++  BLOCKED
++}
++
++enum MessageDirection {
++  INBOUND
++  OUTBOUND
++}
++
++enum MessageType {
++  TEXT
++  IMAGE
++  VIDEO
++  DOCUMENT
++  AUDIO
++  STICKER
++  REACTION
++  TEMPLATE
++  SYSTEM
++}
++
++enum MessageStatus {
++  PENDING
++  QUEUED
++  SENT
++  DELIVERED
++  READ
++  FAILED
++  RECEIVED
++  SUGGESTED
++}
++
++model QuickReply {
++  id          String   @id @default(cuid())
++  workspaceId String   @map("workspace_id")
++  shortcut    String // e.g., "/pricing" ΓÇö used for quick-reply slash commands
++  content     String
++  mediaId     String?  @map("media_id")
++  templateId  String?  @map("template_id") // If set, sends this template instead of text/media
++  isAutoReply Boolean  @default(false) @map("is_auto_reply")
++  keyword     String? // trigger phrase for auto-reply (case-insensitive match)
++  createdAt   DateTime @default(now()) @map("created_at")
++
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  media     Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
++  template  Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
++
++  @@index([workspaceId])
++  @@map("quick_replies")
++}
++
++// Stores the cryptographic keys required by WhatsApp Multi-Device per session
++model WhatsAppSession {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++  sessionId   String @map("session_id") // References WhatsAppAccount.sessionId
++
++  // The state identifier ("creds", "pre-key-1", "app-state-sync-version-xyz", etc)
++  category String
++  // The actual JSON key data
++  data     Json
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++
++  @@unique([sessionId, category])
++  @@index([workspaceId])
++  @@index([sessionId])
++  @@map("whatsapp_sessions")
++}
++
++// Registry of named WhatsApp accounts connected to a workspace
++model WhatsAppAccount {
++  id               String        @id @default(cuid())
++  workspaceId      String        @map("workspace_id")
++  sessionId        String        @unique @map("session_id") // Stable ID used by Baileys auth & socket manager
++  name             String // Human label e.g. "Sales Team North"
++  label            String?
++  phoneNumber      String?       @map("phone_number") // Populated after successful connection
++  status           SessionStatus @default(CONNECTING)
++  botMode          BotMode?      @map("bot_mode")
++  userId           String?       @map("user_id")
++  lastActiveAt     DateTime?     @map("last_active_at")
++  deletedAt        DateTime?     @map("deleted_at")
++  createdAt        DateTime      @default(now()) @map("created_at")
++  updatedAt        DateTime      @updatedAt @map("updated_at")
++  // ΓöÇΓöÇ Session Lifecycle (P8) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++  // Ordered list of previous userId owners (audit trail for session transfers).
++  previousOwnerIds String[]      @default([]) @map("previous_owner_ids")
++  // Set when a session drops unexpectedly ΓÇö used by admin QR relay flow (P5).
++  reauthRequiredAt DateTime?     @map("reauth_required_at")
++  // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
++
++  conversations   Conversation[]
++  accountAccesses AccountAccess[]
++  campaigns       Campaign[]
++
++  @@index([workspaceId, userId, status])
++  @@index([workspaceId])
++  @@map("whatsapp_accounts")
++}
++
++// ΓöÇΓöÇ Broadcast Campaigns ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++
++enum CampaignStatus {
++  DRAFT
++  SCHEDULED
++  RUNNING
++  PAUSED
++  COMPLETED
++  CANCELLED
++}
++
++enum CampaignMemberStatus {
++  PENDING
++  PROCESSING
++  SENT
++  DELIVERED
++  READ
++  FAILED
++}
++
++model Campaign {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  name   String
++  status CampaignStatus @default(DRAFT)
++
++  // Template linked to this campaign
++  templateId        String? @map("template_id")
++  templateVersionId String? @map("template_version_id")
++  templateLanguage  String? @map("template_language")
++
++  // Optional plain text message content (used if no template)
++  messageText String? @map("message_text")
++
++  // Timing
++  scheduledAt DateTime? @map("scheduled_at")
++  startedAt   DateTime? @map("started_at")
++  completedAt DateTime? @map("completed_at")
++
++  // High-level aggregate stats stored as JSON
++  // { total: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
++  stats Json? @default("{}")
++
++  // Metrics for forecasting (optional)
++  expectedReplyRate Float? @map("expected_reply_rate")
++
++  audienceId String? @map("audience_id")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relations
++  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  audience        Audience?        @relation(fields: [audienceId], references: [id], onDelete: SetNull)
++  whatsappAccount WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
++  whatsappAccountId String?        @map("whatsapp_account_id")
++  members         CampaignMember[]
++
++  @@index([workspaceId])
++  @@index([status])
++  @@map("campaigns")
++}
++
++model CampaignMember {
++  id         String @id @default(cuid())
++  campaignId String @map("campaign_id")
++  contactId  String @map("contact_id")
++
++  status CampaignMemberStatus @default(PENDING)
++
++  // If the worker successfully dispatched it, we link the created Message
++  messageId String? @unique @map("message_id")
++
++  // Any contact-specific template variables (e.g. { "name": "John" })
++  variables Json? @default("{}")
++
++  // Bound to specific version so campaign edits are impossible
++  templateVersionId String? @map("template_version_id")
++
++  // Error reason if status is FAILED
++  errorReason String? @map("error_reason")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relations
++  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
++  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
++  message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
++
++  @@unique([campaignId, contactId])
++  @@index([campaignId, status])
++  @@map("campaign_members")
++}
++
++// ΓöÇΓöÇ Automation Rule Engine ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++
++enum AutomationRuleStatus {
++  ACTIVE
++  DRAFT
++  INACTIVE
++}
++
++model AutomationRule {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  name        String               @map("name")
++  description String?
++  status      AutomationRuleStatus @default(DRAFT)
++  eventType   String?              @map("event_type")
++  isActive    Boolean              @default(true) @map("is_active")
++
++  // Discriminator for when this rule fires mapping to shared types (e.g. { "type": "RECORD_CREATED", "pipelineId": "123" })
++  trigger Json @map("trigger")
++
++  // Array of boolean expressions (e.g. [{ "field": "customData.tier", "operator": "eq", "value": "VIP" }])
++  conditions Json @default("[]")
++
++  // Array of sequential actions (e.g. [{ "type": "SEND_WHATSAPP", "template": "hello" }, { "type": "DELAY", "minutes": 1440 }])
++  actions Json @default("[]")
++
++  // Advanced Graph Node definitions for non-linear processing
++  flowDefinition Json? @map("flow_definition")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relations
++  workspace  Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  executions AutomationExecution[]
++
++  @@index([workspaceId, status])
++  @@map("automation_rules")
++}
++
++enum AutomationExecutionStatus {
++  RUNNING
++  PAUSED // e.g. waiting in DELAY
++  COMPLETED
++  FAILED
++}
++
++model AutomationExecution {
++  id        String  @id @default(cuid())
++  ruleId    String  @map("rule_id")
++  contactId String? @map("contact_id")
++
++  status AutomationExecutionStatus @default(RUNNING)
++
++  // The trigger event payload
++  triggerEvent Json?   @map("trigger_event")
++  workspaceId  String? @map("workspace_id")
++
++  // The current step index in the Actions array
++  currentStep Int @default(0) @map("current_step")
++
++  // Node ID of the paused Graph node string
++  currentNodeId String? @map("current_node_id")
++
++  // Context of why it fired, stored for potential templating or rollback evaluation mapping
++  context Json? @default("{}")
++
++  // If paused, when it should wake up
++  resumeAt DateTime? @map("resume_at")
++
++  errorReason String? @map("error_reason")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relations
++  rule     AutomationRule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
++  contact  Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
++  nodeLogs NodeExecutionLog[]
++
++  // Avoid duplicate concurrent runs of the exact same macro on the exact same person
++  @@index([ruleId, contactId, status])
++  @@map("automation_executions")
++}
++
++model NodeExecutionLog {
++  id          String   @id @default(cuid())
++  executionId String   @map("execution_id")
++  nodeId      String   @map("node_id")
++  nodeType    String   @map("node_type")
++  status      String
++  result      Json?
++  error       String?
++  startedAt   DateTime @default(now()) @map("started_at")
++  durationMs  Int      @map("duration_ms")
++
++  execution AutomationExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
++
++  @@index([executionId])
++  @@map("node_execution_logs")
++}
++
++// ============================================================
++// BILLING AND ANALYTICS
++// ============================================================
++
++model PaymentRequest {
++  id             String        @id @default(cuid())
++  workspaceId    String        @map("workspace_id")
++  planTier       PlanTier      @map("plan_tier")
++  durationDays   Int           @map("duration_days")
++  amountPaid     String        @map("amount_paid")
++  transactionRef String        @map("transaction_ref")
++  receiptUrl     String?       @map("receipt_url")
++  status         PaymentStatus @default(PENDING)
++  adminNote      String?       @map("admin_note")
++
++  createdAt      DateTime      @default(now()) @map("created_at")
++  updatedAt      DateTime      @updatedAt @map("updated_at")
++
++  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++
++  @@index([workspaceId])
++  @@index([status])
++  @@map("payment_requests")
++}
++
++model ConversationTag {
++  id               String   @id @default(cuid())
++  workspaceId      String   @map("workspace_id")
++  conversationId   String   @map("conversation_id")
++  tag              String
++  createdByAgentId String?  @map("created_by_agent_id")
++  createdAt        DateTime @default(now()) @map("created_at")
++
++  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
++  agent            User?        @relation(fields: [createdByAgentId], references: [id], onDelete: SetNull)
++
++  @@index([workspaceId])
++  @@index([conversationId])
++  @@map("conversation_tags")
++}
++
++model AgentDailyMetric {
++  id                 String   @id @default(cuid())
++  workspaceId        String   @map("workspace_id")
++  agentId            String   @map("agent_id")
++  date               DateTime @db.Date
++  messagesSent       Int      @default(0) @map("messages_sent")
++  responsesReceived  Int      @default(0) @map("responses_received")
++  avgResponseSeconds Int      @default(0) @map("avg_response_seconds")
++  missedChats        Int      @default(0) @map("missed_chats")
++  tagsApplied        Json     @default("{}") @map("tags_applied")
++
++  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  agent              User      @relation(fields: [agentId], references: [id], onDelete: Cascade)
++
++  @@unique([workspaceId, agentId, date])
++  @@map("agent_daily_metrics")
++}
++
++// ΓöÇΓöÇ Automation Template Library ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++// Global catalog ΓÇö not workspace-scoped; cloned into AutomationRule on install
++
++model AutomationTemplate {
++  id                String   @id @default(cuid())
++  name              String
++  description       String
++  category          String // lead_capture | support | dealer | campaign | appointment
++  flowDefinition    Json     @map("flow_definition")
++  requiredVariables Json     @default("[]") @map("required_variables")
++  isBuiltIn         Boolean  @default(true) @map("is_built_in")
++  createdAt         DateTime @default(now()) @map("created_at")
++
++  @@index([category])
++  @@map("automation_templates")
++}
++
++// ΓöÇΓöÇ Observability & Event Logging ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++// Centralized timeline for all platform events (triggers, executions, external webhooks)
++
++model EventLog {
++  id              String   @id @default(cuid())
++  traceId         String?  @map("trace_id")
++  workspaceId     String   @map("workspace_id")
++  actorUserId     String?  @map("actor_user_id")
++  eventType       String   @map("event_type") // e.g., 'message_received', 'node_failed'
++  sourceModule    String   @map("source_module") // e.g., 'webhook', 'automation_engine'
++  targetId        String?  @map("target_id")
++  payloadMetadata Json     @default("{}") @map("payload_metadata")
++  createdAt       DateTime @default(now()) @map("created_at")
++
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++
++  @@index([traceId])
++  @@index([workspaceId, createdAt])
++  @@index([workspaceId, eventType])
++  @@map("event_logs")
++}
++
++// ============================================================
++// MEDIA GALLERY
++// ============================================================
++
++model Media {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++  name        String
++
++  // Storage Architecture
++  storageProvider String @default("local") // local | s3 | gcs
++  storageKey      String @map("storage_key") // internal path or object key
++  url             String // public or signed CDN URL generated from the storage provider
++
++  // File Metadata
++  type         String // 'image', 'video', 'document'
++  mimeType     String? @map("mime_type")
++  size         Int?
++  thumbnailUrl String? @map("thumbnail_url") // Processed thumbnail URL
++  category     String?
++  language     String?
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  templateVersions   TemplateVersion[]
++  quickReplies       QuickReply[]
++  keywordAutomations KeywordAutomation[]
++
++  @@index([workspaceId, type])
++  @@index([workspaceId, category])
++  @@map("media_gallery")
++}
++
++// ============================================================
++// TEMPLATE STUDIO (VERSIONED)
++// ============================================================
++
++model Template {
++  id          String  @id @default(cuid())
++  workspaceId String  @map("workspace_id")
++  name        String
++  category    String?
++  language    String?
++  status      String  @default("ACTIVE")
++
++  // Cached PNG snapshot captured by html2canvas on save ΓÇö prevents live re-render on grid
++  previewImageUrl String? @map("preview_image_url")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  versions           TemplateVersion[]
++  autoReplies        QuickReply[]
++  keywordAutomations KeywordAutomation[]
++
++  @@index([workspaceId])
++  @@map("templates")
++}
++
++model TemplateVersion {
++  id         String @id @default(cuid())
++  templateId String @map("template_id")
++  version    Int
++
++  messageText   String  @map("message_text")
++  footerText    String? @map("footer_text")
++  headerMediaId String? @map("header_media_id")
++
++  createdAt DateTime @default(now()) @map("created_at")
++
++  template Template         @relation(fields: [templateId], references: [id], onDelete: Cascade)
++  media    Media?           @relation(fields: [headerMediaId], references: [id], onDelete: SetNull)
++  buttons  TemplateButton[]
++
++  @@unique([templateId, version])
++  @@map("template_versions")
++}
++
++model TemplateButton {
++  id        String @id @default(cuid())
++  versionId String @map("version_id")
++
++  type    String // quick_reply | url | call
++  label   String
++  payload String?
++
++  version TemplateVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
++
++  @@map("template_buttons")
++}
++
++// ============================================================
++// INTERNAL PRODUCT KNOWLEDGE BASE
++// ============================================================
++
++enum ProductStatus {
++  INCOMPLETE
++  PENDING_REVIEW
++  VERIFIED
++  REJECTED
++}
++
++enum KnowledgeDataType {
++  TEXT
++  IMAGE
++  VIDEO
++  PDF
++  AUDIO
++}
++
++enum KnowledgeSourceStatus {
++  APPLIED // Extracted data successfully updated the main product
++  DISCARDED // Admin rejected this specific extraction
++  CONFLICT // Automatic merge failed due to low confidence or contradiction; needs review
++  FAILED_VALIDATION // AI returned unusable/malformed data
++  ORPHANED // Context resolution failed (couldn't map message to a product)
++  BLOCKED // Phone number was not in the AllowedNumber list
++}
++
++model ProductKnowledge {
++  id             String        @id @default(cuid())
++  workspaceId    String        @map("workspace_id")
++  sku            String? // Optional initial identifier
++  name           String
++  description    String?
++  price          Float?
++  category       String?
++  specifications Json?         @default("{}") // Structured key-value pairs
++  mediaUrls      String[]      @map("media_urls")
++  status         ProductStatus @default(INCOMPLETE)
++
++  missingFieldsCount Int       @default(0) @map("missing_fields_count")
++  lastOutreachAt     DateTime? @map("last_outreach_at")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  // Relations
++  workspace       Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  sources         ProductKnowledgeSource[]
++  contactProducts ContactProduct[]
++
++  @@index([workspaceId, status])
++  @@index([missingFieldsCount, lastOutreachAt]) // For anti-spam outreach queries
++  @@map("product_knowledge")
++}
++
++model ProductKnowledgeSource {
++  id           String  @id @default(cuid())
++  productId    String? @map("product_id")
++  senderUserId String? @map("sender_user_id") // Which team member sent this (if known)
++  messageId    String? @unique @map("message_id") // Link to original WhatsApp Message ID for traceability
++
++  dataType      KnowledgeDataType @map("data_type")
++  rawContentUrl String?           @map("raw_content_url") // S3 link to the raw audio/image/pdf
++  rawText       String?           @map("raw_text") // Initial text or transcribed text
++
++  extractedData    Json? // Zod-validated JSON payload
++  fieldConfidence  Json? // Map of field keys to integer confidence scores { "weight": 92 }
++  globalConfidence Int?                  @map("global_confidence") // Averaged final score
++  status           KnowledgeSourceStatus @default(CONFLICT)
++  isTrustedSource  Boolean               @default(true) @map("is_trusted_source")
++
++  createdAt DateTime @default(now()) @map("created_at")
++
++  // Relations
++  product ProductKnowledge? @relation(fields: [productId], references: [id], onDelete: Cascade)
++
++  @@index([productId])
++  @@map("product_knowledge_sources")
++}
++
++// ============================================================
++// KEYWORD AUTOMATION ENGINE (Revenue Engine - Phase 2)
++// ============================================================
++
++model KeywordAutomation {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  keyword    String
++  matchType  MatchType @default(CONTAINS) @map("match_type")
++  priority   Int       @default(0)
++  replyText  String?   @map("reply_text")
++  mediaId    String?   @map("media_id")
++  templateId String?   @map("template_id")
++  intent     String?
++
++  isActive    Boolean @default(true) @map("is_active")
++  cooldownSec Int     @default(30) @map("cooldown_sec")
++  legacyId    String? @unique @map("legacy_id")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  media     Media?          @relation(fields: [mediaId], references: [id], onDelete: SetNull)
++  template  Template?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
++  logs      AutomationLog[]
++
++  @@index([workspaceId, isActive, priority])
++  @@index([workspaceId, keyword])
++  @@map("keyword_automations")
++}
++
++// Audit log for every keyword automation trigger.
++// Powers analytics dashboard and pricing justification.
++model AutomationLog {
++  id           String @id @default(cuid())
++  workspaceId  String @map("workspace_id")
++  automationId String @map("automation_id")
++
++  keyword         String
++  contactId       String? @map("contact_id")
++  messageId       String? @map("message_id")
++  matchType       String  @map("match_type")
++  replyType       String? @map("reply_type")
++  priority        Int?    @default(0)
++  executionTimeMs Int?    @map("execution_time_ms")
++
++  triggeredAt DateTime @default(now()) @map("triggered_at")
++
++  workspace  Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  automation KeywordAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
++
++  @@index([workspaceId, triggeredAt])
++  @@index([automationId])
++  @@map("automation_logs")
++}
++
++// ============================================================
++// AUTOMATION INSIGHTS ENGINE (Phase 3 ΓÇö Self-Learning)
++// ============================================================
++
++// Suggested automations surfaced by pattern analysis.
++// Status lifecycle: pending ΓåÆ accepted (creates KeywordAutomation) | dismissed
++model AutomationInsight {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  keyword        String
++  intent         String // e.g. "pricing", "support", "demo"
++  frequency      Int // number of times seen in scan window
++  suggestedReply String @map("suggested_reply") @db.Text
++
++  // Top example messages that triggered this insight (JSON array of strings)
++  exampleMessages Json @default("[]") @map("example_messages")
++
++  // pending | accepted | dismissed
++  status String @default("pending")
++
++  scannedAt  DateTime  @default(now()) @map("scanned_at")
++  resolvedAt DateTime? @map("resolved_at")
++
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++
++  @@unique([workspaceId, keyword, status])
++  @@index([workspaceId, status])
++  @@index([workspaceId, scannedAt])
++  @@map("automation_insights")
++}
++
++// ============================================================
++// LEAD GENERATION (Google Maps / Places API - New)
++// ============================================================
++
++enum LeadListStatus {
++  PENDING
++  PROCESSING
++  READY
++  FAILED
++}
++
++enum LeadStatus {
++  RAW
++  CONVERTED
++  SKIPPED
++}
++
++model LeadList {
++  audiences Audience[]
++
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  query String
++  name  String?
++
++  status LeadListStatus @default(PENDING)
++
++  totalFound Int @default(0) @map("total_found")
++  withPhone  Int @default(0) @map("with_phone")
++  converted  Int @default(0)
++
++  jobId               String?   @map("job_id")
++  processingStartedAt DateTime? @map("processing_started_at")
++  completedAt         DateTime? @map("completed_at")
++
++  source      String  @default("google_places")
++  errorReason String? @map("error_reason")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  leads     Lead[]
++
++  @@index([workspaceId, status])
++  @@index([workspaceId, createdAt])
++  @@map("lead_lists")
++}
++
++model Lead {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++  leadListId  String @map("lead_list_id")
++
++  name          String
++  phone         String?
++  hasPhone      Boolean @default(false) @map("has_phone")
++  address       String?
++  website       String?
++  googlePlaceId String? @map("google_place_id")
++
++  rawData Json? @map("raw_data")
++
++  status LeadStatus @default(RAW)
++
++  contactId String? @map("contact_id")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  leadList  LeadList  @relation(fields: [leadListId], references: [id], onDelete: Cascade)
++  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
++
++  @@unique([leadListId, googlePlaceId])
++  @@index([leadListId, status])
++  @@index([leadListId, hasPhone])
++  @@index([workspaceId, status])
++  @@map("leads")
++}
++
++// ============================================================
++// AUDIENCES ΓÇö Contact Segmentation
++// Named, reusable groups of contacts that can be targeted in campaigns.
++// Members are snapshotted into CampaignMember at campaign population time.
++// ============================================================
++
++model Audience {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++
++  name        String
++  description String?
++
++  // "manual" | "lead_list"
++  sourceType String @default("manual") @map("source_type")
++
++  // If populated from a lead list, track the source for "Sync from Lead List"
++  leadListId String? @map("lead_list_id")
++
++  // Maintained by service layer (incremented/decremented on member changes)
++  memberCount Int @default(0) @map("member_count")
++
++  createdAt DateTime @default(now()) @map("created_at")
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  leadList  LeadList?        @relation(fields: [leadListId], references: [id], onDelete: SetNull)
++  members   AudienceMember[]
++  campaigns Campaign[]
++
++  @@index([workspaceId])
++  @@index([workspaceId, sourceType])
++  @@map("audiences")
++}
++
++model AudienceMember {
++  id         String @id @default(cuid())
++  audienceId String @map("audience_id")
++  contactId  String @map("contact_id")
++
++  // "manual" | "lead_list"
++  sourceType String @default("manual") @map("source_type")
++
++  createdAt DateTime @default(now()) @map("created_at")
++
++  audience Audience @relation(fields: [audienceId], references: [id], onDelete: Cascade)
++  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
++
++  @@unique([audienceId, contactId])
++  @@index([audienceId])
++  @@index([contactId])
++  @@map("audience_members")
++}
++
++// ============================================================
++// PHASE 2 CUSTOMIZATION: Contact-to-Product Extensibility
++// ============================================================
++
++enum ContactProductSource {
++  AI
++  MANUAL
++}
++
++model ContactProduct {
++  id          String @id @default(cuid())
++  workspaceId String @map("workspace_id")
++  contactId   String @map("contact_id")
++  productId   String @map("product_id")
++
++  // Context around the relationship
++  relationType String               @default("INTERESTED") // INTERESTED | OWNED | CART
++  source       ContactProductSource @default(MANUAL)
++  addedByAiAt  DateTime?            @map("added_by_ai_at")
++  addedAt      DateTime             @default(now()) @map("added_at")
++
++  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  contact   Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
++  product   ProductKnowledge @relation(fields: [productId], references: [id], onDelete: Cascade)
++
++  @@unique([workspaceId, contactId, productId, relationType])
++  @@index([workspaceId, contactId])
++  @@index([productId])
++  @@map("contact_products")
++}
++
++// ============================================================
++// PHASE 2 CUSTOMIZATION: Granular Access Control
++// ============================================================
++
++model AccountAccess {
++  id          String   @id @default(cuid())
++  workspaceId String   @map("workspace_id")
++  sessionId   String   @map("session_id")
++  userId      String   @map("user_id")
++  grantedAt   DateTime @default(now()) @map("granted_at")
++
++  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
++  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
++  whatsappAccount WhatsAppAccount @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
++
++  @@unique([sessionId, userId])
++  @@index([userId])
++  @@index([workspaceId, userId]) // For rapid mapping query
++  @@map("account_access")
++}
++
++// ============================================================
++// DEAD LETTER QUEUE ΓÇö Persistent storage for exhausted BullMQ jobs
++// Jobs that exhaust all BullMQ retries are captured here for
++// operator review and selective replay.
++// ============================================================
++
++enum DlqStatus {
++  PENDING_REVIEW
++  REPLAYED
++  DISCARDED
++}
++
++model DeadLetterJob {
++  id          String    @id @default(cuid())
++  workspaceId String?   @map("workspace_id") // null for system-level jobs (e.g. insight-scan)
++  jobId       String    @map("job_id")       // BullMQ-assigned job ID
++  queueName   String    @map("queue_name")
++  jobName     String    @map("job_name")     // BullMQ job name (e.g. "outbound:msg_123")
++  payload     Json                           // Full job.data ΓÇö do NOT log PII in production
++  failReason  String    @map("fail_reason") @db.Text
++  stackTrace  String?   @map("stack_trace") @db.Text
++  failedAt    DateTime  @map("failed_at")
++  attemptsMade Int      @map("attempts_made")
++  status      DlqStatus @default(PENDING_REVIEW)
++
++  // Replay tracking
++  replayedAt    DateTime? @map("replayed_at")
++  replayedJobId String?   @map("replayed_job_id") // New BullMQ jobId after replay
++  replayedBy    String?   @map("replayed_by")      // userId who triggered the replay
++
++  createdAt DateTime @default(now()) @map("created_at")
++
++  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
++
++  @@index([workspaceId, status])
++  @@index([queueName, status])
++  @@index([failedAt])
++  @@map("dead_letter_jobs")
++}
++
++// ============================================================
++// SYSTEM CONFIGURATION
++// Used for global configurations like UPI VPA mappings configurable by Admins
++// ============================================================
++
++model SystemConfig {
++  key       String   @id
++  value     Json
++  updatedAt DateTime @updatedAt @map("updated_at")
++
++  @@map("system_configs")
++}
++
++
+diff --git a/apps/api/prisma/temp_all.sql b/apps/api/prisma/temp_all.sql
+new file mode 100644
+index 0000000..94baf3a
+Binary files /dev/null and b/apps/api/prisma/temp_all.sql differ
+diff --git a/apps/api/src/core/config/pricing.ts b/apps/api/src/core/config/pricing.ts
+new file mode 100644
+index 0000000..674b437
+--- /dev/null
++++ b/apps/api/src/core/config/pricing.ts
+@@ -0,0 +1,40 @@
++import { PlanTier } from "@prisma/client";
++
++export interface PlanLimit {
++  maxAgents: number;
++  maxContacts: number;
++  maxBroadcastMessagesPerMonth: number;
++  dailyResponseLimit: number | null;
++  storageLimitBytes: bigint;
++}
++
++export const PLAN_LIMITS: Record<PlanTier, PlanLimit> = {
++  [PlanTier.FREE]: {
++    maxAgents: 1,
++    maxContacts: 100,
++    maxBroadcastMessagesPerMonth: 0, 
++    dailyResponseLimit: 100, 
++    storageLimitBytes: BigInt(10 * 1024 * 1024), // 10MB
++  },
++  [PlanTier.STARTER]: {
++    maxAgents: 3,
++    maxContacts: 2000,
++    maxBroadcastMessagesPerMonth: 10000,
++    dailyResponseLimit: null, 
++    storageLimitBytes: BigInt(500 * 1024 * 1024), // 500MB
++  },
++  [PlanTier.PRO]: {
++    maxAgents: 10,
++    maxContacts: 10000,
++    maxBroadcastMessagesPerMonth: 50000,
++    dailyResponseLimit: null, 
++    storageLimitBytes: BigInt(2 * 1024 * 1024 * 1024), // 2GB
++  },
++  [PlanTier.AGENCY]: {
++    maxAgents: 9999, // practically unlimited
++    maxContacts: 100000,
++    maxBroadcastMessagesPerMonth: 500000,
++    dailyResponseLimit: null,
++    storageLimitBytes: BigInt(10 * 1024 * 1024 * 1024), // 10GB
++  },
++};
+diff --git a/apps/api/src/core/server.ts b/apps/api/src/core/server.ts
+index a3dc05f..55662ce 100644
+--- a/apps/api/src/core/server.ts
++++ b/apps/api/src/core/server.ts
+@@ -40,6 +40,7 @@ import { licenseRoutes } from '../modules/license/license.routes';
+ import { keywordAutomationRoutes } from '../modules/automation/keyword-automation.route';
+ import { automationInsightRoutes } from '../modules/automation/automation-insights.route';
+ import { leadGenerationRoutes } from '../modules/lead-generation/lead-generation.route';
++import { billingRoutes } from '../modules/billing/billing.route';
+ import { startMonitor, getMonitorSnapshot } from './monitor';
+ 
+ /**
+@@ -206,6 +207,7 @@ export async function createServer(): Promise<FastifyInstance> {
+             await api.register(adminRoutes, { prefix: '/admin' });
+             await api.register(licenseRoutes, { prefix: '/licenses' });
+             await api.register(workspaceRoutes, { prefix: '/workspaces' });
++            await api.register(billingRoutes, { prefix: '/billing' });
+ 
+             // CRM
+             await api.register(
+diff --git a/apps/api/src/core/workers/expiry.worker.ts b/apps/api/src/core/workers/expiry.worker.ts
+new file mode 100644
+index 0000000..405b42d
+--- /dev/null
++++ b/apps/api/src/core/workers/expiry.worker.ts
+@@ -0,0 +1,34 @@
++import { prisma } from '../../prisma/client';
++import { createLogger } from '../logger';
++
++const log = createLogger({ module: 'expiry-worker' });
++
++/**
++ * Sweeps the database for any workspaces whose active subscription
++ * deadline has passed. Automatically downgrades their status to EXPIRED
++ * to prevent automated background systems (like campaigns/AI routines)
++ * from launching on their behalf.
++ */
++export async function processExpirySweep() {
++    log.info('Running daily workspace expiry sweep...');
++    try {
++        const now = new Date();
++        const result = await prisma.workspace.updateMany({
++            where: {
++                status: { in: ['ACTIVE', 'TRIAL'] },
++                expiresAt: { lt: now }
++            },
++            data: {
++                status: 'EXPIRED'
++            }
++        });
++
++        if (result.count > 0) {
++            log.info({ count: result.count }, `Flipped workspaces to EXPIRED state due to elapsed timeline.`);
++        } else {
++            log.debug('No newly expired workspaces found.');
++        }
++    } catch (err) {
++        log.error({ err }, 'Failed to process workspace expiry sweep');
++    }
++}
+diff --git a/apps/api/src/index.ts b/apps/api/src/index.ts
+index ea61c4a..7ee857c 100644
+--- a/apps/api/src/index.ts
++++ b/apps/api/src/index.ts
+@@ -21,6 +21,7 @@ import { initializeWorkers } from './core/queue';
+ import { createServer } from './core/server';
+ import { waManager } from './modules/whatsapp/whatsapp.service';
+ import { flushMessageBuffer } from './core/message-buffer';
++import { processExpirySweep } from './core/workers/expiry.worker';
+ 
+ const log = createLogger({ module: 'bootstrap' });
+ 
+@@ -91,6 +92,14 @@ async function bootstrap() {
+         log.warn({ err }, 'Failed to schedule insight scan ΓÇö non-fatal');
+     }
+ 
++    // 4.7. Schedule Daily Workspace Expiry Sweep
++    // Runs every 12 hours reliably via JS interval to automatically downgrade `status` 
++    // of passed `expiresAt` deadlines to EXPIRED.
++    processExpirySweep(); // run instantly on startup
++    setInterval(() => {
++        processExpirySweep().catch(e => log.error({ err: e }, 'Expiry sweep failed'));
++    }, 12 * 60 * 60 * 1000); // every 12 hours
++
+     // 5. Create Fastify server
+     const server = await createServer();
+ 
+diff --git a/apps/api/src/middleware/requireActiveWorkspace.ts b/apps/api/src/middleware/requireActiveWorkspace.ts
+index df4c8b3..8273f15 100644
+--- a/apps/api/src/middleware/requireActiveWorkspace.ts
++++ b/apps/api/src/middleware/requireActiveWorkspace.ts
+@@ -84,21 +84,19 @@ export async function requireActiveWorkspace(
+         workspace = result;
+     }
+ 
+-    if (workspace.status === 'SUSPENDED' || workspace.status === 'EXPIRED') {
++    if (workspace.status === 'SUSPENDED') {
+         return reply.status(402).send({
+             success: false,
+-            error: { code: 'PAYMENT_REQUIRED', message: `Workspace is ${workspace.status.toLowerCase()}. Please activate a license key.` }
++            error: { code: 'PAYMENT_REQUIRED', message: `Workspace is suspended. Please contact support.` }
+         });
+     }
+ 
+-    if (workspace.status === 'TRIAL') {
+-        // Block only if an expiry date IS set AND it has already passed
+-        if (workspace.expiresAt && workspace.expiresAt < new Date()) {
+-            return reply.status(402).send({
+-                success: false,
+-                error: { code: 'PAYMENT_REQUIRED', message: 'Workspace trial has expired. Please activate a license key.' }
+-            });
+-        }
++    // STRICT EXPIRY CHECK: If ANY license expiry date is set AND it has passed, instantly lock.
++    if (workspace.expiresAt && workspace.expiresAt < new Date()) {
++        return reply.status(402).send({
++            success: false,
++            error: { code: 'PAYMENT_REQUIRED', message: 'Workspace subscription has expired. Please activate a new license key.' }
++        });
+     }
+ }
+ 
+diff --git a/apps/api/src/modules/admin/admin.routes.ts b/apps/api/src/modules/admin/admin.routes.ts
+index be9ea90..9510d7e 100644
+--- a/apps/api/src/modules/admin/admin.routes.ts
++++ b/apps/api/src/modules/admin/admin.routes.ts
+@@ -21,6 +21,25 @@ export const adminRoutes: FastifyPluginAsync = async (fastify: FastifyInstance)
+         return reply.status(200).send({ success: true, data: tokens });
+     });
+ 
++    // ΓöÇΓöÇ System Config ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++    fastify.get('/config', { preHandler: authenticateAdmin }, async (_req, reply) => {
++        const { getAllSystemConfigs } = await import('./config.service');
++        const configs = await getAllSystemConfigs();
++        return reply.status(200).send({ success: true, data: configs });
++    });
++
++    fastify.put('/config', { preHandler: authenticateAdmin }, async (req: any, reply) => {
++        const { setSystemConfig } = await import('./config.service');
++        const updates = req.body as Record<string, any>;
++        
++        for (const [key, value] of Object.entries(updates)) {
++            await setSystemConfig(key, value);
++        }
++        
++        return reply.status(200).send({ success: true, message: 'Configuration updated.' });
++    });
++
++
+     // ΓöÇΓöÇ Workspace Management ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+     fastify.get('/workspaces', { preHandler: authenticateAdmin }, async (_req, reply) => {
+         const workspaces = await adminService.getWorkspaces();
+diff --git a/apps/api/src/modules/admin/config.service.ts b/apps/api/src/modules/admin/config.service.ts
+new file mode 100644
+index 0000000..03e8378
+--- /dev/null
++++ b/apps/api/src/modules/admin/config.service.ts
+@@ -0,0 +1,33 @@
++import { prisma } from '../../prisma/client';
++
++export async function getSystemConfig(key: string, defaultValue: any = null) {
++  const config = await prisma.systemConfig.findUnique({
++    where: { key }
++  });
++
++  if (!config) {
++    return defaultValue;
++  }
++
++  return config.value;
++}
++
++export async function setSystemConfig(key: string, value: any) {
++  const config = await prisma.systemConfig.upsert({
++    where: { key },
++    update: { value },
++    create: { key, value }
++  });
++
++  return config.value;
++}
++
++export async function getAllSystemConfigs() {
++  const configs = await prisma.systemConfig.findMany();
++  
++  // Transform from [{ key: 'K', value: 'V' }] -> { K: 'V' }
++  return configs.reduce((acc, curr) => {
++    acc[curr.key] = curr.value;
++    return acc;
++  }, {} as Record<string, any>);
++}
+diff --git a/apps/api/src/modules/billing/billing.route.ts b/apps/api/src/modules/billing/billing.route.ts
+new file mode 100644
+index 0000000..d1768ec
+--- /dev/null
++++ b/apps/api/src/modules/billing/billing.route.ts
+@@ -0,0 +1,57 @@
++import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
++import { authenticate } from '../../middleware/authenticate';
++import { authenticateAdmin } from '../../middleware/authenticateAdmin';
++import * as billingService from './billing.service';
++
++export const billingRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
++    
++    // ----------- USER FACING ROUTES -----------
++    
++    fastify.post('/payment-requests', { preHandler: authenticate }, async (req: any, reply) => {
++        const { transactionRef, planTier, durationDays, amountPaid } = req.body;
++        const workspaceId = req.user.workspaceId;
++
++        const request = await billingService.createPaymentRequest(workspaceId, transactionRef, planTier, durationDays, amountPaid);
++        return reply.status(201).sendSuccess(request);
++    });
++
++    fastify.get('/payment-requests', { preHandler: authenticate }, async (req: any, reply) => {
++        const workspaceId = req.user.workspaceId;
++        const requests = await billingService.getUserPaymentRequests(workspaceId);
++        return reply.status(200).sendSuccess(requests);
++    });
++
++    fastify.get('/config', { preHandler: authenticate }, async (_req, reply) => {
++        const { getAllSystemConfigs } = await import('../admin/config.service');
++        const configs = await getAllSystemConfigs();
++        
++        // Expose only safe variables to the frontend (like UPI settings)
++        const safeConfigs = {
++            UPI_VPA: configs['UPI_VPA'] || '',
++            UPI_MERCHANT_NAME: configs['UPI_MERCHANT_NAME'] || ''
++        };
++        
++        return reply.status(200).sendSuccess(safeConfigs);
++    });
++
++
++    // ----------- ADMIN FACING ROUTES -----------
++    
++    fastify.get('/admin/payments', { preHandler: authenticateAdmin }, async (_req, reply) => {
++        const requests = await billingService.getAdminPaymentRequests();
++        return reply.status(200).sendSuccess(requests);
++    });
++
++    fastify.post('/admin/payments/:id/process', { preHandler: authenticateAdmin }, async (req: any, reply) => {
++        const { id } = req.params;
++        const { action } = req.body; // 'APPROVE' | 'REJECT'
++        const adminId = req.user.sub;
++
++        if (action !== 'APPROVE' && action !== 'REJECT') {
++            return reply.status(400).send({ success: false, error: { message: 'Invalid action' } });
++        }
++
++        const request = await billingService.processPaymentRequest(id, action, adminId);
++        return reply.status(200).sendSuccess(request);
++    });
++};
+diff --git a/apps/api/src/modules/billing/billing.service.ts b/apps/api/src/modules/billing/billing.service.ts
+new file mode 100644
+index 0000000..30d59ac
+--- /dev/null
++++ b/apps/api/src/modules/billing/billing.service.ts
+@@ -0,0 +1,115 @@
++import { prisma } from '../../prisma/client';
++import { PlanTier } from '@prisma/client';
++import { ErrorCodes } from '@whatszor/shared';
++
++export async function createPaymentRequest(workspaceId: string, transactionRef: string, planTier: PlanTier, durationDays: number = 30, amountPaid: string = '0') {
++    if (!transactionRef) throw new Error('Transaction reference (UTR) is required');
++    if (!Object.values(PlanTier).includes(planTier)) throw new Error('Invalid plan tier');
++
++    const payment = await prisma.paymentRequest.create({
++        data: {
++            workspaceId,
++            transactionRef,
++            amountPaid,
++            planTier,
++            durationDays,
++            status: 'PENDING'
++        }
++    });
++
++    return payment;
++}
++
++export async function getUserPaymentRequests(workspaceId: string) {
++    return prisma.paymentRequest.findMany({
++        where: { workspaceId },
++        orderBy: { createdAt: 'desc' },
++    });
++}
++
++// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++// Admin logic
++
++export async function getAdminPaymentRequests() {
++    return prisma.paymentRequest.findMany({
++        orderBy: { createdAt: 'desc' },
++        include: {
++            workspace: { select: { id: true, name: true, planTier: true } }
++        }
++    });
++}
++
++export async function processPaymentRequest(paymentId: string, action: 'APPROVE' | 'REJECT', adminId: string) {
++    const payment = await prisma.paymentRequest.findUnique({
++        where: { id: paymentId }
++    });
++
++    if (!payment) {
++        throw Object.assign(new Error('Payment request not found'), { statusCode: 404, code: ErrorCodes.NOT_FOUND });
++    }
++
++    if (payment.status !== 'PENDING') {
++        throw Object.assign(new Error(`Payment is already ${payment.status}`), { statusCode: 400, code: ErrorCodes.BAD_REQUEST });
++    }
++
++    if (action === 'REJECT') {
++        return prisma.paymentRequest.update({
++            where: { id: paymentId },
++            data: { status: 'REJECTED' }
++        });
++    }
++
++    // APPROVE flow
++    // 1. Mark as APPROVED
++    // 2. Generate license key
++    // 3. Redeem license key for workspace
++    const durationDays = payment.durationDays;
++
++    const updatedPayment = await prisma.$transaction(async (tx) => {
++        // Mark payment
++        const updated = await tx.paymentRequest.update({
++            where: { id: paymentId },
++            data: { status: 'APPROVED' }
++        });
++
++        // Auto-generate and redeem key
++        const keyData = await tx.licenseKey.create({
++            data: {
++                key: `LK-${Math.random().toString(36).substring(2, 10).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`,
++                planTier: payment.planTier,
++                durationDays: durationDays,
++                status: 'REDEEMED',
++                generatedById: adminId,
++                workspaceId: payment.workspaceId,
++                redeemedAt: new Date(),
++            }
++        });
++
++        // Redeem key for workspace
++        const workspace = await tx.workspace.findUnique({ where: { id: payment.workspaceId } });
++        
++        let newExpiry = new Date();
++        newExpiry.setDate(newExpiry.getDate() + keyData.durationDays);
++
++        if (workspace?.expiresAt && workspace.expiresAt > new Date()) {
++            // Stack the days if existing key is still valid
++            newExpiry = new Date(workspace.expiresAt.getTime());
++            newExpiry.setDate(newExpiry.getDate() + keyData.durationDays);
++        }
++
++        await tx.workspace.update({
++            where: { id: payment.workspaceId },
++            data: {
++                planTier: keyData.planTier,
++                expiresAt: newExpiry,
++                // Also reset current month broadcast usage immediately upon upgrade
++                broadcastUsageCurrentMonth: 0, 
++                broadcastUsageMonth: new Date().toISOString().substring(0, 7)
++            }
++        });
++
++        return updated;
++    });
++
++    return updatedPayment;
++}
+diff --git a/apps/api/src/modules/campaign/campaign.service.ts b/apps/api/src/modules/campaign/campaign.service.ts
+index 22ae723..3ff48e6 100644
+--- a/apps/api/src/modules/campaign/campaign.service.ts
++++ b/apps/api/src/modules/campaign/campaign.service.ts
+@@ -4,6 +4,7 @@ import type { CreateCampaignInput, AddCampaignMembersInput, UpdateCampaignInput
+ import { ErrorCodes } from '@whatszor/shared';
+ import { logEvent } from '../../core/event-logger';
+ import { QueueName, getQueue } from '../../queues';
++import { PLAN_LIMITS } from '../../core/config/pricing';
+ 
+ export async function createCampaign(workspaceId: string, input: CreateCampaignInput) {
+     const campaign = await prisma.campaign.create({
+@@ -194,13 +195,46 @@ export async function startCampaign(workspaceId: string, campaignId: string, isF
+         throw { statusCode: 400, code: ErrorCodes.BAD_REQUEST, message: 'Campaign is already running or completed' };
+     }
+ 
+-    // Mark as running
+-    const updated = await prisma.campaign.update({
+-        where: { id: campaignId },
+-        data: {
+-            status: 'RUNNING',
+-            startedAt: new Date(),
+-        }
++    // ΓöÇΓöÇ Pre-flight Broadcast Usage Enforcement ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
++    if (!workspace) throw new Error('Workspace not found');
++
++    const nowStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM' format
++    let currentUsage = workspace.broadcastUsageCurrentMonth;
++
++    // Reset if month rolled over
++    if (workspace.broadcastUsageMonth !== nowStr) {
++        currentUsage = 0;
++    }
++
++    const memberCount = await prisma.campaignMember.count({ where: { campaignId } });
++    const limit = PLAN_LIMITS[workspace.planTier].maxBroadcastMessagesPerMonth;
++
++    if (currentUsage + memberCount > limit) {
++        throw Object.assign(
++            new Error(`Broadcast limit exceeded for the current month (${limit.toLocaleString()}). You have ${(limit - currentUsage).toLocaleString()} left, but this campaign has ${memberCount.toLocaleString()} recipients. Please upgrade your plan.`),
++            { statusCode: 403, code: 'LIMIT_EXCEEDED' }
++        );
++    }
++    // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++
++    // Mark as running and deduct quota atomically
++    const updated = await prisma.$transaction(async (tx) => {
++        await tx.workspace.update({
++            where: { id: workspaceId },
++            data: {
++                broadcastUsageMonth: nowStr,
++                broadcastUsageCurrentMonth: currentUsage + memberCount
++            }
++        });
++
++        return tx.campaign.update({
++            where: { id: campaignId },
++            data: {
++                status: 'RUNNING',
++                startedAt: new Date(),
++            }
++        });
+     });
+ 
+     // Enqueue job. The worker will paginate through CampaignMembers and push them to outbound routing.
+diff --git a/apps/api/src/modules/dashboard/dashboard.controller.ts b/apps/api/src/modules/dashboard/dashboard.controller.ts
+index 12a0468..e6c8515 100644
+--- a/apps/api/src/modules/dashboard/dashboard.controller.ts
++++ b/apps/api/src/modules/dashboard/dashboard.controller.ts
+@@ -174,3 +174,86 @@ export async function getRecentActivity(req: FastifyRequest, reply: FastifyReply
+ 
+     return reply.sendSuccess(formattedActivities);
+ }
++
++export async function getSalesAnalytics(req: FastifyRequest, reply: FastifyReply) {
++    const workspaceId = req.user.workspaceId;
++    
++    // We fetch metrics for the last 30 days
++    const thirtyDaysAgo = startOfDay(subDays(new Date(), 30));
++
++    // 1. Fetch raw metrics
++    const metrics = await prisma.agentDailyMetric.findMany({
++        where: {
++            workspaceId,
++            date: { gte: thirtyDaysAgo }
++        }
++    });
++
++    // 2. Fetch User instances manually to bypass missing relation
++    const agentIds = Array.from(new Set(metrics.map(m => m.agentId)));
++    const agents = await prisma.user.findMany({
++        where: { id: { in: agentIds } },
++        select: { id: true, name: true, email: true }
++    });
++    
++    const agentDataMap = new Map(agents.map(a => [a.id, a]));
++
++    // 3. Aggregate per-agent
++    const agentStatsMap = new Map<string, any>();
++
++    for (const metric of metrics) {
++        if (!agentStatsMap.has(metric.agentId)) {
++            const user = agentDataMap.get(metric.agentId);
++            agentStatsMap.set(metric.agentId, {
++                agentId: metric.agentId,
++                name: user?.name || user?.email || metric.agentId,
++                totalMessagesSent: 0,
++                avgResponseTimeSum: 0,
++                daysActive: 0
++            });
++        }
++        
++        const stat = agentStatsMap.get(metric.agentId);
++        stat.totalMessagesSent += metric.messagesSent;
++        if (metric.avgResponseSeconds > 0) {
++            stat.avgResponseTimeSum += metric.avgResponseSeconds;
++            stat.daysActive += 1;
++        }
++    }
++
++    // 4. Format final data structure
++    const agentLeaderboard = Array.from(agentStatsMap.values()).map(stat => {
++        return {
++            agentId: stat.agentId,
++            name: stat.name,
++            totalMessagesSent: stat.totalMessagesSent,
++            avgResponseTimeStr: stat.daysActive > 0 
++                ? formatDurationHumanReadable((stat.avgResponseTimeSum / stat.daysActive) * 1000)
++                : 'N/A'
++        };
++    });
++
++    // Sort by most active
++    agentLeaderboard.sort((a, b) => b.totalMessagesSent - a.totalMessagesSent);
++
++    // Provide global sum
++    const totalWorkspaceMessages = agentLeaderboard.reduce((acc, curr) => acc + curr.totalMessagesSent, 0);
++
++    return reply.sendSuccess({
++        leaderboard: agentLeaderboard,
++        totalMessagesSent: totalWorkspaceMessages
++    });
++}
++
++// Utility to convert ms to human readable "Xm Ys"
++function formatDurationHumanReadable(ms: number) {
++    if (!ms || ms < 0) return 'N/A';
++    if (ms < 1000) return '< 1s';
++    
++    let totalSeconds = Math.floor(ms / 1000);
++    const m = Math.floor(totalSeconds / 60);
++    const s = totalSeconds % 60;
++    
++    if (m > 0) return `${m}m ${s}s`;
++    return `${s}s`;
++}
+diff --git a/apps/api/src/modules/dashboard/dashboard.route.ts b/apps/api/src/modules/dashboard/dashboard.route.ts
+index 1036986..dbd5d79 100644
+--- a/apps/api/src/modules/dashboard/dashboard.route.ts
++++ b/apps/api/src/modules/dashboard/dashboard.route.ts
+@@ -1,5 +1,5 @@
+ import { FastifyInstance } from 'fastify';
+-import { getDashboardStats, getDashboardChart, getRecentActivity, getSidebarStats } from './dashboard.controller';
++import { getDashboardStats, getDashboardChart, getRecentActivity, getSidebarStats, getSalesAnalytics } from './dashboard.controller';
+ import { authenticate } from '../../middleware/authenticate';
+ 
+ export async function dashboardRoutes(fastify: FastifyInstance) {
+@@ -9,4 +9,5 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
+     fastify.get('/chart', getDashboardChart);
+     fastify.get('/activity', getRecentActivity);
+     fastify.get('/sidebar', getSidebarStats);
++    fastify.get('/sales', getSalesAnalytics);
+ }
+diff --git a/apps/api/src/modules/messaging/conversation.service.ts b/apps/api/src/modules/messaging/conversation.service.ts
+index 02c3415..04ae092 100644
+--- a/apps/api/src/modules/messaging/conversation.service.ts
++++ b/apps/api/src/modules/messaging/conversation.service.ts
+@@ -351,9 +351,59 @@ export async function sendMessage(
+         // Update conversation summary atomically with message creation
+         await tx.conversation.update({
+             where: { id: conversationId },
+-            data: { lastMessageAt: new Date(), lastMessage: contentPreview },
++            data: { lastMessageAt: new Date(), lastMessage: contentPreview, unreadCount: 0 },
+         });
+ 
++        // ==========================================
++        // ANALYTICS HOOK: AgentDailyMetric
++        // ==========================================
++        if (userId) {
++            const now = new Date();
++            const dateStr = now.toISOString().split('T')[0];
++            const date = new Date(dateStr); // Midnight UTC date
++
++            // Find last INBOUND message to calculate response time
++            const lastInbound = await tx.message.findFirst({
++                where: { conversationId, direction: 'INBOUND' },
++                orderBy: { createdAt: 'desc' }
++            });
++
++            let responseSecs: number | null = null;
++            if (lastInbound && lastInbound.createdAt > new Date(now.getTime() - 24 * 3600 * 1000)) {
++                responseSecs = Math.floor((now.getTime() - lastInbound.createdAt.getTime()) / 1000);
++            }
++
++            const metric = await tx.agentDailyMetric.findUnique({
++                where: { workspaceId_agentId_date: { workspaceId, agentId: userId, date } }
++            });
++
++            if (metric) {
++                let newAvg = metric.avgResponseSeconds;
++                let newCount = metric.responsesReceived;
++                if (responseSecs !== null) {
++                    newAvg = Math.floor(((metric.avgResponseSeconds * metric.responsesReceived) + responseSecs) / (metric.responsesReceived + 1));
++                    newCount += 1;
++                }
++                await tx.agentDailyMetric.update({
++                    where: { id: metric.id },
++                    data: {
++                        messagesSent: { increment: 1 },
++                        avgResponseSeconds: newAvg,
++                        responsesReceived: newCount,
++                    }
++                });
++            } else {
++                await tx.agentDailyMetric.create({
++                    data: {
++                        workspaceId, agentId: userId, date,
++                        messagesSent: 1,
++                        avgResponseSeconds: responseSecs ?? 0,
++                        responsesReceived: responseSecs !== null ? 1 : 0
++                    }
++                });
++            }
++        }
++
+         return msg;
+     });
+ 
+diff --git a/apps/web/src/app/(admin)/admin/payments/page.tsx b/apps/web/src/app/(admin)/admin/payments/page.tsx
+new file mode 100644
+index 0000000..8cb2207
+--- /dev/null
++++ b/apps/web/src/app/(admin)/admin/payments/page.tsx
+@@ -0,0 +1,107 @@
++'use client';
++
++import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
++import api from '@/lib/api';
++import { Loader2, CheckCircle2, XCircle, Clock } from 'lucide-react';
++import { Badge } from '@/components/ui/Badge';
++import { Button } from '@/components/ui/Button';
++
++export default function AdminPaymentsPage() {
++    const qc = useQueryClient();
++
++    const { data: requests, isLoading } = useQuery({
++        queryKey: ['admin-payments'],
++        queryFn: () => api.get('/billing/admin/payments').then(r => r.data)
++    });
++
++    const processMutation = useMutation({
++        mutationFn: ({ id, action }: { id: string; action: 'APPROVE' | 'REJECT' }) => 
++            api.post(`/billing/admin/payments/${id}/process`, { action }),
++        onSuccess: () => {
++            qc.invalidateQueries({ queryKey: ['admin-payments'] });
++        }
++    });
++
++    if (isLoading) {
++        return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-gray-500" /></div>;
++    }
++
++    return (
++        <div className="p-8 max-w-6xl mx-auto w-full">
++            <h1 className="text-2xl font-bold text-white mb-6">Payment Approvals</h1>
++
++            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden shadow-lg">
++                <table className="w-full text-left border-collapse">
++                    <thead>
++                        <tr className="bg-gray-800/50 text-gray-400 text-sm border-b border-gray-800">
++                            <th className="px-6 py-4 font-medium">Workspace</th>
++                            <th className="px-6 py-4 font-medium">Plan & Duration</th>
++                            <th className="px-6 py-4 font-medium">UTR Reference</th>
++                            <th className="px-6 py-4 font-medium">Amount</th>
++                            <th className="px-6 py-4 font-medium">Status</th>
++                            <th className="px-6 py-4 font-medium text-right">Actions</th>
++                        </tr>
++                    </thead>
++                    <tbody className="divide-y divide-gray-800 text-gray-300">
++                        {requests?.map((req: any) => (
++                            <tr key={req.id} className="hover:bg-gray-800/30 transition-colors group">
++                                <td className="px-6 py-4">
++                                    <div className="font-medium text-white">{req.workspace.name}</div>
++                                    <div className="text-xs text-gray-500 font-mono mt-1">{req.workspace.id}</div>
++                                </td>
++                                <td className="px-6 py-4">
++                                    <Badge variant="outline" className="bg-gray-800 border-gray-700 text-gray-200">
++                                        {req.planTier}
++                                    </Badge>
++                                    <div className="text-xs text-gray-400 mt-2">{req.durationDays / 30} Months</div>
++                                </td>
++                                <td className="px-6 py-4 font-mono text-sm text-yellow-400/90">{req.transactionRef}</td>
++                                <td className="px-6 py-4 font-medium">Γé╣ {parseInt(req.amountPaid || '0').toLocaleString()}</td>
++                                <td className="px-6 py-4">
++                                    {req.status === 'PENDING' && <Badge variant="warning" className="flex items-center w-fit gap-1"><Clock size={12}/> PENDING</Badge>}
++                                    {req.status === 'APPROVED' && <Badge variant="success" className="flex items-center w-fit gap-1"><CheckCircle2 size={12}/> APPROVED</Badge>}
++                                    {req.status === 'REJECTED' && <Badge variant="danger" className="flex items-center w-fit gap-1 bg-red-900/50 text-red-500"><XCircle size={12}/> REJECTED</Badge>}
++                                </td>
++                                <td className="px-6 py-4 text-right">
++                                    {req.status === 'PENDING' && (
++                                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
++                                            <Button 
++                                                variant="outline" 
++                                                size="sm" 
++                                                className="border-red-500/50 text-red-400 hover:bg-red-500/10"
++                                                onClick={() => processMutation.mutate({ id: req.id, action: 'REJECT' })}
++                                                disabled={processMutation.isPending}
++                                            >
++                                                Reject
++                                            </Button>
++                                            <Button 
++                                                size="sm" 
++                                                className="bg-green-600 hover:bg-green-500 text-white border-none"
++                                                onClick={() => processMutation.mutate({ id: req.id, action: 'APPROVE' })}
++                                                disabled={processMutation.isPending}
++                                            >
++                                                Approve
++                                            </Button>
++                                        </div>
++                                    )}
++                                    {req.status !== 'PENDING' && (
++                                        <div className="text-xs text-gray-500 flex justify-end">
++                                            Processed on {new Date(req.updatedAt).toLocaleDateString()}
++                                        </div>
++                                    )}
++                                </td>
++                            </tr>
++                        ))}
++                        {(!requests || requests.length === 0) && (
++                            <tr>
++                                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
++                                    No payment requests found.
++                                </td>
++                            </tr>
++                        )}
++                    </tbody>
++                </table>
++            </div>
++        </div>
++    );
++}
+diff --git a/apps/web/src/app/(admin)/admin/settings/page.tsx b/apps/web/src/app/(admin)/admin/settings/page.tsx
+new file mode 100644
+index 0000000..a15b63a
+--- /dev/null
++++ b/apps/web/src/app/(admin)/admin/settings/page.tsx
+@@ -0,0 +1,99 @@
++'use client';
++
++import { useState, useEffect } from 'react';
++import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
++import api from '@/lib/api';
++import { Loader2, Save, Settings } from 'lucide-react';
++import { Button } from '@/components/ui/Button';
++
++export default function AdminSettingsPage() {
++    const qc = useQueryClient();
++    const [configs, setConfigs] = useState({
++        UPI_VPA: '',
++        UPI_MERCHANT_NAME: ''
++    });
++
++    const { data: serverConfigs, isLoading } = useQuery({
++        queryKey: ['admin-config'],
++        queryFn: () => api.get('/admin/config').then(r => r.data)
++    });
++
++    useEffect(() => {
++        if (serverConfigs) {
++            setConfigs({
++                UPI_VPA: serverConfigs['UPI_VPA'] || '',
++                UPI_MERCHANT_NAME: serverConfigs['UPI_MERCHANT_NAME'] || ''
++            });
++        }
++    }, [serverConfigs]);
++
++    const saveMutation = useMutation({
++        mutationFn: (updates: typeof configs) => api.put('/admin/config', updates),
++        onSuccess: () => {
++            qc.invalidateQueries({ queryKey: ['admin-config'] });
++            // Alert or toast could go here
++            alert("Settings saved successfully.");
++        }
++    });
++
++    const handleSave = () => {
++        saveMutation.mutate(configs);
++    };
++
++    if (isLoading) {
++        return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-gray-500" /></div>;
++    }
++
++    return (
++        <div className="p-8 max-w-4xl mx-auto w-full">
++            <h1 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
++                <Settings className="text-gray-400" /> Global System Settings
++            </h1>
++
++            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg">
++                <h2 className="text-lg font-medium text-gray-200 mb-4 border-b border-gray-800 pb-2">UPI Billing Configuration</h2>
++                
++                <div className="space-y-4">
++                    <div>
++                        <label className="block text-sm font-medium text-gray-400 mb-1">
++                            Merchant VPA (UPI ID)
++                        </label>
++                        <input
++                            type="text"
++                            value={configs.UPI_VPA}
++                            onChange={(e) => setConfigs(prev => ({ ...prev, UPI_VPA: e.target.value }))}
++                            placeholder="e.g. yourbusiness@upi"
++                            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors"
++                        />
++                        <p className="text-xs text-gray-500 mt-1">The main UPI ID that will receive SaaS subscription payments.</p>
++                    </div>
++
++                    <div>
++                        <label className="block text-sm font-medium text-gray-400 mb-1">
++                            Merchant Display Name
++                        </label>
++                        <input
++                            type="text"
++                            value={configs.UPI_MERCHANT_NAME}
++                            onChange={(e) => setConfigs(prev => ({ ...prev, UPI_MERCHANT_NAME: e.target.value }))}
++                            placeholder="e.g. My SaaS Company Ltd"
++                            className="w-full bg-gray-950 border border-gray-800 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors"
++                        />
++                        <p className="text-xs text-gray-500 mt-1">The business name authenticated with NPCI associated with the above VPA.</p>
++                    </div>
++                </div>
++
++                <div className="mt-8 pt-4 border-t border-gray-800 flex justify-end">
++                    <Button 
++                        onClick={handleSave} 
++                        disabled={saveMutation.isPending}
++                        className="bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-2"
++                    >
++                        {saveMutation.isPending ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
++                        Save Configuration
++                    </Button>
++                </div>
++            </div>
++        </div>
++    );
++}
+diff --git a/apps/web/src/app/(admin)/layout.tsx b/apps/web/src/app/(admin)/layout.tsx
+index c87a41b..3397417 100644
+--- a/apps/web/src/app/(admin)/layout.tsx
++++ b/apps/web/src/app/(admin)/layout.tsx
+@@ -2,7 +2,7 @@
+ 
+ import Link from 'next/link';
+ import { usePathname, useRouter } from 'next/navigation';
+-import { Key, Users, LogOut } from 'lucide-react';
++import { Key, Users, LogOut, CreditCard } from 'lucide-react';
+ import { useAuthStore } from '@/store/auth';
+ 
+ export default function AdminLayout({
+@@ -44,6 +44,18 @@ export default function AdminLayout({
+                         >
+                             <Users size={18} /> Dealers
+                         </Link>
++                        <Link 
++                            href="/admin/payments" 
++                            className={`flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${pathname === '/admin/payments' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
++                        >
++                            <CreditCard size={18} /> Payments
++                        </Link>
++                        <Link 
++                            href="/admin/settings" 
++                            className={`flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${pathname === '/admin/settings' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
++                        >
++                            <Key size={18} /> System Settings
++                        </Link>
+                         <div className="flex-1" />
+                         <button 
+                             onClick={() => { logout(); router.push('/admin/login'); }}
+diff --git a/apps/web/src/app/(dashboard)/analytics/page.tsx b/apps/web/src/app/(dashboard)/analytics/page.tsx
+index 2fae5df..bfa2853 100644
+--- a/apps/web/src/app/(dashboard)/analytics/page.tsx
++++ b/apps/web/src/app/(dashboard)/analytics/page.tsx
+@@ -59,6 +59,12 @@ export default function DashboardPage() {
+         retry: false,
+     });
+ 
++    const { data: salesData, isLoading: salesLoading } = useQuery({
++        queryKey: ['dashboard-sales'],
++        queryFn: () => api.get('/dashboard/sales').then(r => r.data),
++        retry: false,
++    });
++
+     const cards = [
+         { title: 'Total Contacts', value: stats?.totalContacts ?? 'ΓÇö', icon: Users, colorClass: 'text-zinc-300', trend: '+12 this week' },
+         { title: 'Active Conversations', value: stats?.activeConversations ?? 'ΓÇö', icon: MessageSquare, colorClass: 'text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]', trend: '3 unread' },
+@@ -151,6 +157,67 @@ export default function DashboardPage() {
+                         </div>
+                     </div>
+                 </div>
++
++                {/* Sales Team Performance Leaderboard */}
++                <div className="glass-card mt-2">
++                    <div className="flex items-center justify-between mb-4 sm:mb-6">
++                        <div className="flex items-center gap-2">
++                            <Users size={18} className="text-accent" />
++                            <h2 className="font-semibold text-sm text-secondary">Sales Team Leaderboard (30 Days)</h2>
++                        </div>
++                        {salesData?.totalMessagesSent !== undefined && (
++                            <span className="text-xs text-muted font-medium bg-elevated px-2 py-1 rounded border border-theme">
++                                {salesData.totalMessagesSent} total messages shipped
++                            </span>
++                        )}
++                    </div>
++                    {salesLoading ? (
++                        <div className="w-full h-24 flex items-center justify-center text-muted text-sm">Loading leaderboard...</div>
++                    ) : (
++                        <div className="overflow-x-auto">
++                            <table className="w-full text-left border-collapse">
++                                <thead>
++                                    <tr className="border-b border-theme text-xs text-muted uppercase tracking-wider">
++                                        <th className="pb-3 px-2 font-medium">Rank</th>
++                                        <th className="pb-3 px-2 font-medium">Agent</th>
++                                        <th className="pb-3 px-2 font-medium">Replies Sent</th>
++                                        <th className="pb-3 px-2 font-medium">Avg Response</th>
++                                    </tr>
++                                </thead>
++                                <tbody>
++                                    {salesData?.leaderboard?.length > 0 ? (
++                                        salesData.leaderboard.map((agent: any, index: number) => (
++                                            <tr key={agent.agentId} className="border-b border-theme/50 last:border-0 hover:bg-hover/30 transition-colors">
++                                                <td className="py-3 px-2 text-sm">
++                                                    <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${index === 0 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' : index === 1 ? 'bg-zinc-300/20 text-zinc-300 border border-zinc-300/30' : index === 2 ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-elevated text-muted'}`}>
++                                                        {index + 1}
++                                                    </span>
++                                                </td>
++                                                <td className="py-3 px-2 text-sm font-medium text-primary">{agent.name}</td>
++                                                <td className="py-3 px-2 text-sm text-secondary">
++                                                    <div className="flex items-center gap-1.5">
++                                                        <MessageSquare size={14} className="text-emerald-500" />
++                                                        {agent.totalMessagesSent}
++                                                    </div>
++                                                </td>
++                                                <td className="py-3 px-2 text-sm text-secondary">
++                                                    <div className="flex items-center gap-1.5">
++                                                        <Zap size={14} className="text-purple-400" />
++                                                        {agent.avgResponseTimeStr}
++                                                    </div>
++                                                </td>
++                                            </tr>
++                                        ))
++                                    ) : (
++                                        <tr>
++                                            <td colSpan={4} className="py-6 text-center text-sm text-muted">No sales activity recorded in the last 30 days.</td>
++                                        </tr>
++                                    )}
++                                </tbody>
++                            </table>
++                        </div>
++                    )}
++                </div>
+             </div>
+         </div>
+     );
+diff --git a/apps/web/src/app/(dashboard)/settings/components/BillingTab.tsx b/apps/web/src/app/(dashboard)/settings/components/BillingTab.tsx
+new file mode 100644
+index 0000000..8be1622
+--- /dev/null
++++ b/apps/web/src/app/(dashboard)/settings/components/BillingTab.tsx
+@@ -0,0 +1,260 @@
++'use client';
++
++import { useState } from 'react';
++import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
++import api from '@/lib/api';
++import { Loader2, QrCode, CheckCircle2, Clock, XCircle, ArrowRight } from 'lucide-react';
++import { Badge } from '@/components/ui/Badge';
++import { Button } from '@/components/ui/Button';
++import QRCode from 'react-qr-code';
++
++// Must match API
++const PLAN_LIMITS = {
++    FREE: { name: 'Free Tier', price: 0 },
++    STARTER: { name: 'Starter Plan', price: 999 },
++    PRO: { name: 'Pro Plan', price: 2499 },
++    AGENCY: { name: 'Agency Plan', price: 5999 }
++} as const;
++
++export function BillingTab() {
++    const qc = useQueryClient();
++    const [utr, setUtr] = useState('');
++    const [selectedTier, setSelectedTier] = useState<keyof typeof PLAN_LIMITS>('PRO');
++    const [months, setMonths] = useState(1);
++
++    const { data: workspace, isLoading: wsLoading } = useQuery({
++        queryKey: ['workspace-current'],
++        queryFn: () => api.get('/workspaces/me').then(r => r.data)
++    });
++
++    const { data: paymentRequests, isLoading: reqsLoading } = useQuery({
++        queryKey: ['payment-requests'],
++        queryFn: () => api.get('/billing/payment-requests').then(r => r.data)
++    });
++
++    const { data: systemConfig, isLoading: configLoading } = useQuery({
++        queryKey: ['billing-config'],
++        queryFn: () => api.get('/billing/config').then(r => r.data)
++    });
++
++    const submitMutation = useMutation({
++        mutationFn: (payload: any) => api.post('/billing/payment-requests', payload),
++        onSuccess: () => {
++            setUtr('');
++            qc.invalidateQueries({ queryKey: ['payment-requests'] });
++        }
++    });
++
++    if (wsLoading || reqsLoading || configLoading) {
++        return (
++            <div className="flex items-center justify-center p-12">
++                <Loader2 className="animate-spin text-muted h-8 w-8" />
++            </div>
++        );
++    }
++
++    const tierName = PLAN_LIMITS[workspace?.planTier as keyof typeof PLAN_LIMITS]?.name || workspace?.planTier || 'Free';
++    const amountToPay = PLAN_LIMITS[selectedTier].price * months;
++
++    const upgradingTierName = PLAN_LIMITS[selectedTier]?.name || selectedTier;
++    const merchantVpa = systemConfig?.UPI_VPA || 'whatsvue@upi';
++    const merchantName = systemConfig?.UPI_MERCHANT_NAME || 'WhatsVue Software';
++    const transactionNote = encodeURIComponent(`WhatsVue ${upgradingTierName} - ${months} Months`);
++    const upiUri = amountToPay > 0 && merchantVpa
++        ? `upi://pay?pa=${merchantVpa}&pn=${encodeURIComponent(merchantName)}&am=${amountToPay.toFixed(2)}&cu=INR&tn=${transactionNote}`
++        : '';
++
++    const handleSubmitData = (e: React.FormEvent) => {
++        e.preventDefault();
++        if (!utr.trim()) return;
++        submitMutation.mutate({
++            transactionRef: utr.trim(),
++            planTier: selectedTier,
++            durationDays: months * 30,
++            amountPaid: amountToPay.toString()
++        });
++    };
++
++    return (
++        <div className="flex flex-col gap-8 max-w-4xl mx-auto md:mx-0">
++            {/* Active Subscription Summary */}
++            <div className="flex flex-col md:flex-row gap-6">
++                <div className="flex-1 card bg-surface border-theme p-6 rounded-2xl flex flex-col gap-2 relative overflow-hidden group">
++                    <div className="absolute -right-12 -top-12 w-40 h-40 bg-accent/10 rounded-full blur-3xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
++                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Current Plan</h3>
++                    <div className="text-3xl font-bold tracking-tight text-primary flex items-center gap-3">
++                        {tierName}
++                        {workspace?.planTier !== 'FREE' && (
++                            <Badge variant="success" className="text-xs">Active</Badge>
++                        )}
++                    </div>
++                    {workspace?.expiresAt ? (
++                        <p className="text-sm text-secondary mt-1">
++                            Expires on {new Date(workspace.expiresAt).toLocaleDateString()}
++                        </p>
++                    ) : (
++                        <p className="text-sm text-secondary mt-1">Forever free limits applied.</p>
++                    )}
++                </div>
++
++                <div className="flex-1 card bg-surface border-theme p-6 rounded-2xl flex flex-col gap-2">
++                    <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Usage Details</h3>
++                    <div className="flex justify-between items-center mt-2">
++                        <span className="text-sm font-medium text-secondary">Broadcasts this month</span>
++                        <span className="text-sm font-bold text-primary">{workspace?.broadcastUsageCurrentMonth || 0}</span>
++                    </div>
++                    <div className="w-full bg-body rounded-full h-1.5 mt-1 overflow-hidden">
++                        <div className="bg-accent h-1.5 rounded-full" style={{ width: '15%' }}></div>
++                    </div>
++                </div>
++            </div>
++
++            {/* Manual UPI Upgrade Section */}
++            <div>
++                <h2 className="text-xl font-bold tracking-tight text-primary mb-4">Upgrade Subscription</h2>
++                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
++                    
++                    {/* Payment Step */}
++                    <div className="card bg-surface border-theme p-6 rounded-2xl flex flex-col gap-6">
++                        <div className="flex items-center gap-3 border-b border-theme/50 pb-4">
++                            <div className="w-10 h-10 rounded-xl bg-accent/10 flex flex-center items-center justify-center text-accent">
++                                <QrCode size={20} />
++                            </div>
++                            <div>
++                                <h3 className="font-semibold text-primary">1. Scan & Pay via UPI</h3>
++                                <p className="text-xs text-muted">Use any UPI app (GPay, PhonePe, Paytm)</p>
++                            </div>
++                        </div>
++
++                        <div className="flex flex-col items-center justify-center py-6 bg-body rounded-xl border border-theme/50 border-dashed">
++                            {amountToPay > 0 ? (
++                                <div className="p-3 bg-white rounded-xl shadow-md border border-zinc-200 hover:scale-105 transition-transform duration-300">
++                                    <QRCode 
++                                        value={upiUri} 
++                                        size={180} 
++                                        level="M" 
++                                    />
++                                </div>
++                            ) : (
++                                <div className="w-[180px] h-[180px] bg-white rounded-lg p-3 shadow-sm border border-zinc-200 flex flex-col items-center justify-center text-center px-4">
++                                    <div className="w-12 h-12 rounded-full bg-green-500/10 flex flex-center items-center justify-center mb-2">
++                                        <CheckCircle2 className="text-green-500" size={24} />
++                                    </div>
++                                    <span className="font-semibold text-zinc-800 text-sm">Free Tier</span>
++                                    <span className="text-xs text-zinc-500 mt-1">No payment required.</span>
++                                </div>
++                            )}
++                            <div className="mt-5 text-center flex flex-col gap-1 w-full px-6">
++                                <div className="text-sm font-semibold text-primary bg-surface py-2 rounded-lg border border-theme w-full flex justify-between items-center px-3">
++                                    <span className="text-muted font-normal">UPI ID</span>
++                                    <span className="font-mono tracking-tight">{merchantVpa}</span>
++                                </div>
++                                <div className="text-xs text-muted mt-2">
++                                    Paying <span className="font-semibold text-primary">Γé╣{amountToPay.toLocaleString()}</span> to <span className="text-primary font-medium">{merchantName}</span>
++                                </div>
++                            </div>
++                        </div>
++                    </div>
++
++                    {/* Submission Step */}
++                    <div className="card bg-surface border-theme p-6 rounded-2xl flex flex-col gap-4">
++                        <div className="flex items-center gap-3 border-b border-theme/50 pb-4">
++                            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex flex-center items-center justify-center text-blue-500">
++                                <Clock size={20} />
++                            </div>
++                            <div>
++                                <h3 className="font-semibold text-primary">2. Submit Reference No.</h3>
++                                <p className="text-xs text-muted">Admin approval takes ~10 minutes</p>
++                            </div>
++                        </div>
++
++                        <form className="flex flex-col gap-4 mt-2" onSubmit={handleSubmitData}>
++                            <div className="flex flex-col gap-1">
++                                <label className="text-sm font-medium text-secondary">Select Plan</label>
++                                <select 
++                                    className="input text-sm"
++                                    value={selectedTier}
++                                    onChange={(e) => setSelectedTier(e.target.value as any)}
++                                >
++                                    <option value="STARTER">Starter Plan (Γé╣999/mo)</option>
++                                    <option value="PRO">Pro Plan (Γé╣2,499/mo)</option>
++                                    <option value="AGENCY">Agency Plan (Γé╣5,999/mo)</option>
++                                </select>
++                            </div>
++
++                            <div className="flex flex-col gap-1">
++                                <label className="text-sm font-medium text-secondary">Duration (Months)</label>
++                                <div className="flex items-center gap-2">
++                                    {[1, 3, 6, 12].map(m => (
++                                        <button 
++                                            key={m} type="button"
++                                            onClick={() => setMonths(m)}
++                                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${months === m ? 'bg-primary text-body border-primary' : 'bg-body border-theme text-secondary hover:text-primary'} `}
++                                        >
++                                            {m}m
++                                        </button>
++                                    ))}
++                                </div>
++                            </div>
++
++                            <div className="flex flex-col gap-1 border-t border-theme/50 pt-4 mt-2">
++                                <div className="flex justify-between items-center mb-1">
++                                    <span className="text-sm font-medium text-secondary">Amount to Pay</span>
++                                    <span className="text-xl font-bold text-primary">Γé╣ {amountToPay.toLocaleString()}</span>
++                                </div>
++                            </div>
++
++                            <div className="flex flex-col gap-1">
++                                <label className="text-sm font-medium text-secondary">12-Digit UTR Number <span className="text-red-500">*</span></label>
++                                <input 
++                                    type="text" 
++                                    placeholder="e.g. 312345678901" 
++                                    className="input font-mono text-sm"
++                                    value={utr}
++                                    onChange={e => setUtr(e.target.value)}
++                                    maxLength={20}
++                                    required
++                                />
++                            </div>
++
++                            <Button type="submit" disabled={!utr.trim() || submitMutation.isPending} className="mt-2 w-full gap-2">
++                                {submitMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <span>Submit for Activation</span>}
++                                {!submitMutation.isPending && <ArrowRight size={16} />}
++                            </Button>
++                        </form>
++                    </div>
++                </div>
++            </div>
++
++            {/* Past Requests */}
++            {paymentRequests && paymentRequests.length > 0 && (
++                <div className="mt-4">
++                    <h3 className="text-sm font-bold text-primary uppercase tracking-wider mb-4">Payment History</h3>
++                    <div className="flex flex-col gap-3">
++                        {paymentRequests.map((req: any) => (
++                            <div key={req.id} className="flex items-center justify-between p-4 rounded-xl border border-theme bg-surface hover:bg-elevated transition-colors">
++                                <div className="flex items-center gap-4">
++                                    <div className={`p-2 rounded-lg flex items-center justify-center ${req.status === 'APPROVED' ? 'bg-green-500/10 text-green-500' : req.status === 'REJECTED' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
++                                        {req.status === 'APPROVED' ? <CheckCircle2 size={16} /> : req.status === 'REJECTED' ? <XCircle size={16} /> : <Clock size={16} />}
++                                    </div>
++                                    <div className="flex flex-col">
++                                        <div className="flex items-center gap-2">
++                                            <span className="font-semibold text-primary">{PLAN_LIMITS[req.planTier as keyof typeof PLAN_LIMITS]?.name || req.planTier}</span>
++                                            <span className="text-xs text-secondary">ΓÇó {req.durationDays / 30} Months</span>
++                                        </div>
++                                        <span className="text-xs text-muted font-mono mt-0.5">UTR: {req.transactionRef}</span>
++                                    </div>
++                                </div>
++                                <div className="flex flex-col items-end">
++                                    <span className="font-bold text-primary">Γé╣ {parseInt(req.amountPaid).toLocaleString()}</span>
++                                    <span className="text-xs text-muted">{new Date(req.createdAt).toLocaleDateString()}</span>
++                                </div>
++                            </div>
++                        ))}
++                    </div>
++                </div>
++            )}
++
++        </div>
++    );
++}
+diff --git a/apps/web/src/app/(dashboard)/settings/page.tsx b/apps/web/src/app/(dashboard)/settings/page.tsx
+index 7477eeb..a20cfa8 100644
+--- a/apps/web/src/app/(dashboard)/settings/page.tsx
++++ b/apps/web/src/app/(dashboard)/settings/page.tsx
+@@ -8,6 +8,7 @@ import { GeneralTab } from './components/GeneralTab';
+ import { WhatsAppTab } from './components/WhatsAppTab';
+ import { MembersTab } from './components/MembersTab';
+ import { KnowledgeBotTab } from './components/KnowledgeBotTab';
++import { BillingTab } from './components/BillingTab';
+ import { useRouter } from 'next/navigation';
+ 
+ type Tab = 'general' | 'whatsapp' | 'ai' | 'billing' | 'members' | 'knowledgebot';
+@@ -47,7 +48,7 @@ export default function SettingsPage() {
+             {activeTab === 'general'      && <GeneralTab />}
+             {activeTab === 'whatsapp'     && <WhatsAppTab />}
+             {activeTab === 'ai'           && <div className="flex items-center justify-center h-40 text-muted text-sm">AI Configuration coming soon...</div>}
+-            {activeTab === 'billing'      && <div className="flex items-center justify-center h-40 text-muted text-sm">Billing capabilities coming soon...</div>}
++            {activeTab === 'billing'      && <BillingTab />}
+             {activeTab === 'members'      && <MembersTab />}
+             {activeTab === 'knowledgebot' && <KnowledgeBotTab />}
+         </>
+diff --git a/apps/web/src/components/ui/Badge.tsx b/apps/web/src/components/ui/Badge.tsx
+new file mode 100644
+index 0000000..574e109
+--- /dev/null
++++ b/apps/web/src/components/ui/Badge.tsx
+@@ -0,0 +1,25 @@
++import React from 'react';
++
++const variants = {
++    default: 'bg-elevated text-secondary border-theme',
++    primary: 'bg-accent/10 text-accent border-accent/20',
++    success: 'bg-green-500/10 text-green-500 border-green-500/20',
++    warning: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',
++    danger: 'bg-red-500/10 text-red-500 border-red-500/20',
++    outline: 'bg-transparent text-secondary border-theme',
++};
++
++export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
++    variant?: keyof typeof variants;
++}
++
++export function Badge({ children, variant = 'default', className = '', ...props }: BadgeProps) {
++    return (
++        <span 
++            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${variants[variant]} ${className}`}
++            {...props}
++        >
++            {children}
++        </span>
++    );
++}

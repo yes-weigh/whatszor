@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Key, Users, LogOut } from 'lucide-react';
+import { Key, Users, LogOut, CreditCard } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 
 export default function AdminLayout({
@@ -43,6 +43,18 @@ export default function AdminLayout({
                             className={`flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${pathname === '/admin/workspaces' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
                         >
                             <Users size={18} /> Dealers
+                        </Link>
+                        <Link 
+                            href="/admin/payments" 
+                            className={`flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${pathname === '/admin/payments' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                        >
+                            <CreditCard size={18} /> Payments
+                        </Link>
+                        <Link 
+                            href="/admin/settings" 
+                            className={`flex items-center gap-3 p-3 rounded-lg font-medium transition-colors ${pathname === '/admin/settings' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                        >
+                            <Key size={18} /> System Settings
                         </Link>
                         <div className="flex-1" />
                         <button 
