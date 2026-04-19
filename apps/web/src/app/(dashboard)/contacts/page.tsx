@@ -216,6 +216,60 @@ export default function ContactsPage() {
         },
     ];
 
+    // Mobile card list render function
+    const renderMobileCards = () => (
+        <div className="flex flex-col divide-y divide-theme">
+            {contacts.length === 0 ? (
+                <div className="py-12 text-center text-muted text-sm">No contacts yet.</div>
+            ) : contacts.map((contact: Contact) => {
+                const customData = contact.customData as any;
+                const sessionName = customData?.sourceSessionName;
+                return (
+                    <div
+                        key={contact.id}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-hover transition-colors cursor-pointer"
+                        onClick={() => router.push(`/contacts/${contact.id}`)}
+                    >
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 bg-accent/10 text-accent border border-accent/20">
+                            {contact.firstName.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-primary truncate">
+                                {contact.firstName} {contact.lastName}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                {contact.phone && (
+                                    <span className="text-xs text-muted flex items-center gap-1">
+                                        <Phone size={10} />{contact.phone}
+                                    </span>
+                                )}
+                                {contact.email && (
+                                    <span className="text-xs text-muted flex items-center gap-1">
+                                        <Mail size={10} /><span className="truncate max-w-[140px]">{contact.email}</span>
+                                    </span>
+                                )}
+                                {sessionName && (
+                                    <span className="text-xs text-muted">{sessionName}</span>
+                                )}
+                            </div>
+                        </div>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0 shrink-0" onClick={e => e.stopPropagation()}>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => router.push(`/contacts/${contact.id}`)}>View Details</DropdownMenuItem>
+                                <DropdownMenuItem className="text-red-500" onClick={() => bulkDelete([contact.id])}>Delete</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                );
+            })}
+        </div>
+    );
+
     return (
         <div className="flex flex-col min-h-screen">
             <Header 
@@ -223,8 +277,9 @@ export default function ContactsPage() {
                 subtitle="Manage your customer relationships" 
             />
             
-            <div className="p-6 md:p-8 space-y-6">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="p-3 sm:p-6 md:p-8 space-y-4 sm:space-y-6">
+                {/* Toolbar */}
+                <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                         {selectedRows.length > 0 && hasPermission('contacts:delete') && (
                             <Button 
@@ -233,8 +288,8 @@ export default function ContactsPage() {
                                 onClick={handleDeleteSelected}
                                 className="animate-in fade-in slide-in-from-left-2"
                             >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete ({selectedRows.length})
+                                <Trash2 className="mr-1.5 h-4 w-4" />
+                                <span className="hidden sm:inline">Delete </span>({selectedRows.length})
                             </Button>
                         )}
                         
@@ -242,11 +297,11 @@ export default function ContactsPage() {
                             <Modal open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                                 <ModalTrigger asChild>
                                     <Button variant="accent" size="sm">
-                                        <Plus className="mr-2 h-4 w-4" />
-                                        Add Contact
+                                        <Plus className="mr-1.5 h-4 w-4" />
+                                        <span className="hidden sm:inline">Add </span>Contact
                                     </Button>
                                 </ModalTrigger>
-                                <ModalContent className="sm:max-w-[425px]">
+                                <ModalContent className="sm:max-w-[425px] mx-4 sm:mx-auto">
                                     <ModalHeader>
                                         <ModalTitle>Add New Contact</ModalTitle>
                                     </ModalHeader>
@@ -320,9 +375,16 @@ export default function ContactsPage() {
                             </Modal>
                         )}
                     </div>
+                    <p className="text-xs text-muted">{contacts.length} contact{contacts.length !== 1 ? 's' : ''}</p>
                 </div>
 
-                <div className="animate-in fade-in duration-500">
+                {/* Mobile card list — hidden on md+ */}
+                <div className="block md:hidden rounded-2xl border border-theme bg-elevated overflow-hidden shadow-sm animate-in fade-in duration-500">
+                    {renderMobileCards()}
+                </div>
+
+                {/* Desktop DataTable — hidden below md */}
+                <div className="hidden md:block animate-in fade-in duration-500">
                     <DataTable 
                         columns={columns} 
                         data={contacts} 

@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import { 
   Send, CheckCheck, Check, Sparkles, Loader2, 
-  Download, FileText, Paperclip, Search, MessageSquare, X
+  Download, FileText, Paperclip, Search, MessageSquare, X, ChevronLeft
 } from 'lucide-react';
 import { Conversation, Message } from '@/hooks/useConversations';
 import { ContactAvatar, getDisplayName } from './ConversationsList';
@@ -189,6 +189,7 @@ interface ChatWindowProps {
   onSendMessage: (text: string) => void;
   inputValue: string;
   setInputValue: (val: string) => void;
+  onBack?: () => void;
 }
 
 // eslint-disable-next-line @next/next/no-duplicate-head -- function props are intentional; component is always rendered inside a client tree
@@ -201,7 +202,8 @@ export function ChatWindow({
   fetchNextPage,
   onSendMessage,
   inputValue,
-  setInputValue
+  setInputValue,
+  onBack
 }: ChatWindowProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -282,10 +284,19 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden relative chat-window-bg">
+    <div className="flex-1 w-full flex flex-col overflow-hidden relative chat-window-bg">
       {/* ── Chat Header ── */}
       <div className="px-5 py-3 border-b border-theme flex items-center justify-between bg-surface z-10 shrink-0 shadow-sm relative">
           <div className="flex items-center gap-4">
+              {onBack && (
+                  <button 
+                      onClick={onBack}
+                      className="md:hidden interactive-press p-2 -ml-2 text-muted hover:text-primary transition-colors"
+                      aria-label="Back to conversations"
+                  >
+                      <ChevronLeft size={24} />
+                  </button>
+              )}
               <ContactAvatar jid={activeConversation.providerId} name={getDisplayName(activeConversation)} sizeClass="w-10 h-10 text-sm" />
               <div>
                   <h2 className="font-semibold text-base text-primary">

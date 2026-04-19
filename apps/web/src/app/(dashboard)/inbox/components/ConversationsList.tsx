@@ -141,7 +141,7 @@ export function ConversationsList({
   });
 
   return (
-    <aside className="w-[320px] shrink-0 border-r border-theme flex flex-col bg-surface overflow-hidden">
+    <aside className="w-full md:w-[320px] shrink-0 border-r border-theme flex flex-col bg-surface overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 border-b border-theme sticky top-0 bg-surface z-10">
             <div className="flex items-center justify-between mb-3">
@@ -308,7 +308,7 @@ export function ConversationsList({
                                 
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   {conv.unreadCount > 0 && (
-                                      <span className="h-[18px] min-w-[18px] px-1.5 bg-accent rounded-full flex items-center justify-center text-[10px] font-bold" style={{ color: 'var(--bg-base)' }}>
+                                      <span className="h-[18px] min-w-[18px] px-1.5 bg-accent rounded-full flex items-center justify-center text-[10px] font-bold text-bg-base">
                                           {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
                                       </span>
                                   )}

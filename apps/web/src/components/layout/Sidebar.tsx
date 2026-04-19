@@ -101,14 +101,25 @@ function LiveBadge({ label }: { label: string }) {
 }
 
 // ─── Main Sidebar ─────────────────────────────────────────────────────────────
-export function Sidebar() {
+interface SidebarProps {
+    isMobileMenuOpen?: boolean;
+    closeMobileMenu?: () => void;
+}
+
+export function Sidebar({ isMobileMenuOpen = false, closeMobileMenu }: SidebarProps = {}) {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
+    const [showLogout, setShowLogout] = useState(false);
 
     const { user, hasPermission, logout } = useAuthStore();
     const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => { setIsMounted(true); }, []);
+
+    // Close mobile menu on route navigation
+    useEffect(() => {
+        if (closeMobileMenu) closeMobileMenu();
+    }, [pathname]);
 
     // Fetch live sidebar stat badges
     const { data: stats } = useQuery({
@@ -125,11 +136,25 @@ export function Sidebar() {
         pathname === href || pathname.startsWith(href + '/');
 
     return (
-        <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : 'sidebar--expanded'}`}>
+        <>
+            {isMobileMenuOpen && (
+                <div 
+                    className="md:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm transition-opacity"
+                    onClick={closeMobileMenu}
+                />
+            )}
+            <aside 
+                className={`sidebar z-50 ${isMobileMenuOpen ? 'sidebar--expanded' : collapsed ? 'sidebar--collapsed' : 'sidebar--expanded'} ${isMobileMenuOpen ? 'fixed inset-y-0 left-0 translate-x-0' : 'fixed inset-y-0 left-0 -translate-x-full md:relative md:translate-x-0'} transition-transform duration-300 md:transition-[width]`}
+            >
 
             {/* ── Workspace header (branding + switcher) ─────────────────── */}
-            <div className="sidebar-header" onClick={() => collapsed && setCollapsed(false)}>
-                <div className="sidebar-logo-mark">
+            <div className="sidebar-header">
+                <div 
+                    className="sidebar-logo-mark" 
+                    onClick={() => { if (!isMobileMenuOpen) setCollapsed(!collapsed); }}
+                    style={{ cursor: isMobileMenuOpen ? 'default' : 'pointer' }}
+                    title={isMobileMenuOpen ? undefined : collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
                     <NextImage src="/logo.png" alt="WhatsVue" width={18} height={18} className="object-contain" />
                 </div>
                 {!collapsed && (
@@ -138,14 +163,6 @@ export function Sidebar() {
                             <span className="sidebar-workspace-name">WhatsVue</span>
                             <span className="sidebar-workspace-plan">Pro</span>
                         </div>
-                        <button 
-                            className="sidebar-collapse-btn" 
-                            aria-label="Collapse sidebar"
-                            title="Collapse sidebar"
-                            onClick={(e) => { e.stopPropagation(); setCollapsed(true); }}
-                        >
-                            <PanelLeftClose size={15} />
-                        </button>
                     </>
                 )}
             </div>
@@ -160,9 +177,6 @@ export function Sidebar() {
 
                     return (
                         <div key={label} className="sidebar-section">
-                            {!collapsed && (
-                                <span className="sidebar-section-label">{label}</span>
-                            )}
                             {visibleItems.map((item: any) => {
                                 const { id, href, label: itemLabel, icon: Icon, badge } = item;
                                 const active = isActive(href);
@@ -231,10 +245,12 @@ export function Sidebar() {
                     {!collapsed && <span className="sidebar-nav-label">Settings</span>}
                 </Link>
 
-                <ThemeToggle collapsed={collapsed} />
-
                 {isMounted && user && (
-                    <div className="sidebar-user">
+                    <div 
+                        className="sidebar-user cursor-pointer relative"
+                        onClick={() => setShowLogout(!showLogout)}
+                        title="Toggle user actions"
+                    >
                         <div className="sidebar-user-avatar">
                             {user.name?.charAt(0).toUpperCase()}
                         </div>
@@ -244,14 +260,28 @@ export function Sidebar() {
                                     <p className="sidebar-user-name">{user.name}</p>
                                     <p className="sidebar-user-email">{user.email}</p>
                                 </div>
-                                <button
-                                    className="sidebar-user-logout"
-                                    onClick={() => logout()}
-                                    aria-label="Sign out"
-                                    title="Sign out"
-                                >
-                                    <LogOut size={13} />
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                        <ThemeToggle className="sidebar-user-logout" />
+                                    </div>
+                                </div>
+
+                                {/* Drop-up Menu */}
+                                {showLogout && (
+                                    <div 
+                                        className="absolute bottom-full left-0 mb-2 w-full bg-elevated border border-theme rounded-lg shadow-xl shadow-black/20 overflow-hidden z-[100]"
+                                    >
+                                        <button
+                                            className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium text-red-500 hover:bg-zinc-800/50 transition-colors"
+                                            onClick={(e) => { e.stopPropagation(); logout(); }}
+                                            aria-label="Sign out"
+                                            title="Sign out"
+                                        >
+                                            <LogOut size={16} />
+                                            <span>Sign out</span>
+                                        </button>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>
@@ -262,5 +292,6 @@ export function Sidebar() {
 
 
         </aside>
+        </>
     );
 }

@@ -3,6 +3,12 @@
     "rules": {
         "react/forbid-dom-props": "off",
 
+        /* False-positive: fires on any function prop received by a 'use client'
+           component even when the caller is also 'use client'. All callers of
+           components that receive callback props in this project are client
+           components, so there is no actual serialization boundary violation. */
+        "@next/next/no-unsupported-functions-in-client-components": "off",
+
         "no-restricted-syntax": [
             "error",
             {

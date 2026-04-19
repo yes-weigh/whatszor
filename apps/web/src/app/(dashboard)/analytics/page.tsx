@@ -17,14 +17,14 @@ interface StatCardProps {
 
 function StatCard({ title, value, icon: Icon, trend, colorClass }: StatCardProps) {
     return (
-        <div className="glass-card glass-card-interactive flex flex-col gap-4">
+        <div className="glass-card glass-card-interactive flex flex-col gap-3">
             <div className="flex items-start justify-between">
                 <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted">{title}</p>
-                    <p className="text-3xl font-bold mt-1 text-primary">{value}</p>
+                    <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wide text-muted">{title}</p>
+                    <p className="text-2xl sm:text-3xl font-bold mt-1 text-primary">{value}</p>
                 </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center bg-elevated border border-theme shadow-inner ${colorClass}`}>
-                    <Icon size={20} />
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center bg-elevated border border-theme shadow-inner shrink-0 ${colorClass}`}>
+                    <Icon size={18} />
                 </div>
             </div>
             {trend && (
@@ -68,22 +68,22 @@ export default function DashboardPage() {
 
     return (
         <div>
-            <Header title="Dashboard" subtitle="Your Whatsvue workspace at a glance" />
-            <div className="p-6 flex flex-col gap-6">
+            <Header title="Analytics" subtitle="Your Whatsvue workspace at a glance" />
+            <div className="p-3 sm:p-6 flex flex-col gap-4 sm:gap-6">
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
                     {cards.map(c => <StatCard key={c.title} {...c} />)}
                 </div>
 
                 {/* Activity Chart */}
                 <div className="glass-card">
-                    <div className="flex items-center gap-2 mb-6">
+                    <div className="flex items-center gap-2 mb-4 sm:mb-6">
                         <Activity className="text-emerald-500" size={18} />
                         <h2 className="font-semibold text-sm text-secondary">Platform Activity (Last 7 Days)</h2>
                     </div>
-                    <div className="h-[280px] w-full">
+                    <div className="h-[200px] sm:h-[280px] w-full">
                         {mounted && chartData ? (
-                            <ResponsiveContainer width="100%" height={280}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
@@ -95,8 +95,8 @@ export default function DashboardPage() {
                                             <stop offset="95%" stopColor="#a1a1aa" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
                                     <Tooltip
                                         contentStyle={{ backgroundColor: 'var(--bg-elevated)', backdropFilter: 'blur(10px)', borderColor: 'var(--border-strong)', borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.2)', color: 'var(--text-primary)' }}
                                         itemStyle={{ fontSize: '14px', color: 'var(--text-primary)' }}
@@ -112,15 +112,15 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Activity Feed & Quick Actions */}
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 sm:gap-4">
                     <div className="glass-card xl:col-span-2">
-                        <h2 className="font-semibold text-sm mb-4 text-secondary">Recent Activity</h2>
-                        <div className="flex flex-col gap-3">
+                        <h2 className="font-semibold text-sm mb-3 sm:mb-4 text-secondary">Recent Activity</h2>
+                        <div className="flex flex-col gap-2 sm:gap-3">
                             {activityLoading ? (
                                 <div className="text-sm text-muted">Loading activity...</div>
                             ) : activityData?.length ? (
                                 activityData.map((item: any, i: number) => (
-                                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-elevated border border-theme animate-in fade-in duration-500 delay-100 hover:bg-hover transition-colors">
+                                    <div key={i} className="flex items-start gap-3 p-2.5 sm:p-3 rounded-xl bg-elevated border border-theme animate-in fade-in duration-500 delay-100 hover:bg-hover transition-colors">
                                         <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 shadow-[0_0_8px_currentColor] ${item.dot.replace('bg-accent', 'bg-emerald-500').replace('bg-success', 'bg-emerald-400')}`} />
                                         <div className="flex-1">
                                             <p className="text-sm text-primary">{item.msg}</p>
@@ -135,17 +135,17 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="glass-card">
-                        <h2 className="font-semibold text-sm mb-4 text-secondary">Quick Actions</h2>
-                        <div className="flex flex-col gap-2">
+                        <h2 className="font-semibold text-sm mb-3 sm:mb-4 text-secondary">Quick Actions</h2>
+                        <div className="grid grid-cols-3 xl:grid-cols-1 gap-2">
                             {[
                                 { label: 'New Campaign', href: '/campaigns/new', cls: 'bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20' },
                                 { label: 'Add Contact', href: '/contacts', cls: 'bg-elevated text-secondary border border-theme hover:bg-hover hover:text-primary' },
-                                { label: 'Create Automation', href: '/automations', cls: 'bg-elevated text-secondary border border-theme hover:bg-hover hover:text-primary' },
+                                { label: 'Automation', href: '/automations', cls: 'bg-elevated text-secondary border border-theme hover:bg-hover hover:text-primary' },
                             ].map(a => (
                                 <a key={a.label} href={a.href}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${a.cls}`}
+                                    className={`flex flex-col sm:flex-row items-center gap-1.5 sm:gap-3 px-3 sm:px-4 py-3 rounded-xl transition-all text-center sm:text-left ${a.cls}`}
                                 >
-                                    <span className="text-sm font-medium">{a.label}</span>
+                                    <span className="text-xs sm:text-sm font-medium leading-tight">{a.label}</span>
                                 </a>
                             ))}
                         </div>

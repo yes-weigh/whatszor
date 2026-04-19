@@ -86,7 +86,7 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
   // If no conversation is selected, show empty state
   if (!activeConversation) {
     return (
-      <div className="w-[320px] shrink-0 border-l border-theme bg-surface h-full flex flex-col items-center justify-center p-6 text-center opacity-60 relative overflow-hidden">
+      <div className="w-full shrink-0 border-l border-theme bg-surface h-full flex flex-col items-center justify-center p-6 text-center opacity-60 relative overflow-hidden">
         <div className="absolute inset-0 bg-accent-ai/[0.02] pointer-events-none" />
         <Sparkles size={32} className="text-muted mb-3 relative z-10" />
         <p className="text-[14px] font-semibold text-primary relative z-10 tracking-tight">AI Copilot</p>
@@ -130,7 +130,7 @@ export function AISuggestions({ activeConversation, messages, onSelectSuggestion
   }
 
   return (
-    <div className="w-[320px] shrink-0 border-l border-theme bg-surface h-full flex flex-col overflow-y-auto relative ai-suggestions-bg">
+    <div className="w-full shrink-0 border-l border-theme bg-surface h-full flex flex-col overflow-y-auto relative ai-suggestions-bg">
       {/* Header */}
       <div className="px-4 py-3 border-b border-theme sticky top-0 bg-surface z-10 flex items-center justify-between">
         <div className="flex items-center gap-2">

@@ -38,36 +38,43 @@ export default function InboxCommandCenter() {
   return (
     <div className="flex h-screen overflow-hidden bg-app">
         {/* ── Pane 1: Conversations List (Left) ── */}
-        <ConversationsList 
-            conversations={conversations}
-            loading={convsLoading}
-            accounts={accounts}
-            connectedAccounts={connectedAccounts}
-            activeSessionId={activeSessionId}
-            setActiveSessionId={setActiveSessionId}
-            activeConversation={activeConversation}
-            onSelect={setActiveConversation}
-        />
+        <div className={`shrink-0 h-full w-full md:w-auto ${activeConversation ? 'hidden md:flex' : 'flex'}`}>
+            <ConversationsList 
+                conversations={conversations}
+                loading={convsLoading}
+                accounts={accounts}
+                connectedAccounts={connectedAccounts}
+                activeSessionId={activeSessionId}
+                setActiveSessionId={setActiveSessionId}
+                activeConversation={activeConversation}
+                onSelect={setActiveConversation}
+            />
+        </div>
 
         {/* ── Pane 2: WhatsApp Chat Execution (Center) ── */}
-        <ChatWindow 
-            activeConversation={activeConversation}
-            messages={messages}
-            loading={msgsLoading}
-            hasNextPage={hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            fetchNextPage={fetchNextPage}
-            inputValue={chatInputValue}
-            setInputValue={setChatInputValue}
-            onSendMessage={handleSendMessage}
-        />
+        <div className={`flex-1 h-full w-full ${!activeConversation ? 'hidden md:flex' : 'flex'}`}>
+            <ChatWindow 
+                activeConversation={activeConversation}
+                messages={messages}
+                loading={msgsLoading}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                fetchNextPage={fetchNextPage}
+                inputValue={chatInputValue}
+                setInputValue={setChatInputValue}
+                onSendMessage={handleSendMessage}
+                onBack={() => setActiveConversation(null)}
+            />
+        </div>
 
         {/* ── Pane 3: AI Copilot (Right) ── */}
-        <AISuggestions 
-            activeConversation={activeConversation}
-            messages={messages}
-            onSelectSuggestion={handleAiSuggestionSelect}
-        />
+        <div className="hidden lg:flex w-[300px] xl:w-[350px] h-full shrink-0">
+            <AISuggestions 
+                activeConversation={activeConversation}
+                messages={messages}
+                onSelectSuggestion={handleAiSuggestionSelect}
+            />
+        </div>
     </div>
   );
 }

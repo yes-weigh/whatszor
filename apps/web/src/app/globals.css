@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Utility: hide scrollbar while keeping scroll functionality */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 @layer base {
   :root {
     /* Deep Black Monochrome Theme (Vercel/Linear style) */
@@ -686,6 +695,8 @@
 @layer utilities {
   .bg-glow-ai { background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, transparent 60%); }
   .text-strong { color: var(--border-strong); }
+  /* Unread badge text — uses bg-base token so it contrasts with the accent bg */
+  .text-bg-base { color: var(--bg-base); }
 
   /* Premium Interaction System */
   .interactive-press {
