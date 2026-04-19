@@ -317,7 +317,7 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                                             {blurredLeadsCount} Leads Hidden
                                         </h3>
                                         <p className="text-sm text-muted mb-5">
-                                            You've hit the view limit for the Free tier. Upgrade to Pro to see all found leads and export them directly to your CRM.
+                                            You&apos;ve hit the view limit for the Free tier. Upgrade to Pro to see all found leads and export them directly to your CRM.
                                         </p>
                                         <Button variant="accent" className="w-full shadow-lg shadow-accent/20" onClick={() => router.push('/settings?tab=billing')}>
                                             Upgrade Subscription (₹999/mo)
