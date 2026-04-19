@@ -132,6 +132,13 @@ export function Sidebar({ isMobileMenuOpen = false, closeMobileMenu }: SidebarPr
         refetchInterval: 15000, // Poll every 15s to keep sidebar fresh
     });
 
+    const { data: workspace } = useQuery({
+        queryKey: ['workspace-current'],
+        queryFn: () => api.get('/workspaces/me').then(r => r.data),
+        enabled: isMounted && !!user,
+        staleTime: 5 * 60 * 1000, // Cache for 5 mins
+    });
+
     const isActive = (href: string) =>
         pathname === href || pathname.startsWith(href + '/');
 
@@ -150,9 +157,8 @@ export function Sidebar({ isMobileMenuOpen = false, closeMobileMenu }: SidebarPr
             {/* ── Workspace header (branding + switcher) ─────────────────── */}
             <div className="sidebar-header">
                 <div 
-                    className="sidebar-logo-mark" 
+                    className={`sidebar-logo-mark ${isMobileMenuOpen ? 'cursor-default' : 'cursor-pointer'}`} 
                     onClick={() => { if (!isMobileMenuOpen) setCollapsed(!collapsed); }}
-                    style={{ cursor: isMobileMenuOpen ? 'default' : 'pointer' }}
                     title={isMobileMenuOpen ? undefined : collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
                     <NextImage src="/logo.png" alt="WhatsVue" width={18} height={18} className="object-contain" />
@@ -160,8 +166,10 @@ export function Sidebar({ isMobileMenuOpen = false, closeMobileMenu }: SidebarPr
                 {!collapsed && (
                     <>
                         <div className="sidebar-workspace-info">
-                            <span className="sidebar-workspace-name">WhatsVue</span>
-                            <span className="sidebar-workspace-plan">Pro</span>
+                            <span className="sidebar-workspace-name">{workspace?.name || 'WhatsVue'}</span>
+                            <span className={`sidebar-workspace-plan !text-[10px] uppercase font-bold tracking-wider ${(workspace?.planTier !== 'FREE' ? workspace?.planTier : workspace?.plan?.toUpperCase()) === 'FREE' ? 'text-zinc-500' : 'text-green-500'}`}>
+                                {workspace?.planTier !== 'FREE' ? workspace?.planTier : (workspace?.plan?.toUpperCase() || 'FREE')}
+                            </span>
                         </div>
                     </>
                 )}

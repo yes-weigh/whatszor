@@ -53,7 +53,8 @@ export function BillingTab() {
         );
     }
 
-    const tierName = PLAN_LIMITS[workspace?.planTier as keyof typeof PLAN_LIMITS]?.name || workspace?.planTier || 'Free';
+    const activeTier = workspace?.planTier !== 'FREE' ? workspace?.planTier : (workspace?.plan?.toUpperCase() || 'FREE');
+    const tierName = PLAN_LIMITS[activeTier as keyof typeof PLAN_LIMITS]?.name || activeTier || 'Free Tier';
     const amountToPay = PLAN_LIMITS[selectedTier].price * months;
 
     const upgradingTierName = PLAN_LIMITS[selectedTier]?.name || selectedTier;
@@ -104,7 +105,7 @@ export function BillingTab() {
                         <span className="text-sm font-bold text-primary">{workspace?.broadcastUsageCurrentMonth || 0}</span>
                     </div>
                     <div className="w-full bg-body rounded-full h-1.5 mt-1 overflow-hidden">
-                        <div className="bg-accent h-1.5 rounded-full" style={{ width: '15%' }}></div>
+                        <div className="bg-accent h-1.5 rounded-full w-[15%]"></div>
                     </div>
                 </div>
             </div>
@@ -173,6 +174,7 @@ export function BillingTab() {
                                 <label className="text-sm font-medium text-secondary">Select Plan</label>
                                 <select 
                                     className="input text-sm"
+                                    title="Select Subscription Plan"
                                     value={selectedTier}
                                     onChange={(e) => setSelectedTier(e.target.value as any)}
                                 >
@@ -189,7 +191,7 @@ export function BillingTab() {
                                         <button 
                                             key={m} type="button"
                                             onClick={() => setMonths(m)}
-                                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${months === m ? 'bg-primary text-body border-primary' : 'bg-body border-theme text-secondary hover:text-primary'} `}
+                                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${months === m ? 'bg-primary text-bg-base border-primary' : 'bg-body border-theme text-secondary hover:text-primary'} `}
                                         >
                                             {m}m
                                         </button>

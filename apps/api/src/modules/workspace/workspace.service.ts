@@ -18,6 +18,11 @@ export async function getWorkspace(workspaceId: string) {
             slug: true,
             status: true,
             plan: true,
+            planTier: true,
+            broadcastUsageMonth: true,
+            broadcastUsageCurrentMonth: true,
+            storageUsedBytes: true,
+            storageLimitBytes: true,
             settings: true,
             createdAt: true,
             updatedAt: true,
@@ -31,11 +36,15 @@ export async function getWorkspace(workspaceId: string) {
         throw err;
     }
 
-    return workspace;
+    return {
+        ...workspace,
+        storageUsedBytes: Number(workspace.storageUsedBytes),
+        storageLimitBytes: Number(workspace.storageLimitBytes),
+    };
 }
 
 export async function updateWorkspace(workspaceId: string, input: UpdateWorkspaceInput) {
-    return prisma.workspace.update({
+    const updated = await prisma.workspace.update({
         where: { id: workspaceId },
         data: {
             name: input.name ?? undefined,
@@ -48,10 +57,21 @@ export async function updateWorkspace(workspaceId: string, input: UpdateWorkspac
             slug: true,
             status: true,
             plan: true,
+            planTier: true,
+            broadcastUsageMonth: true,
+            broadcastUsageCurrentMonth: true,
+            storageUsedBytes: true,
+            storageLimitBytes: true,
             settings: true,
             updatedAt: true,
         },
     });
+
+    return {
+        ...updated,
+        storageUsedBytes: Number(updated.storageUsedBytes),
+        storageLimitBytes: Number(updated.storageLimitBytes),
+    };
 }
 
 // ── Members ────────────────────────────────────────────────

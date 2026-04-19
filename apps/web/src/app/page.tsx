@@ -511,7 +511,99 @@ export default function LandingPage() {
                     </div>
                 </section>
 
-                {/* 6. FINAL CTA (STRONG CLOSE) */}
+                {/* 6. PRICING PLANS */}
+                <section className="py-24 bg-base relative overflow-hidden transition-colors border-t border-theme" id="pricing">
+                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                        <div className="text-center max-w-3xl mx-auto mb-16">
+                            <h2 className="text-3xl font-bold text-primary sm:text-4xl mb-4">Simple, transparent pricing</h2>
+                            <p className="text-muted text-lg">Scale your WhatsApp operations with predictive costs and powerful limits.</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+                            {/* Free Tier */}
+                            <GlowCard className="p-8 flex flex-col h-full !bg-surface shadow-[0_0_15px_rgba(0,0,0,0.02)]">
+                                <div className="mb-6">
+                                    <h3 className="text-xl font-bold text-primary mb-2">Free</h3>
+                                    <p className="text-sm text-secondary">Perfect for testing the waters.</p>
+                                    <div className="mt-4 flex items-baseline text-4xl font-extrabold text-primary">
+                                        ₹0<span className="ml-1 text-xl font-medium text-muted">/mo</span>
+                                    </div>
+                                </div>
+                                <ul className="flex-1 space-y-4 text-sm text-secondary mb-8">
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> 100MB Media Storage</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> 50 G-Map Extractions/mo</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> 1 Team Member</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Standard Support</li>
+                                </ul>
+                                <Link href="/register" className="w-full inline-flex justify-center rounded-xl bg-body border border-theme px-4 py-3 text-sm font-semibold text-primary hover:bg-hover transition-colors mt-auto">Get Started</Link>
+                            </GlowCard>
+
+                            {/* Starter Tier */}
+                            <GlowCard className="p-8 flex flex-col h-full !bg-surface shadow-[0_0_15px_rgba(0,0,0,0.02)]">
+                                <div className="mb-6">
+                                    <h3 className="text-xl font-bold text-primary mb-2">Starter</h3>
+                                    <p className="text-sm text-secondary">For growing local businesses.</p>
+                                    <div className="mt-4 flex items-baseline text-4xl font-extrabold text-primary">
+                                        ₹999<span className="ml-1 text-xl font-medium text-muted">/mo</span>
+                                    </div>
+                                </div>
+                                <ul className="flex-1 space-y-4 text-sm text-secondary mb-8">
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> 500MB Media Storage</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> 1,000 G-Map Extractions/mo</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> 3 Team Members</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Automated Auto-Replies</li>
+                                </ul>
+                                <Link href="/register" className="w-full inline-flex justify-center rounded-xl bg-body border border-theme px-4 py-3 text-sm font-semibold text-primary hover:bg-hover transition-colors mt-auto">Start Trial</Link>
+                            </GlowCard>
+
+                            {/* Pro Tier (Highlighted) */}
+                            <div className="relative group rounded-2xl bg-gradient-to-b from-emerald-500/20 to-transparent p-[1px] md:-my-4 md:z-10 shadow-2xl h-full flex transform hover:-translate-y-1 transition-transform duration-300">
+                                <div className="absolute inset-0 bg-emerald-500/10 blur-xl rounded-2xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                                <div className="relative w-full bg-surface rounded-2xl border border-emerald-500/30 p-8 flex flex-col overflow-hidden backdrop-blur-md">
+                                    <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500"></div>
+                                    <div className="absolute top-4 right-4 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide border border-emerald-500/30">
+                                        Most Popular
+                                    </div>
+                                    <div className="mb-6 mt-2">
+                                        <h3 className="text-xl font-bold text-primary mb-2">Pro</h3>
+                                        <p className="text-sm text-secondary">Full power for closing teams.</p>
+                                        <div className="mt-4 flex items-baseline text-4xl font-extrabold text-primary">
+                                            ₹2,499<span className="ml-1 text-xl font-medium text-muted">/mo</span>
+                                        </div>
+                                    </div>
+                                    <ul className="flex-1 space-y-4 text-sm text-secondary mb-8">
+                                        <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> <span className="font-semibold text-primary">2GB</span> Media Storage</li>
+                                        <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> <span className="font-semibold text-primary">5,000</span> G-Map Extractions/mo</li>
+                                        <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Bulk WhatsApp Campaigns</li>
+                                        <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> AI Reply Suggestions</li>
+                                    </ul>
+                                    <Link href="/register" className="w-full inline-flex justify-center rounded-xl bg-emerald-500 px-4 py-4 text-sm font-bold text-white dark:text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:bg-emerald-400 transition-all mt-auto scale-100 hover:scale-105">Upgrade to Pro</Link>
+                                </div>
+                            </div>
+
+                            {/* Agency Tier */}
+                            <GlowCard className="p-8 flex flex-col h-full !bg-surface shadow-[0_0_15px_rgba(0,0,0,0.02)]">
+                                <div className="mb-6">
+                                    <h3 className="text-xl font-bold text-primary mb-2">Agency</h3>
+                                    <p className="text-sm text-secondary">Unlimited scale capability.</p>
+                                    <div className="mt-4 flex items-baseline text-4xl font-extrabold text-primary">
+                                        ₹5,999<span className="ml-1 text-xl font-medium text-muted">/mo</span>
+                                    </div>
+                                </div>
+                                <ul className="flex-1 space-y-4 text-sm text-secondary mb-8">
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> 10GB Media Storage</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Unlimited Extractions</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Priority 24/7 Support</li>
+                                    <li className="flex items-start gap-3"><CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" /> Whitelabel Ready</li>
+                                </ul>
+                                <a href="#demo" className="w-full inline-flex justify-center rounded-xl bg-body border border-theme px-4 py-3 text-sm font-semibold text-primary hover:bg-hover transition-colors mt-auto">Contact Sales</a>
+                            </GlowCard>
+
+                        </div>
+                    </div>
+                </section>
+
+                {/* 7. FINAL CTA (STRONG CLOSE) */}
                 <section className="relative py-32 bg-surface overflow-hidden border-t border-theme transition-colors">
                     <div className="absolute inset-0 bg-emerald-500/10 dark:bg-emerald-900/20 blur-3xl rounded-full scale-150 transform translate-y-1/2"></div>
                     
