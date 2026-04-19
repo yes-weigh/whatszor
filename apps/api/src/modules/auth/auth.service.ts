@@ -49,7 +49,8 @@ export async function registerUser(input: RegisterInput): Promise<AuthTokens> {
             data: {
                 name: workspaceName,
                 slug: workspaceSlug,
-                status: 'TRIAL',
+                status: 'ACTIVE',
+                planTier: 'FREE',
                 members: {
                     create: { userId: user.id, role: 'OWNER' },
                 },

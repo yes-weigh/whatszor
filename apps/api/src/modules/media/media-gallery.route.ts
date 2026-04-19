@@ -6,6 +6,7 @@ import multipart from '@fastify/multipart';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/require-role';
 import { resolveStorageLimit } from '../../core/config/storage';
+import { PLAN_LIMITS } from '../../core/config/pricing';
 
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;  // 10MB
@@ -70,6 +71,15 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
         }
         const storageLimit = resolveStorageLimit(wsForPlan.planTier, wsForPlan.storageLimitBytes);
         const fileSize = BigInt(buffer.length);
+
+        const maxMediaFiles = PLAN_LIMITS[wsForPlan.planTier].maxMediaFiles;
+        const currentMediaCount = await prisma.media.count({ where: { workspaceId } });
+        if (currentMediaCount >= maxMediaFiles) {
+            return reply.sendError({ 
+                message: `Media file limit reached. Upgrade your plan to upload more than ${maxMediaFiles} files.`, 
+                code: 'PAYMENT_REQUIRED' 
+            }, 402);
+        }
 
         // Atomic compare-and-swap: increment ONLY if quota allows. No separate read.
         // If the workspace is over-limit, 0 rows are updated and we return 413.

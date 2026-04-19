@@ -7,6 +7,30 @@ import { QueueName, getQueue } from '../../queues';
 import { PLAN_LIMITS } from '../../core/config/pricing';
 
 export async function createCampaign(workspaceId: string, input: CreateCampaignInput) {
+    const workspace = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { planTier: true },
+    });
+    
+    // Check daily campaign limit
+    const limit = PLAN_LIMITS[workspace?.planTier || 'FREE'].maxCampaignsPerDay;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const campaignsToday = await prisma.campaign.count({
+        where: {
+            workspaceId,
+            createdAt: { gte: today }
+        }
+    });
+
+    if (campaignsToday >= limit) {
+        throw Object.assign(
+            new Error(`Daily campaign limit reached. Upgrade your plan to create more than ${limit} campaigns per day.`),
+            { code: 'PAYMENT_REQUIRED', statusCode: 402 }
+        );
+    }
+
     const campaign = await prisma.campaign.create({
         data: {
             workspaceId,

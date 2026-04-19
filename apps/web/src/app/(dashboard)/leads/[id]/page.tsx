@@ -22,6 +22,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { ColumnDef } from '@tanstack/react-table';
+import { Lock } from 'lucide-react';
 
 export default function LeadListDetailPage({ params }: { params: { id: string } }) {
     const router = useRouter();
@@ -58,14 +59,17 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
         {
             accessorKey: "name",
             header: "Name",
-            cell: ({ row }) => (
-                <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-primary">{row.getValue("name")}</span>
-                    {row.original.googlePlaceId && (
-                        <span className="text-xs text-muted font-mono">{row.original.googlePlaceId.substring(0, 8)}...</span>
-                    )}
-                </div>
-            ),
+            cell: ({ row }) => {
+                const isBlurred = row.original._isLocked === true;
+                return (
+                    <div className={`flex flex-col gap-0.5 ${isBlurred ? 'blur-sm select-none opacity-60' : ''}`}>
+                        <span className="text-sm font-semibold text-primary">{row.getValue("name")}</span>
+                        {row.original.googlePlaceId && !isBlurred && (
+                            <span className="text-xs text-muted font-mono">{row.original.googlePlaceId.substring(0, 8)}...</span>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             accessorKey: "phone",
@@ -75,12 +79,14 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                 const status = row.original.status;
                 const hasPhone = row.original.hasPhone;
 
+                const isBlurred = row.original._isLocked === true;
+
                 if (!hasPhone) {
-                    return <span className="text-xs text-muted italic">— No Phone —</span>;
+                    return <span className={`text-xs text-muted italic ${isBlurred ? 'blur-[2px] select-none opacity-60' : ''}`}>— No Phone —</span>;
                 }
 
                 return (
-                    <div className="flex flex-col gap-1">
+                    <div className={`flex flex-col gap-1 ${isBlurred ? 'blur-sm select-none opacity-60 pointer-events-none' : ''}`}>
                         <div className="flex items-center gap-2 text-sm text-secondary">
                             <Phone size={14} className="text-muted" />
                             {phone}
@@ -104,9 +110,11 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
             header: "Address",
             cell: ({ row }) => {
                 const address = row.getValue("address") as string | null;
+                const isBlurred = row.original._isLocked === true;
+                
                 if (!address) return <span className="text-muted">—</span>;
                 return (
-                    <div className="flex items-center gap-2 text-sm text-secondary max-w-xs truncate" title={address}>
+                    <div className={`flex items-center gap-2 text-sm text-secondary max-w-xs truncate ${isBlurred ? 'blur-sm select-none opacity-60' : ''}`} title={address}>
                         <MapPin size={14} className="text-muted shrink-0" />
                         <span className="truncate">{address}</span>
                     </div>
@@ -118,12 +126,20 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
             header: "Website",
             cell: ({ row }) => {
                 const website = row.getValue("website") as string | null;
+                const isBlurred = row.original._isLocked === true;
+                
                 if (!website) return <span className="text-muted">—</span>;
+                let displayHost = website;
+                try {
+                    displayHost = website === 'https://hidden.url' ? 'hidden.url' : new URL(website).hostname;
+                } catch {
+                    displayHost = website;
+                }
                 return (
-                    <a href={website} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-accent hover:underline max-w-[200px] truncate">
+                    <div className={`flex items-center gap-2 text-sm text-accent max-w-[200px] truncate ${isBlurred ? 'blur-sm select-none opacity-60 pointer-events-none text-muted' : 'hover:underline cursor-pointer'}`}>
                         <Globe size={14} className="shrink-0" />
-                        <span className="truncate">{new URL(website).hostname}</span>
-                    </a>
+                        <span className="truncate">{displayHost}</span>
+                    </div>
                 );
             },
         },
@@ -147,6 +163,7 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
 
     const isProcessing = list.status === 'PROCESSING' || list.status === 'PENDING';
     const isFailed = list.status === 'FAILED';
+    const blurredLeadsCount = leads?.filter(l => l._isLocked === true).length || 0;
 
     return (
         <div className="flex flex-col min-h-screen">
@@ -289,7 +306,26 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                             </div>
                         )}
 
-                        <div className="animate-in fade-in duration-500">
+                        <div className="animate-in fade-in duration-500 relative">
+                            {blurredLeadsCount > 0 && (
+                                <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-background via-background/90 to-transparent z-10 flex flex-col items-center justify-end pb-8 pointer-events-none">
+                                    <div className="bg-elevated/80 backdrop-blur-md border border-accent/20 shadow-2xl shadow-accent/5 p-6 rounded-2xl flex flex-col items-center text-center max-w-md pointer-events-auto">
+                                        <div className="w-12 h-12 bg-accent/10 text-accent rounded-full flex items-center justify-center mb-3">
+                                            <Lock size={20} />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-primary mb-1">
+                                            {blurredLeadsCount} Leads Hidden
+                                        </h3>
+                                        <p className="text-sm text-muted mb-5">
+                                            You've hit the view limit for the Free tier. Upgrade to Pro to see all found leads and export them directly to your CRM.
+                                        </p>
+                                        <Button variant="accent" className="w-full shadow-lg shadow-accent/20" onClick={() => router.push('/settings?tab=billing')}>
+                                            Upgrade Subscription (₹999/mo)
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
                             <DataTable 
                                 columns={columns} 
                                 data={leads} 

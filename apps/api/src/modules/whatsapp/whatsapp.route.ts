@@ -8,6 +8,7 @@ import { getAntibanStats } from '../../core/antiban';
 import { logEvent } from '../../core/event-logger';
 
 import { requireActiveWorkspace } from '../../middleware/requireActiveWorkspace';
+import { PLAN_LIMITS } from '../../core/config/pricing';
 
 export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
@@ -44,6 +45,14 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
             workspaceId: req.user.workspaceId,
             role: req.user.role as import('@prisma/client').UserRole,
         };
+
+        const workspace = await prisma.workspace.findUnique({ where: { id: ctx.workspaceId }, select: { planTier: true } });
+        const currentAccounts = await prisma.whatsAppAccount.count({ where: { workspaceId: ctx.workspaceId, deletedAt: null } });
+        const limit = PLAN_LIMITS[workspace?.planTier || 'FREE'].maxWhatsAppAccounts;
+
+        if (currentAccounts >= limit) {
+             return reply.sendError({ message: `Plan limit reached. Upgrade to add more than ${limit} WhatsApp accounts.`, code: 'PAYMENT_REQUIRED' }, 402);
+        }
 
         const sessionId = randomUUID();
 

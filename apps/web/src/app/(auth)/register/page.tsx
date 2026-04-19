@@ -48,10 +48,9 @@ export default function RegisterPage() {
             const me = meRes.data as any;
             if (!me) throw new Error('Could not retrieve user profile after registration');
 
-            // Step 4: Persist auth state and redirect to license activation
-            // New workspaces start as TRIAL — they must activate a license before accessing the dashboard
+            // Step 4: Persist auth state and redirect to dashboard
             setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken, refreshToken);
-            router.push('/workspace/unlock');
+            router.push('/');
         } catch (err: any) {
             // Clear partial auth on failure
             localStorage.removeItem('accessToken');

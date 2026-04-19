@@ -8,12 +8,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import QRCode from 'react-qr-code';
 
-// Must match API
+// Must match API (broadcast limits from pricing.ts)
 const PLAN_LIMITS = {
-    FREE: { name: 'Free Tier', price: 0 },
-    STARTER: { name: 'Starter Plan', price: 999 },
-    PRO: { name: 'Pro Plan', price: 2499 },
-    AGENCY: { name: 'Agency Plan', price: 5999 }
+    FREE:    { name: 'Free Tier',    price: 0,    maxBroadcastMessagesPerMonth: 500 },
+    STARTER: { name: 'Starter Plan', price: 999,  maxBroadcastMessagesPerMonth: 10000 },
+    PRO:     { name: 'Pro Plan',     price: 2499, maxBroadcastMessagesPerMonth: 50000 },
+    AGENCY:  { name: 'Agency Plan',  price: 5999, maxBroadcastMessagesPerMonth: 500000 },
 } as const;
 
 export function BillingTab() {
@@ -102,10 +102,19 @@ export function BillingTab() {
                     <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Usage Details</h3>
                     <div className="flex justify-between items-center mt-2">
                         <span className="text-sm font-medium text-secondary">Broadcasts this month</span>
-                        <span className="text-sm font-bold text-primary">{workspace?.broadcastUsageCurrentMonth || 0}</span>
+                        <span className="text-sm font-bold text-primary">
+                            {workspace?.broadcastUsageCurrentMonth || 0}
+                            <span className="text-muted font-normal"> / {PLAN_LIMITS[workspace?.planTier as keyof typeof PLAN_LIMITS]?.maxBroadcastMessagesPerMonth ?? '—'}</span>
+                        </span>
                     </div>
-                    <div className="w-full bg-body rounded-full h-1.5 mt-1 overflow-hidden">
-                        <div className="bg-accent h-1.5 rounded-full w-[15%]"></div>
+                    <div className="w-full bg-surface border border-theme rounded-full h-1.5 mt-1 overflow-hidden">
+                        {(() => {
+                            const used = workspace?.broadcastUsageCurrentMonth || 0;
+                            const max = PLAN_LIMITS[workspace?.planTier as keyof typeof PLAN_LIMITS]?.maxBroadcastMessagesPerMonth ?? 1;
+                            const pct = Math.min(Math.round((used / max) * 100), 100);
+                            const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-accent';
+                            return <div className={`${color} h-1.5 rounded-full transition-all`} style={{ width: `${pct}%` }} />;
+                        })()}
                     </div>
                 </div>
             </div>
@@ -127,7 +136,7 @@ export function BillingTab() {
                             </div>
                         </div>
 
-                        <div className="flex flex-col items-center justify-center py-6 bg-body rounded-xl border border-theme/50 border-dashed">
+                        <div className="flex flex-col items-center justify-center py-6 bg-surface rounded-xl border border-theme/50 border-dashed">
                             {amountToPay > 0 ? (
                                 <div className="p-3 bg-white rounded-xl shadow-md border border-zinc-200 hover:scale-105 transition-transform duration-300">
                                     <QRCode 
@@ -191,7 +200,7 @@ export function BillingTab() {
                                         <button 
                                             key={m} type="button"
                                             onClick={() => setMonths(m)}
-                                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${months === m ? 'bg-primary text-bg-base border-primary' : 'bg-body border-theme text-secondary hover:text-primary'} `}
+                                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors border ${months === m ? 'bg-accent text-white dark:text-zinc-950 border-accent' : 'bg-surface border-theme text-secondary hover:text-primary'} `}
                                         >
                                             {m}m
                                         </button>
@@ -219,7 +228,7 @@ export function BillingTab() {
                                 />
                             </div>
 
-                            <Button type="submit" disabled={!utr.trim() || submitMutation.isPending} className="mt-2 w-full gap-2">
+                            <Button type="submit" variant="accent" disabled={!utr.trim() || submitMutation.isPending} className="mt-2 w-full gap-2">
                                 {submitMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <span>Submit for Activation</span>}
                                 {!submitMutation.isPending && <ArrowRight size={16} />}
                             </Button>

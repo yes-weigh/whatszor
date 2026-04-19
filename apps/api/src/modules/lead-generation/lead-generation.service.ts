@@ -19,6 +19,7 @@ import { logEvent } from '../../core/event-logger';
 import { env } from '../../env';
 import { previewPlaces } from './places.client';
 import type { SearchPreview } from './places.client';
+import { PLAN_LIMITS } from '../../core/config/pricing';
 
 const log = createLogger({ module: 'lead-generation-service' });
 
@@ -220,6 +221,7 @@ export async function getLeadList(
 ) {
     const list = await prisma.leadList.findFirst({
         where: { id: leadListId, workspaceId },
+        include: { workspace: { select: { planTier: true } } }
     });
 
     if (!list) {
@@ -261,7 +263,29 @@ export async function getLeadList(
         prisma.lead.count({ where: leadsWhere }),
     ]);
 
-    return { ...list, leads, leadsTotal };
+    // Apply visibility teaser rules based on the workspace's plan tier
+    const visibleLimit = PLAN_LIMITS[list.workspace.planTier].leadsVisiblePerSearch;
+    const sanitizedLeads = leads.map((lead, index) => {
+        const absoluteIndex = skip + index;
+        if (absoluteIndex >= visibleLimit) {
+            // Replace ALL identifiable data with placeholder values.
+            // The name MUST be set to 'Blurred Lead #N' because the frontend
+            // uses `name.startsWith('Blurred Lead')` to detect locked rows.
+            return {
+                ...lead,
+                name: `Blurred Lead #${absoluteIndex + 1}`,
+                phone: null,
+                address: null,
+                website: null,
+                googlePlaceId: null,
+                _isLocked: true,
+            };
+        }
+        return { ...lead, _isLocked: false };
+    });
+
+    const { workspace, ...listData } = list;
+    return { ...listData, leads: sanitizedLeads, leadsTotal };
 }
 
 /**
@@ -287,6 +311,7 @@ export async function convertLeads(
 ) {
     const list = await prisma.leadList.findFirst({
         where: { id: leadListId, workspaceId },
+        include: { workspace: { select: { planTier: true } } }
     });
 
     if (!list) {
@@ -295,6 +320,11 @@ export async function convertLeads(
         (err as any).code = 'NOT_FOUND';
         throw err;
     }
+
+    // Enforce per-search visibility cap: free-tier users can only convert the
+    // leads they are allowed to SEE. This prevents bypassing the teaser limit
+    // by calling /convert directly against all raw leads in the list.
+    const visibleLimit = PLAN_LIMITS[list.workspace.planTier].leadsVisiblePerSearch;
 
     // Determine which leads to convert
     const leadsWhere: Record<string, unknown> = {
@@ -307,7 +337,18 @@ export async function convertLeads(
         leadsWhere.id = { in: input.leadIds };
     }
 
-    const leads = await prisma.lead.findMany({ where: leadsWhere });
+    // Fetch ordered so the cap applies to the same set the user sees (oldest first)
+    const allLeads = await prisma.lead.findMany({
+        where: leadsWhere,
+        orderBy: { createdAt: 'asc' },
+    });
+
+    // Apply the plan's per-search visibility limit.
+    // If the user explicitly selected specific leadIds we trust that list
+    // (they already went through the gated UI), otherwise enforce the cap.
+    const leads = input.leadIds?.length
+        ? allLeads
+        : allLeads.slice(0, visibleLimit);
 
     if (leads.length === 0) {
         return { converted: 0, skipped: 0, failed: 0, skippedReasons: {}, audienceId: input.audienceId ?? null };
@@ -318,6 +359,21 @@ export async function convertLeads(
     let failed = 0;
     const skippedReasons: Record<string, number> = {};
     const newContactIds: string[] = [];
+
+    // Determine extraction capacity limit for today
+    const redis = getRedisClient();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dailyExtractKey = `lead_gen:extracts:${workspaceId}:${todayStr}`;
+    const leadsExtractedToday = parseInt((await redis.get(dailyExtractKey)) || '0', 10);
+    const limitExtracts = PLAN_LIMITS[list.workspace.planTier].leadsExtractedPerDay;
+
+    let availableCapacity = limitExtracts - leadsExtractedToday;
+    if (availableCapacity <= 0) {
+        const err = new Error(`Daily extraction limit of ${limitExtracts} reached. Upgrade your plan to extract more leads today.`);
+        (err as any).statusCode = 402;
+        (err as any).code = 'PAYMENT_REQUIRED';
+        throw err;
+    }
 
     for (const lead of leads) {
         if (!lead.phone) continue; // safety guard (hasPhone filter should prevent this)
@@ -363,6 +419,11 @@ export async function convertLeads(
 
             newContactIds.push(contact.id);
             converted++;
+            availableCapacity--;
+            
+            if (availableCapacity <= 0) {
+                break; // Stop converting if we hit the daily limit
+            }
         } catch (err: any) {
             // Handle unique constraint violation (race condition — phone added concurrently)
             if (err?.code === 'P2002') {
@@ -384,6 +445,10 @@ export async function convertLeads(
             where: { id: leadListId },
             data: { converted: { increment: converted } },
         }).catch(() => {});
+
+        // Update Redis usage pattern for daily extract limit
+        await redis.incrby(dailyExtractKey, converted);
+        await redis.expire(dailyExtractKey, 86400 * 2); // Keep for 2 days
 
         // Log platform event
         await logEvent(workspaceId, 'leads_converted', 'lead-generation', {

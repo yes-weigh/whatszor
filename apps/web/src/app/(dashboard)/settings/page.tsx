@@ -1,7 +1,7 @@
 'use client';
 
 import { Header } from '@/components/layout/Header';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { Settings as SettingsIcon, MessageCircle, Bot, CreditCard, Users, Shield } from 'lucide-react';
 import { GeneralTab } from './components/GeneralTab';
@@ -9,7 +9,7 @@ import { WhatsAppTab } from './components/WhatsAppTab';
 import { MembersTab } from './components/MembersTab';
 import { KnowledgeBotTab } from './components/KnowledgeBotTab';
 import { BillingTab } from './components/BillingTab';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 type Tab = 'general' | 'whatsapp' | 'ai' | 'billing' | 'members' | 'knowledgebot';
 
@@ -22,9 +22,10 @@ const tabs: { id: Tab; label: string; icon: any; externalHref?: string }[] = [
     { id: 'billing',      label: 'Billing',        icon: CreditCard },
 ];
 
-export default function SettingsPage() {
+function SettingsPage() {
     const hasPermission = useAuthStore(s => s.hasPermission);
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
@@ -37,9 +38,24 @@ export default function SettingsPage() {
         return true;
     });
 
-    const [activeTab, setActiveTab] = useState<Tab>(
-        filteredTabs.find(t => t.id === 'whatsapp') ? 'whatsapp' : (filteredTabs[0]?.id || 'general')
-    );
+    // Resolve initial tab from URL query param, falling back to first accessible tab
+    const getDefaultTab = (): Tab => {
+        const fromUrl = searchParams.get('tab') as Tab | null;
+        if (fromUrl && filteredTabs.some(t => t.id === fromUrl)) return fromUrl;
+        if (filteredTabs.some(t => t.id === 'whatsapp')) return 'whatsapp';
+        return filteredTabs[0]?.id || 'general';
+    };
+
+    const [activeTab, setActiveTab] = useState<Tab>(getDefaultTab);
+
+    // When the URL ?tab param changes externally (browser back/fwd, router.push), sync state
+    useEffect(() => {
+        const fromUrl = searchParams.get('tab') as Tab | null;
+        if (fromUrl && filteredTabs.some(t => t.id === fromUrl) && fromUrl !== activeTab) {
+            setActiveTab(fromUrl);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
 
     if (!mounted) return null;
 
@@ -55,8 +71,13 @@ export default function SettingsPage() {
     );
 
     const handleTabClick = (tab: typeof tabs[number]) => {
-        if (tab.externalHref) router.push(tab.externalHref);
-        else setActiveTab(tab.id);
+        if (tab.externalHref) {
+            router.push(tab.externalHref);
+        } else {
+            setActiveTab(tab.id);
+            // Sync the URL so deep-links and back-button work
+            router.replace(`/settings?tab=${tab.id}`, { scroll: false });
+        }
     };
 
     return (
@@ -114,5 +135,13 @@ export default function SettingsPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function SettingsPageWrapper() {
+    return (
+        <Suspense fallback={null}>
+            <SettingsPage />
+        </Suspense>
     );
 }

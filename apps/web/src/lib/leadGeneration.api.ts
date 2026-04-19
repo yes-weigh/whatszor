@@ -26,6 +26,7 @@ export interface Lead {
     status: 'RAW' | 'CONVERTED' | 'SKIPPED';
     contactId: string | null;
     createdAt: string;
+    _isLocked?: boolean;
 }
 
 export interface SearchPreviewResult {

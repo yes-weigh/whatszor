@@ -8,6 +8,7 @@ import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 import { RenderContext } from './template-renderer';
 import { getStorageProvider } from '../../core/storage';
 import multipart from '@fastify/multipart';
+import { PLAN_LIMITS } from '../../core/config/pricing';
 
 function buildRenderContext(flatVariables: Record<string, any> = {}): RenderContext {
     const context: any = {};
@@ -52,6 +53,16 @@ export default async function templateRoutes(fastify: FastifyInstance) {
             validateMessageVariables(b.messageText);
         } catch (e: any) {
             return reply.sendError({ code: 'BAD_REQUEST', message: e.message || 'Invalid template variables' }, 400);
+        }
+
+        const wsForPlan = await prisma.workspace.findUnique({
+            where: { id: workspaceId },
+            select: { planTier: true },
+        });
+        const maxTemplates = PLAN_LIMITS[wsForPlan?.planTier || 'FREE'].maxTemplates;
+        const currentTemplates = await prisma.template.count({ where: { workspaceId } });
+        if (currentTemplates >= maxTemplates) {
+             return reply.sendError({ message: `Template limit reached. Upgrade your plan to create more than ${maxTemplates} templates.`, code: 'PAYMENT_REQUIRED' }, 402);
         }
 
         // Start a transaction to ensure atomic creation of Root + Version 1

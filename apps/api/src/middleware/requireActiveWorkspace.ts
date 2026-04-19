@@ -87,7 +87,7 @@ export async function requireActiveWorkspace(
     if (workspace.status === 'SUSPENDED') {
         return reply.status(402).send({
             success: false,
-            error: { code: 'PAYMENT_REQUIRED', message: `Workspace is suspended. Please contact support.` }
+            error: { code: 'WORKSPACE_LOCKED', message: `Workspace is suspended. Please contact support.` }
         });
     }
 
@@ -95,7 +95,7 @@ export async function requireActiveWorkspace(
     if (workspace.expiresAt && workspace.expiresAt < new Date()) {
         return reply.status(402).send({
             success: false,
-            error: { code: 'PAYMENT_REQUIRED', message: 'Workspace subscription has expired. Please activate a new license key.' }
+            error: { code: 'WORKSPACE_LOCKED', message: 'Workspace subscription has expired. Please activate a new license key.' }
         });
     }
 }

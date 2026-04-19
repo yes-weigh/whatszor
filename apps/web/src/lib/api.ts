@@ -130,7 +130,7 @@ api.interceptors.response.use(
             } finally {
                 isRefreshing = false;
             }
-        } else if (typeof window !== 'undefined' && err.response?.status === 402) {
+        } else if (typeof window !== 'undefined' && err.response?.status === 402 && err.response?.data?.error?.code === 'WORKSPACE_LOCKED') {
             window.location.href = '/workspace/unlock';
         }
 

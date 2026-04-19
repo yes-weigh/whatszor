@@ -19,6 +19,7 @@
 import { prisma } from '../../prisma/client';
 import { createLogger } from '../../core/logger';
 import { getRedisClient } from '../../core/redis';
+import { PLAN_LIMITS } from '../../core/config/pricing';
 
 const log = createLogger({ module: 'keyword-automation' });
 
@@ -349,6 +350,20 @@ function validateExclusivity(data: any) {
 
 export async function createKeywordAutomation(workspaceId: string, data: any) {
     validateExclusivity(data);
+
+    const wsForPlan = await prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { planTier: true },
+    });
+    const limit = PLAN_LIMITS[wsForPlan?.planTier || 'FREE'].maxAutoReplyRules;
+
+    const currentCount = await (prisma as any).keywordAutomation.count({ where: { workspaceId } });
+    if (currentCount >= limit) {
+        throw Object.assign(
+            new Error(`Auto-reply rule limit reached. Upgrade your plan to create more than ${limit} rules.`),
+            { code: 'PAYMENT_REQUIRED', statusCode: 402 }
+        );
+    }
 
     const result = await (prisma as any).keywordAutomation.create({
         data: {
