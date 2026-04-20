@@ -4,6 +4,7 @@ import { createLogger } from '../../core/logger';
 import { composeAndQueueMessage } from '../../core/messaging/message-composer';
 import { createOrGetConversation } from '../../modules/messaging/conversation.service';
 import { getQueue, QueueName } from '../../queues';
+import { syncCampaignStats } from './campaign.service';
 
 const log = createLogger({ module: 'campaign-worker' });
 
@@ -37,11 +38,46 @@ export async function processCampaignJob(job: Job) {
     // ─────────────────────────────────────────────────────────────────────────
 
     // ── Campaign Cancellation Guard ───────────────────────────────────────────
-    // Re-check before processing. The campaign may have been cancelled between
-    // job enqueue and this point.
     if (campaign.status === 'CANCELLED') {
         log.info({ campaignId }, 'Campaign already CANCELLED — skipping execution');
         return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // ── Resolve WhatsApp session ──────────────────────────────────────────────
+    // The campaign must have a linked WhatsApp account to send from.
+    let resolvedSessionId: string | null = null;
+
+    if (campaign.whatsappAccountId) {
+        const account = await prisma.whatsAppAccount.findUnique({
+            where: { id: campaign.whatsappAccountId },
+            select: { sessionId: true, status: true },
+        });
+        if (account) {
+            resolvedSessionId = account.sessionId;
+            if (account.status !== 'CONNECTED') {
+                log.warn({ campaignId, sessionId: account.sessionId }, 'Linked WhatsApp session is not CONNECTED — messages may not deliver');
+            }
+        }
+    }
+
+    if (!resolvedSessionId) {
+        // Fallback: pick any connected session in the workspace
+        const fallback = await prisma.whatsAppAccount.findFirst({
+            where: { workspaceId, status: 'CONNECTED', deletedAt: null },
+            select: { sessionId: true },
+        });
+        if (fallback) {
+            log.warn({ campaignId }, 'No WhatsApp account linked to campaign — falling back to first connected session');
+            resolvedSessionId = fallback.sessionId;
+        } else {
+            log.error({ campaignId }, 'No connected WhatsApp session found in workspace — aborting');
+            await prisma.campaign.update({
+                where: { id: campaignId },
+                data: { status: 'CANCELLED', completedAt: new Date() },
+            });
+            return;
+        }
     }
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -60,7 +96,11 @@ export async function processCampaignJob(job: Job) {
     }
 
     if (!templateVersionId && !campaign.messageText) {
-        log.error({ campaignId }, 'Campaign missing template version and message text');
+        log.error({ campaignId }, 'Campaign missing template version and message text — aborting');
+        await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { status: 'CANCELLED', completedAt: new Date() },
+        });
         return;
     }
 
@@ -81,7 +121,13 @@ export async function processCampaignJob(job: Job) {
     log.info({ campaignId, batchCount: members.length }, 'Processing campaign members batch');
 
     if (members.length === 0) {
-        log.info({ campaignId }, 'No more pending members found.');
+        log.info({ campaignId }, 'No more pending members found — finalising campaign');
+        await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { status: 'COMPLETED', completedAt: new Date() },
+        });
+        // Sync final aggregate stats onto the Campaign record
+        await syncCampaignStats(workspaceId, campaignId);
         return;
     }
 
@@ -91,10 +137,11 @@ export async function processCampaignJob(job: Job) {
                 throw new Error('Contact missing phone number');
             }
 
-            // Ensure conversation exists
+            // Ensure conversation exists, pinned to the resolved WA session
             const conversation = await createOrGetConversation(workspaceId, {
                 provider: 'WHATSAPP',
                 providerId: member.contact.phone,
+                sessionId: resolvedSessionId,
             });
 
             const isTemplate = !!templateVersionId;
@@ -102,9 +149,10 @@ export async function processCampaignJob(job: Job) {
                 workspaceId,
                 conversationId: conversation.id,
                 provider: 'WHATSAPP',
-                providerId: member.contact.phone, // Real JID resolution happens in WA worker
+                providerId: member.contact.phone,
+                // ← critical: tell the outbound worker which account to send with
+                sessionId: resolvedSessionId,
                 campaignId: campaign.id,
-                // We rely on outbound worker's per-session limit now, so no arbitrary delay needed
                 delay: 0,
                 ...(isTemplate ? {
                     templateVersionId: (member.templateVersionId || templateVersionId) as string,
@@ -136,20 +184,10 @@ export async function processCampaignJob(job: Job) {
                     errorReason: error.message || 'Unknown error during composing'
                 }
             });
-            
-            const c = await prisma.campaign.findUnique({ where: { id: campaignId } });
-            if (c) {
-                const stats = (c.stats as Record<string, number>) || {};
-                stats.failed = (stats.failed || 0) + 1;
-                await prisma.campaign.update({
-                    where: { id: campaignId },
-                    data: { stats: stats as any }
-                });
-            }
         }
     }
 
-    // Recursively schedule the next batch
+    // Recursively schedule the next batch if there are more
     if (members.length === BATCH_SIZE) {
         log.info({ campaignId }, 'Batch complete, scheduling next batch chunk.');
         await getQueue(QueueName.CAMPAIGN).add(job.name, job.data, { delay: 1000 });
@@ -163,6 +201,10 @@ export async function processCampaignJob(job: Job) {
             completedAt: new Date()
         }
     });
+
+    // ── Sync final stats so the dashboard shows real sent/failed counts ───────
+    await syncCampaignStats(workspaceId, campaignId);
+    // ─────────────────────────────────────────────────────────────────────────
 
     log.info({ campaignId }, 'Campaign completely finished.');
 }

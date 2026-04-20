@@ -24,6 +24,40 @@ function MobileTopBar({ onMenuOpen }: { onMenuOpen: () => void }) {
     );
 }
 
+function AdminImpersonationBanner() {
+    const { user, setAuth, logout } = useAuthStore();
+    const router = useRouter();
+
+    if (!user?.isImpersonating) return null;
+
+    const handleReturn = () => {
+        const adminToken = localStorage.getItem('adminAccessToken');
+        if (adminToken) {
+            // Restore admin token
+            setAuth(
+                { id: user.id, name: user.name, email: user.email, workspaceId: 'ADMIN_WORKSPACE', role: 'SUPER_ADMIN', isImpersonating: false }, 
+                adminToken, 
+                ''
+            );
+            // Remove the stored admin token
+            localStorage.removeItem('adminAccessToken');
+            router.push('/admin/workspaces');
+        } else {
+            // Fallback if we somehow lost it
+            logout();
+        }
+    };
+
+    return (
+        <div className="bg-red-600 text-white text-xs font-medium px-4 py-1.5 flex items-center justify-between shrink-0 z-[100]">
+            <span>You are currently impersonating an organization. Actions performed are logged.</span>
+            <button onClick={handleReturn} className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded transition-colors text-white font-semibold">
+                Return to Admin
+            </button>
+        </div>
+    );
+}
+
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     const { isAuthenticated, user, setAuth } = useAuthStore();
     const router = useRouter();
@@ -38,7 +72,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                    .then(res => {
                        const me = res.data as any;
                        if (me) {
-                           setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, localStorage.getItem('accessToken')!, localStorage.getItem('refreshToken')!);
+                           setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role, isImpersonating: me.isImpersonating }, localStorage.getItem('accessToken')!, localStorage.getItem('refreshToken')!);
                            if (me.workspaceStatus && me.workspaceStatus !== 'ACTIVE') {
                                router.push('/workspace/unlock');
                            }
@@ -60,17 +94,20 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-base relative">
-            <MobileTopBar onMenuOpen={() => setIsMobileMenuOpen(true)} />
+        <div className="flex flex-col h-[100dvh] w-full overflow-hidden bg-base relative">
+            <AdminImpersonationBanner />
+            <div className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
+                <MobileTopBar onMenuOpen={() => setIsMobileMenuOpen(true)} />
 
-            <Sidebar
-                isMobileMenuOpen={isMobileMenuOpen}
-                closeMobileMenu={() => setIsMobileMenuOpen(false)}
-            />
+                <Sidebar
+                    isMobileMenuOpen={isMobileMenuOpen}
+                    closeMobileMenu={() => setIsMobileMenuOpen(false)}
+                />
 
-            <main className="flex-1 overflow-y-auto relative z-0 flex flex-col min-w-0 h-[calc(100vh-49px)] md:h-screen">
-                {children}
-            </main>
+                <main className="flex-1 overflow-y-auto relative z-0 flex flex-col min-w-0 h-[calc(100vh-49px)] md:h-full">
+                    {children}
+                </main>
+            </div>
         </div>
     );
 }

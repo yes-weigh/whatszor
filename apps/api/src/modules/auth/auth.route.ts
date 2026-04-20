@@ -55,12 +55,28 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
      * Returns the currently authenticated user's profile (id, name, email, role, workspaceStatus).
      */
     fastify.get('/me', { preHandler: authenticate }, async (req, reply) => {
-        const { sub, workspaceId, role } = req.user;
-        const user = await prisma.user.findUnique({
-            where: { id: sub },
-            select: { id: true, name: true, email: true },
-        });
-        if (!user) return reply.sendError({ message: 'User not found', code: 'NOT_FOUND' }, 404);
+        const { sub, workspaceId, role, isImpersonating } = req.user as any;
+        
+        let userName = '';
+        let userEmail = '';
+
+        if (isImpersonating) {
+            const admin = await prisma.globalUser.findUnique({
+                where: { id: sub },
+                select: { name: true, email: true },
+            });
+            if (!admin) return reply.sendError({ message: 'Admin not found', code: 'NOT_FOUND' }, 404);
+            userName = `Admin (${admin.name || 'Staff'})`;
+            userEmail = admin.email;
+        } else {
+            const user = await prisma.user.findUnique({
+                where: { id: sub },
+                select: { id: true, name: true, email: true },
+            });
+            if (!user) return reply.sendError({ message: 'User not found', code: 'NOT_FOUND' }, 404);
+            userName = user.name;
+            userEmail = user.email;
+        }
 
         // Fetch workspace status for gating enforcement
         let workspaceStatus: string | null = null;
@@ -73,12 +89,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) =
         }
 
         return reply.sendSuccess({ 
-            id: user.id, 
-            name: user.name, 
-            email: user.email, 
+            id: sub, 
+            name: userName, 
+            email: userEmail, 
             workspaceId, 
             role, 
-            workspaceStatus 
+            workspaceStatus,
+            isImpersonating: !!isImpersonating
         });
     });
 };

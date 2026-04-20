@@ -50,6 +50,7 @@ interface User {
     email: string;
     workspaceId: string;
     role: string;
+    isImpersonating?: boolean;
 }
 
 interface AuthState {

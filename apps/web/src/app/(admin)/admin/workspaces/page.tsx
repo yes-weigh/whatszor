@@ -71,6 +71,32 @@ export default function AdminWorkspacesPage() {
         }
     };
 
+    const handleImpersonate = async (id: string) => {
+        try {
+            setActionLoading(`impersonate-${id}`);
+            const res = await api.post(`/admin/workspaces/${id}/impersonate`);
+            const { token } = res.data as { token: string };
+
+            // Save the current admin token securely so we can return
+            const currentToken = localStorage.getItem('accessToken');
+            if (currentToken) {
+                localStorage.setItem('adminAccessToken', currentToken);
+            }
+
+            // Impersonate
+            localStorage.setItem('accessToken', token);
+            document.cookie = `accessToken=${token}; path=/; SameSite=Strict`;
+            
+            // Redirect using native window.location to trigger full app re-hydration with new token
+            window.location.href = '/inbox';
+        } catch (error: any) {
+            console.error('Failed to impersonate:', error);
+            alert(error.response?.data?.message || 'Failed to impersonate organization.');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const getStatusStyle = (status: string) => {
         switch (status) {
             case 'ACTIVE': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
@@ -174,23 +200,35 @@ export default function AdminWorkspacesPage() {
                                                         {ws.expiresAt ? new Date(ws.expiresAt).toLocaleDateString() : 'Never'}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <button
-                                                        onClick={() => handleToggleStatus(ws.id, ws.status)}
-                                                        disabled={actionLoading === ws.id}
-                                                        className={`inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
-                                                            ws.status === 'ACTIVE' || ws.status === 'TRIAL'
-                                                                ? 'text-red-400 border-red-500/30 hover:bg-red-500/10'
-                                                                : 'text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10'
-                                                        } disabled:opacity-50`}
-                                                    >
-                                                        {actionLoading === ws.id ? (
-                                                            <Loader2 size={14} className="animate-spin" />
-                                                        ) : (
-                                                            ws.status === 'ACTIVE' || ws.status === 'TRIAL' ? <PowerOff size={14} /> : <Power size={14} />
-                                                        )}
-                                                        {ws.status === 'ACTIVE' || ws.status === 'TRIAL' ? 'Suspend' : 'Activate'}
-                                                    </button>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex justify-end gap-2 text-right">
+                                                        <button
+                                                            onClick={() => handleImpersonate(ws.id)}
+                                                            disabled={actionLoading === `impersonate-${ws.id}` || ws.status === 'SUSPENDED'}
+                                                            className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 transition-all disabled:opacity-50"
+                                                        >
+                                                            {actionLoading === `impersonate-${ws.id}` ? (
+                                                                <Loader2 size={14} className="animate-spin mr-1" />
+                                                            ) : null}
+                                                            Log in as
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleToggleStatus(ws.id, ws.status)}
+                                                            disabled={actionLoading === ws.id}
+                                                            className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                                                                ws.status === 'ACTIVE' || ws.status === 'TRIAL'
+                                                                    ? 'text-red-400 border-red-500/30 hover:bg-red-500/10'
+                                                                    : 'text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10'
+                                                            } disabled:opacity-50 w-24`}
+                                                        >
+                                                            {actionLoading === ws.id ? (
+                                                                <Loader2 size={14} className="animate-spin" />
+                                                            ) : (
+                                                                ws.status === 'ACTIVE' || ws.status === 'TRIAL' ? <PowerOff size={14} /> : <Power size={14} />
+                                                            )}
+                                                            {ws.status === 'ACTIVE' || ws.status === 'TRIAL' ? 'Suspend' : 'Activate'}
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );

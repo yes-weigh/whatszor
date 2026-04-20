@@ -276,6 +276,24 @@ export async function processOutboundMessage(job: Job): Promise<void> {
                 where: { messageId },
                 data: { status: 'SENT' },
             });
+
+            // Increment stats.sent on the campaign atomically
+            try {
+                const campaign = await prisma.campaign.findUnique({
+                    where: { id: job.data.campaignId },
+                    select: { stats: true },
+                });
+                if (campaign) {
+                    const stats = (campaign.stats as Record<string, number>) || {};
+                    stats.sent = (stats.sent ?? 0) + 1;
+                    await prisma.campaign.update({
+                        where: { id: job.data.campaignId },
+                        data: { stats: stats as any },
+                    });
+                }
+            } catch (statsErr) {
+                log.warn({ statsErr, campaignId: job.data.campaignId }, 'Failed to increment campaign sent stats');
+            }
         }
 
         await logEvent(workspaceId, 'message_sent', 'outbound_worker', { messageId, toJid }, traceId);

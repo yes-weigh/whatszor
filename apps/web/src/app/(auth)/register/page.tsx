@@ -51,7 +51,7 @@ export default function RegisterPage() {
 
             // Step 4: Persist auth state and redirect to dashboard
             setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken, refreshToken);
-            router.push('/');
+            router.push('/inbox');
         } catch (err: any) {
             // Clear partial auth on failure
             localStorage.removeItem('accessToken');
