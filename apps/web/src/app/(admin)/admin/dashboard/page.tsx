@@ -96,6 +96,7 @@ export default function AdminDashboardPage() {
                                 value={planTier}
                                 onChange={(e) => setPlanTier(e.target.value)}
                             >
+                                <option value="FREE">Free</option>
                                 <option value="STARTER">Starter</option>
                                 <option value="PRO">Pro</option>
                                 <option value="AGENCY">Agency</option>

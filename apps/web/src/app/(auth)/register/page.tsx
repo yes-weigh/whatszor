@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
 import api from '@/lib/api';
-import { Bot, Loader2, ArrowLeft } from 'lucide-react';
+import { Bot, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 export default function RegisterPage() {
     const [form, setForm] = useState({ name: '', email: '', password: '', workspaceName: '', workspaceSlug: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
     const { setAuth } = useAuthStore();
     const router = useRouter();
 
@@ -83,12 +84,28 @@ export default function RegisterPage() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="card flex flex-col gap-4">
+                    {/* Organization Name + auto-slug */}
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-medium text-secondary">Organization Name</label>
+                        <input
+                            type="text"
+                            className="input"
+                            placeholder="Acme Corp"
+                            value={form.workspaceName}
+                            onChange={set('workspaceName')}
+                            required
+                        />
+                        {form.workspaceSlug && (
+                            <p className="text-[11px] text-muted flex items-center gap-1.5">
+                                <span className="text-muted/60">ID:</span>
+                                <span className="font-mono bg-elevated border border-theme px-1.5 py-0.5 rounded text-secondary">{form.workspaceSlug}</span>
+                            </p>
+                        )}
+                    </div>
+
                     {[
-                        { key: 'workspaceName', label: 'Organization Name', placeholder: 'Acme Corp', type: 'text' },
-                        { key: 'workspaceSlug', label: 'Organization ID (Unique)', placeholder: 'acme-corp', type: 'text' },
                         { key: 'name', label: 'Your Name', placeholder: 'Rahul Mehta', type: 'text' },
                         { key: 'email', label: 'Email', placeholder: 'you@company.com', type: 'email' },
-                        { key: 'password', label: 'Password', placeholder: '••••••••', type: 'password' },
                     ].map(f => (
                         <div key={f.key} className="flex flex-col gap-1.5">
                             <label className="text-xs font-medium text-secondary">{f.label}</label>
@@ -96,6 +113,30 @@ export default function RegisterPage() {
                                 value={(form as any)[f.key]} onChange={set(f.key)} required />
                         </div>
                     ))}
+
+                    {/* Password with show/hide toggle */}
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-medium text-secondary">Password</label>
+                        <div className="relative">
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                className="input pr-10"
+                                placeholder="••••••••"
+                                value={form.password}
+                                onChange={set('password')}
+                                required
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(v => !v)}
+                                className="absolute inset-y-0 right-0 flex items-center px-3 text-muted hover:text-primary transition-colors"
+                                tabIndex={-1}
+                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            >
+                                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                            </button>
+                        </div>
+                    </div>
 
                     {error && (
                         <div className="text-xs px-3 py-2 rounded-lg bg-danger/10 text-danger">{error}</div>

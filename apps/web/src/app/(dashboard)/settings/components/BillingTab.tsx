@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import { Loader2, QrCode, CheckCircle2, Clock, XCircle, ArrowRight } from 'lucide-react';
+import { Loader2, QrCode, CheckCircle2, Clock, XCircle, ArrowRight, KeyRound, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import QRCode from 'react-qr-code';
@@ -21,6 +21,10 @@ export function BillingTab() {
     const [utr, setUtr] = useState('');
     const [selectedTier, setSelectedTier] = useState<keyof typeof PLAN_LIMITS>('PRO');
     const [months, setMonths] = useState(1);
+    // Map month selections to exact day counts (12 months = 365 days, not 360)
+    const MONTH_TO_DAYS: Record<number, number> = { 1: 30, 3: 90, 6: 180, 12: 365 };
+    const [licenseKey, setLicenseKey] = useState('');
+    const [redeemSuccess, setRedeemSuccess] = useState(false);
 
     const { data: workspace, isLoading: wsLoading } = useQuery({
         queryKey: ['workspace-current'],
@@ -42,6 +46,15 @@ export function BillingTab() {
         onSuccess: () => {
             setUtr('');
             qc.invalidateQueries({ queryKey: ['payment-requests'] });
+        }
+    });
+
+    const redeemMutation = useMutation({
+        mutationFn: (key: string) => api.post('/licenses/redeem', { key }),
+        onSuccess: () => {
+            setRedeemSuccess(true);
+            setLicenseKey('');
+            qc.invalidateQueries({ queryKey: ['workspace-current'] });
         }
     });
 
@@ -71,7 +84,7 @@ export function BillingTab() {
         submitMutation.mutate({
             transactionRef: utr.trim(),
             planTier: selectedTier,
-            durationDays: months * 30,
+            durationDays: MONTH_TO_DAYS[months] ?? months * 30,
             amountPaid: amountToPay.toString()
         });
     };
@@ -235,6 +248,71 @@ export function BillingTab() {
                         </form>
                     </div>
                 </div>
+            </div>
+
+            {/* License Key Redemption */}
+            <div className="card bg-surface border-theme p-6 rounded-2xl flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent shrink-0">
+                        <KeyRound size={20} />
+                    </div>
+                    <div>
+                        <h3 className="font-semibold text-primary">Redeem a License Key</h3>
+                        <p className="text-xs text-muted">Have a key from our sales team? Enter it below to activate instantly.</p>
+                    </div>
+                </div>
+
+                {redeemSuccess ? (
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20">
+                        <CheckCircle2 size={18} className="text-green-500 shrink-0" />
+                        <div>
+                            <p className="text-sm font-semibold text-green-400">License Activated!</p>
+                            <p className="text-xs text-green-500/70">Your plan has been upgraded. Enjoy the new features.</p>
+                        </div>
+                        <button
+                            onClick={() => setRedeemSuccess(false)}
+                            className="ml-auto text-xs text-muted hover:text-primary transition-colors"
+                        >
+                            Redeem another
+                        </button>
+                    </div>
+                ) : (
+                    <form
+                        onSubmit={(e) => { e.preventDefault(); if (licenseKey.trim()) redeemMutation.mutate(licenseKey.trim()); }}
+                        className="flex flex-col gap-3"
+                    >
+                        {redeemMutation.isError && (
+                            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-danger/10 border border-danger/20 text-danger text-xs">
+                                <XCircle size={14} className="shrink-0" />
+                                {(redeemMutation.error as any)?.response?.data?.message || 'Invalid or already redeemed key. Please check and try again.'}
+                            </div>
+                        )}
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                className="input font-mono text-sm flex-1 tracking-wider"
+                                placeholder="WZOR-PRO-XXXX-XXXX-XXXX"
+                                value={licenseKey}
+                                onChange={e => { setLicenseKey(e.target.value); redeemMutation.reset(); }}
+                                required
+                            />
+                            <button
+                                type="submit"
+                                disabled={!licenseKey.trim() || redeemMutation.isPending}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-black text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                            >
+                                {redeemMutation.isPending
+                                    ? <Loader2 size={15} className="animate-spin" />
+                                    : <><Sparkles size={15} /> Activate</>}
+                            </button>
+                        </div>
+                        <p className="text-[11px] text-muted">
+                            Keys are single-use and tied to your organisation. Contact{' '}
+                            <a href="mailto:support@whatsvue.com" className="text-accent hover:underline">support@whatsvue.com</a>{' '}
+                            if you have issues.
+                        </p>
+                    </form>
+                )}
             </div>
 
             {/* Past Requests */}

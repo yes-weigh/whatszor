@@ -1,10 +1,25 @@
 import { prisma } from '../../prisma/client';
 import { PlanTier } from '@prisma/client';
 import { ErrorCodes } from '@whatszor/shared';
+import { invalidateWorkspaceCache } from '../../middleware/requireActiveWorkspace';
 
 export async function createPaymentRequest(workspaceId: string, transactionRef: string, planTier: PlanTier, durationDays: number = 30, amountPaid: string = '0') {
     if (!transactionRef) throw new Error('Transaction reference (UTR) is required');
     if (!Object.values(PlanTier).includes(planTier)) throw new Error('Invalid plan tier');
+
+    // Duplicate UTR guard — prevent the same reference from being submitted multiple times
+    const existing = await prisma.paymentRequest.findFirst({
+        where: {
+            transactionRef,
+            status: { in: ['PENDING', 'APPROVED'] }
+        }
+    });
+    if (existing) {
+        throw Object.assign(
+            new Error('This UTR number has already been submitted. Please check your payment history.'),
+            { statusCode: 400, code: ErrorCodes.BAD_REQUEST }
+        );
+    }
 
     const payment = await prisma.paymentRequest.create({
         data: {
@@ -39,7 +54,7 @@ export async function getAdminPaymentRequests() {
     });
 }
 
-export async function processPaymentRequest(paymentId: string, action: 'APPROVE' | 'REJECT', adminId: string) {
+export async function processPaymentRequest(paymentId: string, action: 'APPROVE' | 'REJECT', adminId: string, adminNote?: string) {
     const payment = await prisma.paymentRequest.findUnique({
         where: { id: paymentId }
     });
@@ -55,7 +70,7 @@ export async function processPaymentRequest(paymentId: string, action: 'APPROVE'
     if (action === 'REJECT') {
         return prisma.paymentRequest.update({
             where: { id: paymentId },
-            data: { status: 'REJECTED' }
+            data: { status: 'REJECTED', adminNote: adminNote?.trim() || null }
         });
     }
 
@@ -110,6 +125,9 @@ export async function processPaymentRequest(paymentId: string, action: 'APPROVE'
 
         return updated;
     });
+
+    // Purge stale cache so requireActiveWorkspace picks up the new planTier/expiresAt immediately
+    invalidateWorkspaceCache(payment.workspaceId);
 
     return updatedPayment;
 }

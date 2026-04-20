@@ -44,14 +44,14 @@ export const billingRoutes: FastifyPluginAsync = async (fastify: FastifyInstance
 
     fastify.post('/admin/payments/:id/process', { preHandler: authenticateAdmin }, async (req: any, reply) => {
         const { id } = req.params;
-        const { action } = req.body; // 'APPROVE' | 'REJECT'
+        const { action, adminNote } = req.body; // 'APPROVE' | 'REJECT'
         const adminId = req.user.sub;
 
         if (action !== 'APPROVE' && action !== 'REJECT') {
             return reply.status(400).send({ success: false, error: { message: 'Invalid action' } });
         }
 
-        const request = await billingService.processPaymentRequest(id, action, adminId);
+        const request = await billingService.processPaymentRequest(id, action, adminId, adminNote);
         return reply.status(200).sendSuccess(request);
     });
 };
