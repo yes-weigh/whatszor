@@ -111,7 +111,7 @@ export default function AdminPaymentsPage() {
                                                         rows={2}
                                                         placeholder="e.g. UTR number not found in our records. Please resubmit with the correct reference."
                                                         className="w-full bg-gray-950 border border-red-900/50 text-white text-sm rounded-lg p-2.5 outline-none focus:ring-1 focus:ring-red-500 resize-none"
-                                                        value={rejectTarget.note}
+                                                        value={rejectTarget?.note || ''}
                                                         onChange={e => setRejectTarget(t => t ? { ...t, note: e.target.value } : null)}
                                                     />
                                                 </div>
@@ -125,7 +125,7 @@ export default function AdminPaymentsPage() {
                                                     <Button
                                                         size="sm"
                                                         className="bg-red-600 hover:bg-red-700 text-white border-none"
-                                                        onClick={() => processMutation.mutate({ id: req.id, action: 'REJECT', adminNote: rejectTarget.note })}
+                                                        onClick={() => processMutation.mutate({ id: req.id, action: 'REJECT', adminNote: rejectTarget?.note || '' })}
                                                         disabled={processMutation.isPending}
                                                     >
                                                         {processMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : 'Confirm Reject'}
