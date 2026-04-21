@@ -617,3 +617,85 @@ export async function generateOnboardingChat(
     }
 }
 
+export async function generateTemplate(workspaceId: string, prompt: string): Promise<{ text?: string, error?: string }> {
+    try {
+        const workspace = await prisma.workspace.findUnique({
+            where: { id: workspaceId },
+            select: { settings: true }
+        });
+        
+        const settings = (workspace?.settings as any) || {};
+        const businessContext = settings.businessContext || "No specific business context provided.";
+
+        const systemInstruction = `You are an expert copywriter for WhatsApp marketing and notifications.
+Your job is to write a highly effective, concise, and engaging WhatsApp message based on the user's prompt and their business context.
+RULES:
+1. Keep it brief. WhatsApp messages should be easy to read quickly.
+2. Use emojis naturally but professionally.
+3. Automatically insert relevant variables. For example, if addressing the user, you can use {{contact.name}}.
+4. Tone should be friendly yet professional, aligned with the business context provided.
+5. Return ONLY the raw generated message text exactly as it will be sent. Do NOT wrap it in markdown blockquotes or code blocks.`;
+
+        const fullPrompt = `Business Context:\n${businessContext}\n\nUser Request: ${prompt}\n\nPlease generate the WhatsApp template message body now.`;
+
+        const response = await ai.models.generateContent({
+            model: MODEL,
+            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+            config: {
+                systemInstruction,
+                temperature: 0.7,
+            }
+        });
+
+        if (!response.text) {
+             return { error: 'Empty response from AI.' };
+        }
+
+        return { text: response.text.trim() };
+
+    } catch (err: any) {
+        log.error({ err }, 'generateTemplate failed');
+        return { error: err.message };
+    }
+}
+
+export async function suggestLeadQueries(keyword: string, location: string): Promise<{ suggestions?: {keyword: string, location: string}[]; error?: string }> {
+    try {
+        const systemInstruction = `You are a localized lead generation expert. You break down broad business queries into narrower, highly-targeted categories and specific local neighborhoods/sub-regions.
+You MUST reply with ONLY a raw JSON array of 10 objects, each containing exactly two string properties: "keyword" and "location".
+Example: [{"keyword": "Pastry Shop", "location": "Manhattan"}, {"keyword": "Cafe", "location": "Brooklyn"}]`;
+
+        const fullPrompt = `Break this down into 10 alternative sub-searches: Keyword: "${keyword}", Location: "${location}"`;
+
+        const response = await ai.models.generateContent({
+            model: MODEL,
+            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+            config: {
+                systemInstruction,
+                temperature: 0.8,
+                responseMimeType: 'application/json',
+            }
+        });
+
+        if (!response.text) return { error: 'Empty response from AI.' };
+        
+        let parsed;
+        try {
+            parsed = JSON.parse(response.text.trim());
+        } catch(e) {
+            return { error: 'Failed to parse JSON response from AI.' };
+        }
+        
+        if (!Array.isArray(parsed)) return { error: 'Invalid AI response array.' };
+        
+        return { 
+            suggestions: parsed.slice(0, 10).map((p: any) => ({ 
+                keyword: String(p.keyword || p.Keyword || keyword), 
+                location: String(p.location || p.Location || location) 
+            })) 
+        };
+    } catch (err: any) {
+        log.error({ err }, 'suggestLeadQueries failed');
+        return { error: err.message };
+    }
+}

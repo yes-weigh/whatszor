@@ -99,4 +99,62 @@ export const aiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => 
 
         return reply.sendSuccess({ text: result.text });
     });
+
+    /**
+     * POST /ai/generate-template
+     * Body: { prompt: string }
+     * Returns: { text }
+     */
+    fastify.post('/generate-template', {
+        config: { rateLimit: { max: 20, timeWindow: '1 minute' } }
+    }, async (req, reply) => {
+        const { prompt } = req.body as { prompt: string };
+
+        if (!prompt) {
+            return reply.code(400).sendError({
+                code: 'INVALID_INPUT',
+                message: 'Prompt is required',
+            });
+        }
+
+        const result = await require('./ai.service').generateTemplate(req.user.workspaceId, prompt);
+
+        if (result.error) {
+            return reply.code(500).sendError({
+                code: 'GENERATION_FAILED',
+                message: result.error,
+            });
+        }
+
+        return reply.sendSuccess({ text: result.text });
+    });
+
+    /**
+     * POST /ai/lead-suggestions
+     * Body: { keyword: string; location: string }
+     * Returns: { suggestions: {keyword, location}[] }
+     */
+    fastify.post('/lead-suggestions', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+    }, async (req, reply) => {
+        const { keyword, location } = req.body as { keyword: string; location: string };
+
+        if (!keyword || !location) {
+            return reply.code(400).sendError({
+                code: 'INVALID_INPUT',
+                message: 'Both keyword and location are required',
+            });
+        }
+
+        const result = await require('./ai.service').suggestLeadQueries(keyword, location);
+
+        if (result.error) {
+            return reply.code(500).sendError({
+                code: 'GENERATION_FAILED',
+                message: result.error,
+            });
+        }
+
+        return reply.sendSuccess({ suggestions: result.suggestions });
+    });
 };

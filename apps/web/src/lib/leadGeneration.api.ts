@@ -46,6 +46,11 @@ export interface ConvertResult {
     audienceId: string | null;
 }
 
+export interface LeadSuggestion {
+    keyword: string;
+    location: string;
+}
+
 export const leadGenerationApi = {
     previewLeads: async (query: string): Promise<SearchPreviewResult> => {
         const res = await api.post('/lead-generation/preview', { query });
@@ -75,5 +80,10 @@ export const leadGenerationApi = {
     deleteLeadList: async (id: string): Promise<{ message: string }> => {
         const res = await api.delete(`/lead-generation/${id}`);
         return res.data;
-    }
+    },
+
+    suggestLeadQueries: async (keyword: string, location: string): Promise<{ suggestions: LeadSuggestion[] }> => {
+        const res = await api.post('/ai/lead-suggestions', { keyword, location });
+        return res.data;
+    },
 };

@@ -233,7 +233,7 @@ function useReadiness(
         const s = sessions.find(s => s.id === draft.whatsappSessionId);
         return s?.status === 'connected' || s?.status === 'CONNECTED';
     })();
-    const messageReady = draft.message.text.trim().length > 0;
+    const messageReady = (draft.message.text || '').trim().length > 0;
     const audienceReady = (() => {
         if (draft.audience.mode === 'list') return !!draft.audience.listId && (selectedAudience?.memberCount ?? 0) > 0;
         if (draft.audience.mode === 'manual') return manualContacts.length > 0;

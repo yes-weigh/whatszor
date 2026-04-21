@@ -6,7 +6,7 @@ import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     ChevronLeft, Info, Plus, Trash2, Smartphone, HelpCircle,
-    Video, FileText, ImageIcon, ArrowUpRight, Phone, Zap, Save
+    Video, FileText, ImageIcon, ArrowUpRight, Phone, Zap, Save, Sparkles, Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -75,6 +75,7 @@ function TemplateBuilder() {
     const [previewVars, setPreviewVars] = useState<Record<string, string>>({});
     const [testSessionId, setTestSessionId] = useState('');
     const [testPhoneNumber, setTestPhoneNumber] = useState('');
+    const [aiPrompt, setAiPrompt] = useState('');
     const previewRef = useRef<HTMLDivElement>(null);
 
     /**
@@ -298,6 +299,19 @@ function TemplateBuilder() {
         onError: (err: any) => alert(err.response?.data?.message || 'Error sending test message'),
     });
 
+    const generateAiMutation = useMutation({
+        mutationFn: (promptText: string) => api.post('/ai/generate-template', { prompt: promptText }),
+        onSuccess: (res) => {
+            if (res.data?.text) {
+                setForm(prev => ({ ...prev, messageText: res.data.text }));
+                setAiPrompt('');
+            }
+        },
+        onError: (err: any) => {
+            alert(err.response?.data?.message || 'Error generating text');
+        }
+    });
+
     useEffect(() => {
         const matches = [...form.messageText.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1]);
         const newVars: Record<string, string> = { ...previewVars };
@@ -407,6 +421,32 @@ function TemplateBuilder() {
 
                         {/* Message Body */}
                         <Section title="Message Body">
+                            {/* AI Assist Box */}
+                            <div className="flex flex-col gap-2 p-3 rounded-md border border-[rgba(34,197,94,0.15)] bg-[rgba(34,197,94,0.02)] relative">
+                                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-accent uppercase tracking-wider mb-0.5">
+                                    <Sparkles size={11} className="text-accent" />
+                                    AI Writer Assist
+                                </label>
+                                <div className="flex gap-2">
+                                    <FormInput
+                                        placeholder="e.g. Write a festive offer, ending soon..."
+                                        value={aiPrompt}
+                                        onChange={e => setAiPrompt(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && aiPrompt.trim()) generateAiMutation.mutate(aiPrompt.trim());
+                                        }}
+                                        disabled={generateAiMutation.isPending}
+                                    />
+                                    <button
+                                        onClick={() => aiPrompt.trim() && generateAiMutation.mutate(aiPrompt.trim())}
+                                        disabled={!aiPrompt.trim() || generateAiMutation.isPending}
+                                        className="interactive-press shrink-0 px-3 py-2 rounded-md bg-accent text-black font-semibold text-[13px] disabled:opacity-50 transition-colors flex items-center justify-center min-w-[80px]"
+                                    >
+                                        {generateAiMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : 'Generate'}
+                                    </button>
+                                </div>
+                            </div>
+
                             <div>
                                 <Label>Body Text</Label>
                                 <div className="rounded-md border border-[rgba(255,255,255,0.06)] focus-within:border-[rgba(34,197,94,0.4)] focus-within:ring-1 focus-within:ring-[rgba(34,197,94,0.15)] transition-all duration-[120ms] overflow-hidden bg-[#111111]">
@@ -495,7 +535,7 @@ function TemplateBuilder() {
                                             <div className="flex gap-2 items-center">
                                                 <FormSelect
                                                     title="Button type"
-                                                    className="w-32 shrink-0"
+                                                    className="!w-[140px] shrink-0"
                                                     value={btn.type}
                                                     onChange={e => {
                                                         const n = [...buttons]; n[idx].type = e.target.value; setButtons(n);
@@ -507,6 +547,7 @@ function TemplateBuilder() {
                                                 </FormSelect>
                                                 <FormInput
                                                     placeholder="Button label"
+                                                    className="flex-1 min-w-0"
                                                     value={btn.label}
                                                     onChange={e => {
                                                         const n = [...buttons]; n[idx].label = e.target.value; setButtons(n);

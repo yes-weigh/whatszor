@@ -120,3 +120,13 @@ export function useLeadGenerationPreview() {
         }
     });
 }
+
+export function useLeadGenerationSuggestions() {
+    return useMutation({
+        mutationFn: ({ keyword, location }: { keyword: string; location: string }) =>
+            leadGenerationApi.suggestLeadQueries(keyword, location),
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || 'Failed to get AI suggestions');
+        }
+    });
+}
