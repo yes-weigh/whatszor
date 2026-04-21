@@ -12,7 +12,8 @@ export function GeneralTab() {
         crm: {
             emailVisibility: true,
             productMapping: true
-        }
+        },
+        businessContext: ''
     });
 
     const { data: workspace, isLoading } = useQuery({
@@ -21,8 +22,12 @@ export function GeneralTab() {
     });
 
     useEffect(() => {
-        if (workspace?.settings?.crm) {
-            setSettings({ crm: { ...workspace.settings.crm } });
+        if (workspace?.settings) {
+            setSettings(s => ({
+                ...s,
+                crm: workspace.settings.crm ? { ...s.crm, ...workspace.settings.crm } : s.crm,
+                businessContext: workspace.settings.businessContext || ''
+            }));
         }
     }, [workspace]);
 
@@ -44,7 +49,8 @@ export function GeneralTab() {
     const saveSettings = () => {
         const payload = {
             ...(workspace?.settings || {}),
-            crm: settings.crm
+            crm: settings.crm,
+            businessContext: settings.businessContext
         };
         updateMutation.mutate(payload);
     };
@@ -57,6 +63,23 @@ export function GeneralTab() {
             </div>
 
             <div className="flex flex-col gap-4 card bg-surface mt-2">
+                <h3 className="font-semibold text-primary mb-2 border-b border-theme/50 pb-2">Business Profile & Context</h3>
+                
+                <div className="flex flex-col gap-2 p-3 rounded-xl border border-theme bg-body hover:bg-elevated transition-colors">
+                    <div className="flex flex-col gap-1">
+                        <span className="text-sm font-semibold text-primary">AI Business Context</span>
+                        <span className="text-xs text-muted">This context allows Whatsvue&apos;s AI features to provide tailored solutions and suggestions for your specific business case. It is automatically populated during your initial onboarding chat.</span>
+                    </div>
+                    <textarea 
+                        className="w-full bg-surface border border-theme rounded-lg px-3 py-2 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent min-h-[150px] resize-y mt-2 scrollbar-thin"
+                        placeholder="e.g. We are a B2B SaaS startup based in Bangalore, providing software for real estate agencies. Out target audience is mid-sized firms."
+                        value={settings.businessContext}
+                        onChange={e => setSettings(s => ({ ...s, businessContext: e.target.value }))}
+                    />
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-4 card bg-surface">
                 <h3 className="font-semibold text-primary mb-2 border-b border-theme/50 pb-2">CRM Configuration</h3>
                 
                 <label className="flex items-center justify-between p-3 rounded-xl border border-theme bg-body hover:bg-elevated transition-colors cursor-pointer">

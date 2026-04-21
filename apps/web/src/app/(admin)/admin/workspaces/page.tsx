@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { useRouter } from 'next/navigation';
-import { Building2, Power, PowerOff, Loader2 } from 'lucide-react';
+import { Building2, Power, PowerOff, Loader2, Trash2 } from 'lucide-react';
 import api from '@/lib/api';
 
 interface Workspace {
@@ -92,6 +92,27 @@ export default function AdminWorkspacesPage() {
         } catch (error: any) {
             console.error('Failed to impersonate:', error);
             alert(error.response?.data?.message || 'Failed to impersonate organization.');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleWipeWorkspace = async (id: string, slug: string) => {
+        const input = window.prompt(`DANGER: This will permanently delete this organization and ALL its data.\n\nType the organization ID exactly to confirm: ${slug}`);
+        if (input !== slug) {
+            if (input !== null) {
+                alert('Organization ID did not match. Aborting wipe.');
+            }
+            return;
+        }
+
+        try {
+            setActionLoading(`wipe-${id}`);
+            await api.delete(`/admin/workspaces/${id}/wipe`);
+            await fetchWorkspaces();
+        } catch (error: any) {
+            console.error('Failed to wipe workspace:', error);
+            alert(error.response?.data?.message || 'Failed to wipe organization.');
         } finally {
             setActionLoading(null);
         }
@@ -227,6 +248,19 @@ export default function AdminWorkspacesPage() {
                                                                 ws.status === 'ACTIVE' || ws.status === 'TRIAL' ? <PowerOff size={14} /> : <Power size={14} />
                                                             )}
                                                             {ws.status === 'ACTIVE' || ws.status === 'TRIAL' ? 'Suspend' : 'Activate'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleWipeWorkspace(ws.id, ws.slug)}
+                                                            disabled={actionLoading === `wipe-${ws.id}`}
+                                                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-red-500/10 hover:border-red-500/50 hover:bg-red-500/10 text-red-500 transition-all disabled:opacity-50"
+                                                            title="Wipe Workspace & All Data"
+                                                        >
+                                                            {actionLoading === `wipe-${ws.id}` ? (
+                                                                <Loader2 size={14} className="animate-spin" />
+                                                            ) : (
+                                                                <Trash2 size={14} />
+                                                            )}
+                                                            Wipe
                                                         </button>
                                                     </div>
                                                 </td>

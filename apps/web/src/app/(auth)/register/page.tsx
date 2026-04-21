@@ -49,9 +49,9 @@ export default function RegisterPage() {
             const me = meRes.data as any;
             if (!me) throw new Error('Could not retrieve user profile after registration');
 
-            // Step 4: Persist auth state and redirect to dashboard
+            // Step 4: Persist auth state and redirect to onboarding
             setAuth({ id: me.id, name: me.name, email: me.email, workspaceId: me.workspaceId, role: me.role }, accessToken, refreshToken);
-            router.push('/inbox');
+            router.push('/onboarding');
         } catch (err: any) {
             // Clear partial auth on failure
             localStorage.removeItem('accessToken');

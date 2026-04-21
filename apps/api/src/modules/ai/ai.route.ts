@@ -55,4 +55,48 @@ export const aiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => 
 
         return reply.sendSuccess(result);
     });
+
+    /**
+     * POST /ai/onboarding
+     * Body: { messages: any[] }
+     * Returns: { text }
+     */
+    fastify.post('/onboarding', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+    }, async (req, reply) => {
+        const { messages } = req.body as { messages: any[] };
+
+        if (!Array.isArray(messages)) {
+            return reply.code(400).sendError({
+                code: 'INVALID_INPUT',
+                message: 'Messages array is required',
+            });
+        }
+
+        // We fetch the workspace to get its name for context
+        const { prisma } = require('../../prisma/client');
+        const workspace = await prisma.workspace.findUnique({
+            where: { id: req.user.workspaceId },
+            select: { name: true }
+        });
+
+        const dbUser = await prisma.user.findUnique({
+            where: { id: (req.user as any).sub } // Type assertion to access 'sub' safely from payload
+        });
+
+        const result = await require('./ai.service').generateOnboardingChat(
+            req.user.workspaceId,
+            messages,
+            { orgName: workspace?.name || 'Your Organization', userEmail: dbUser?.email || '' }
+        );
+
+        if (result.error) {
+            return reply.code(500).sendError({
+                code: 'GENERATION_FAILED',
+                message: result.error,
+            });
+        }
+
+        return reply.sendSuccess({ text: result.text });
+    });
 };

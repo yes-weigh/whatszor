@@ -126,6 +126,7 @@ export function BillingTab() {
                             const max = PLAN_LIMITS[workspace?.planTier as keyof typeof PLAN_LIMITS]?.maxBroadcastMessagesPerMonth ?? 1;
                             const pct = Math.min(Math.round((used / max) * 100), 100);
                             const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-accent';
+                            {/* eslint-disable-next-line */}
                             return <div className={`${color} h-1.5 rounded-full transition-all`} style={{ width: `${pct}%` }} />;
                         })()}
                     </div>

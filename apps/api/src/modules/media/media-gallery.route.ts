@@ -310,4 +310,134 @@ export default async function mediaGalleryRoutes(fastify: FastifyInstance) {
 
         return reply.sendSuccess(updated);
     });
+
+    /**
+     * @route GET /api/v1/media-gallery/suggested
+     * @desc Returns images scraped from the workspace's website during onboarding
+     */
+    fastify.get('/suggested', { preHandler: [authenticate] }, async (request, reply) => {
+        const workspaceId = request.user?.workspaceId;
+        if (!workspaceId) {
+            return reply.sendError({ message: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED }, 401);
+        }
+
+        const ws = await prisma.workspace.findUnique({
+            where: { id: workspaceId },
+            select: { settings: true }
+        });
+
+        const settings = (ws?.settings as any) || {};
+        const images: string[] = settings.suggestedImages || [];
+        const source: string = settings.suggestedImagesSource || '';
+
+        return reply.sendSuccess({ images, source });
+    });
+
+    /**
+     * @route POST /api/v1/media-gallery/import-url
+     * @desc Downloads an external image URL and saves it to the media library
+     */
+    fastify.post('/import-url', { preHandler: [authenticate, requireRole('media:manage')] }, async (request, reply) => {
+        const workspaceId = request.user?.workspaceId;
+        if (!workspaceId) {
+            return reply.sendError({ message: 'Unauthorized', code: ErrorCodes.UNAUTHORIZED }, 401);
+        }
+
+        const { url, name } = request.body as { url: string; name?: string };
+        if (!url) {
+            return reply.sendError({ message: 'url is required', code: 'BAD_REQUEST' }, 400);
+        }
+
+        // Validate it's an image URL
+        if (!/^https?:\/\/.+/i.test(url)) {
+            return reply.sendError({ message: 'Invalid URL', code: 'BAD_REQUEST' }, 400);
+        }
+
+        let buffer: Buffer;
+        let mimeType = 'image/jpeg';
+        let filename = name || url.split('/').pop()?.split('?')[0] || 'image.jpg';
+
+        try {
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhatsVueCRM/1.0)' },
+                signal: AbortSignal.timeout(15000)
+            });
+
+            if (!res.ok) {
+                return reply.sendError({ message: `Failed to download image: HTTP ${res.status}`, code: 'BAD_REQUEST' }, 400);
+            }
+
+            mimeType = res.headers.get('content-type')?.split(';')[0] || mimeType;
+            buffer = Buffer.from(await res.arrayBuffer());
+        } catch (err: any) {
+            return reply.sendError({ message: `Download failed: ${err.message}`, code: 'BAD_REQUEST' }, 400);
+        }
+
+        if (buffer.length > MAX_IMAGE_SIZE) {
+            return reply.sendError({
+                message: `Image too large. Max is ${MAX_IMAGE_SIZE / (1024 * 1024)}MB.`,
+                code: 'BAD_REQUEST'
+            }, 400);
+        }
+
+        // Quota check (same as upload)
+        const wsForPlan = await prisma.workspace.findUnique({
+            where: { id: workspaceId },
+            select: { planTier: true, storageLimitBytes: true }
+        });
+        if (!wsForPlan) {
+            return reply.sendError({ message: 'Workspace not found', code: ErrorCodes.NOT_FOUND }, 404);
+        }
+        const { resolveStorageLimit } = require('../../core/config/storage');
+        const { PLAN_LIMITS } = require('../../core/config/pricing');
+        const storageLimit = resolveStorageLimit(wsForPlan.planTier, wsForPlan.storageLimitBytes);
+        const fileSize = BigInt(buffer.length);
+        const maxMediaFiles = PLAN_LIMITS[wsForPlan.planTier].maxMediaFiles;
+        const currentMediaCount = await prisma.media.count({ where: { workspaceId } });
+        if (currentMediaCount >= maxMediaFiles) {
+            return reply.sendError({ message: `Media file limit reached (${maxMediaFiles}).`, code: 'PAYMENT_REQUIRED' }, 402);
+        }
+
+        const quotaResult = await prisma.$executeRaw`
+            UPDATE workspaces
+            SET storage_used_bytes = storage_used_bytes + ${fileSize}
+            WHERE id = ${workspaceId}
+              AND storage_used_bytes + ${fileSize} <= ${storageLimit}
+        `;
+        if (quotaResult === 0) {
+            return reply.sendError({ message: 'Storage quota exceeded.', code: 'STORAGE_QUOTA_EXCEEDED' }, 413);
+        }
+
+        let media: any;
+        try {
+            const uploadResult = await storageProvider.upload(workspaceId, buffer, {
+                filename,
+                mimeType,
+                size: buffer.length
+            });
+            media = await prisma.media.create({
+                data: {
+                    workspaceId,
+                    name: filename,
+                    storageProvider: 'local',
+                    storageKey: uploadResult.storageKey,
+                    url: uploadResult.url,
+                    type: 'image',
+                    mimeType,
+                    size: buffer.length,
+                    category: 'website_import',
+                }
+            });
+        } catch (uploadErr) {
+            await prisma.$executeRaw`
+                UPDATE workspaces
+                SET storage_used_bytes = GREATEST(0, storage_used_bytes - ${fileSize})
+                WHERE id = ${workspaceId}
+            `;
+            throw uploadErr;
+        }
+
+        return reply.sendSuccess(media, 201);
+    });
 }
+

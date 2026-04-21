@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { Header } from '@/components/layout/Header';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UploadCloud, Image as ImageIcon, FileText, Trash2, Loader2, Link as LinkIcon, Download, Pencil, Check, X } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, FileText, Trash2, Loader2, Link as LinkIcon, Download, Pencil, Check, X, Globe, Sparkles, Plus } from 'lucide-react';
 
 const formatBytes = (bytes: number = 0, decimals = 2) => {
     if (!+bytes) return '0 Bytes';
@@ -21,6 +21,7 @@ export default function MediaGalleryPage() {
     const [filterType, setFilterType] = useState<string>('all');
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
+    const [importingUrl, setImportingUrl] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Fetch Media
@@ -30,10 +31,22 @@ export default function MediaGalleryPage() {
             const params = new URLSearchParams();
             if (filterType !== 'all') params.append('type', filterType);
             const res = await api.get('/media-gallery?' + params.toString());
-            // Fastify returns { media: [...] } normally
             return res.data?.media || [];
         },
     });
+
+    // Fetch Suggested Images from website scraping
+    const { data: suggestedData } = useQuery({
+        queryKey: ['media-suggested'],
+        queryFn: async () => {
+            const res = await api.get('/media-gallery/suggested');
+            return res.data || { images: [], source: '' };
+        },
+        staleTime: 5 * 60 * 1000, // 5 min cache
+    });
+
+    const suggestedImages: string[] = suggestedData?.images || [];
+    const suggestedSource: string = suggestedData?.source || '';
 
     const mediaList = mediaResponse || [];
 
@@ -48,6 +61,20 @@ export default function MediaGalleryPage() {
         onSuccess: () => {
             setEditingId(null);
             qc.invalidateQueries({ queryKey: ['media'] });
+        }
+    });
+
+    // Import URL Mutation
+    const importUrlMutation = useMutation({
+        mutationFn: ({ url, name }: { url: string; name?: string }) =>
+            api.post('/media-gallery/import-url', { url, name }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['media'] });
+            setImportingUrl(null);
+        },
+        onError: (err: any) => {
+            alert(err.response?.data?.message || 'Failed to import image.');
+            setImportingUrl(null);
         }
     });
 
@@ -68,7 +95,7 @@ export default function MediaGalleryPage() {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('category', 'general'); // Extensible later
+            formData.append('category', 'general');
 
             await api.post('/media-gallery', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
@@ -90,6 +117,12 @@ export default function MediaGalleryPage() {
         const url = `${baseUrl}/media-gallery/${id}/file?token=${token}`;
         navigator.clipboard.writeText(url);
         alert('Internal streaming URL copied to clipboard');
+    };
+
+    const handleImport = (imgUrl: string) => {
+        setImportingUrl(imgUrl);
+        const name = imgUrl.split('/').pop()?.split('?')[0] || 'website-image.jpg';
+        importUrlMutation.mutate({ url: imgUrl, name });
     };
 
     return (
@@ -143,6 +176,92 @@ export default function MediaGalleryPage() {
                         </button>
                     </div>
                 </div>
+
+                {/* ── Suggested from Website ─────────────────────────────────── */}
+                {suggestedImages.length > 0 && (
+                    <div className="rounded-xl border border-theme bg-elevated overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center gap-3 px-5 py-4 border-b border-theme">
+                            <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center">
+                                <Sparkles size={16} className="text-accent" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="text-sm font-semibold text-primary">Suggested from Your Website</h3>
+                                {suggestedSource && (
+                                    <a
+                                        href={suggestedSource}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-xs text-muted hover:text-accent flex items-center gap-1 transition-colors truncate"
+                                    >
+                                        <Globe size={11} />
+                                        {suggestedSource}
+                                    </a>
+                                )}
+                            </div>
+                            <span className="text-xs text-muted bg-theme px-2 py-0.5 rounded-full font-medium">
+                                {suggestedImages.length} found
+                            </span>
+                        </div>
+
+                        {/* Image Strip */}
+                        <div className="p-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                                {suggestedImages.map((imgUrl, idx) => {
+                                    const isImporting = importingUrl === imgUrl && importUrlMutation.isPending;
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className="group relative flex flex-col rounded-lg overflow-hidden border border-theme bg-surface hover:border-accent transition-all"
+                                        >
+                                            {/* Image Preview */}
+                                            <div className="relative aspect-square bg-theme flex items-center justify-center overflow-hidden">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                    src={imgUrl}
+                                                    alt={`Suggested ${idx + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        (e.target as HTMLImageElement).style.display = 'none';
+                                                    }}
+                                                />
+                                                {/* Overlay */}
+                                                <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                                                    <button
+                                                        onClick={() => handleImport(imgUrl)}
+                                                        disabled={isImporting}
+                                                        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors disabled:opacity-60"
+                                                    >
+                                                        {isImporting ? (
+                                                            <><Loader2 size={11} className="animate-spin" /> Saving…</>
+                                                        ) : (
+                                                            <><Plus size={11} /> Save to Library</>
+                                                        )}
+                                                    </button>
+                                                    <a
+                                                        href={imgUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-white/20 text-white text-xs font-medium hover:bg-white/30 transition-colors"
+                                                    >
+                                                        <Download size={11} /> View Original
+                                                    </a>
+                                                </div>
+                                            </div>
+                                            {/* Filename */}
+                                            <div className="px-2 py-1.5">
+                                                <p className="text-[11px] text-muted truncate" title={imgUrl}>
+                                                    {imgUrl.split('/').pop()?.split('?')[0] || 'image'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Grid */}
                 {isLoading ? (

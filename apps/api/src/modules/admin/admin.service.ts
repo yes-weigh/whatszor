@@ -12,6 +12,7 @@ import { logEvent } from '../../core/event-logger';
 import type { AdminLoginInput, AuthTokens } from '@whatszor/shared';
 import { ErrorCodes } from '@whatszor/shared';
 import { env } from '../../env';
+import { waManager } from '../whatsapp/whatsapp.service';
 
 export async function loginAdmin(input: AdminLoginInput): Promise<AuthTokens> {
     const { email, password } = input;
@@ -68,6 +69,57 @@ export async function toggleWorkspaceStatus(id: string, suspended: boolean, admi
     logEvent(id, eventType, 'admin_panel', { adminId, status });
 
     return workspace;
+}
+
+export async function wipeWorkspace(id: string, adminId: string): Promise<void> {
+    const workspace = await prisma.workspace.findUnique({
+        where: { id },
+        select: { id: true, slug: true }
+    });
+
+    if (!workspace) {
+        const err = new Error('Workspace not found') as Error & { code: string; statusCode: number };
+        err.code = ErrorCodes.NOT_FOUND;
+        err.statusCode = 404;
+        throw err;
+    }
+
+    logEvent(id, 'workspace_wiped', 'admin_panel', { adminId });
+
+    // Disconnect active WhatsApp sessions so they don't zombie
+    const sessions = await prisma.whatsAppAccount.findMany({
+        where: { workspaceId: id },
+        select: { sessionId: true }
+    });
+
+    for (const session of sessions) {
+        try {
+            await waManager.deleteAccount(session.sessionId);
+        } catch (err) {
+            // Log but don't fail, we need to wipe regardless
+            console.error(`Failed to cleanup WA session ${session.sessionId} during wipe:`, err);
+        }
+    }
+
+    // Grab user IDs before wiping to check for orphans later
+    const members = await prisma.workspaceMember.findMany({
+        where: { workspaceId: id },
+        select: { userId: true }
+    });
+    const candidateUserIds = members.map(m => m.userId);
+
+    // Rely on Prisma CASCADE to scrub child relations
+    await prisma.workspace.delete({ where: { id } });
+
+    // Clean up orphaned users (those who have no remaining memberships)
+    if (candidateUserIds.length > 0) {
+        await prisma.user.deleteMany({
+            where: {
+                id: { in: candidateUserIds },
+                memberships: { none: {} }
+            }
+        });
+    }
 }
 
 // ── Impersonation ─────────────────────────────────────────────

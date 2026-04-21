@@ -29,6 +29,7 @@ export type EventType =
     | 'admin_impersonation'
     | 'workspace_suspended'
     | 'workspace_activated'
+    | 'workspace_wiped'
     | 'member_role_changed'
     | 'session_reassigned'
     | 'session_unassigned'

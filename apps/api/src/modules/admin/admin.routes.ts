@@ -63,6 +63,13 @@ export const adminRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) 
         return reply.status(200).send({ success: true });
     });
 
+    fastify.delete('/workspaces/:id/wipe', { preHandler: authenticateAdmin }, async (req: any, reply) => {
+        const { id } = req.params as { id: string };
+        await adminService.wipeWorkspace(id, req.user.sub);
+        invalidateWorkspaceCache(id);
+        return reply.status(200).send({ success: true });
+    });
+
     // ── Impersonation ─────────────────────────────────────────────────────────
     fastify.post('/workspaces/:id/impersonate', { preHandler: authenticateAdmin }, async (req: any, reply) => {
         const { id: workspaceId } = req.params as { id: string };

@@ -92,6 +92,138 @@ async function executeToolCall(_workspaceId: string, contactId: string | undefin
                     return { error: e.message };
                 }
 
+            case 'update_business_context':
+                const { summary } = args;
+                if (!summary) return { error: "Missing summary" };
+                
+                try {
+                    const workspace = await prisma.workspace.findUnique({
+                        where: { id: _workspaceId },
+                        select: { settings: true }
+                    });
+                    if (!workspace) return { error: "Workspace not found" };
+
+                    const currentSettings = (workspace.settings as Record<string, any>) || {};
+                    // Append or overwrite the business context
+                    currentSettings.businessContext = summary;
+
+                    await prisma.workspace.update({
+                        where: { id: _workspaceId },
+                        data: { settings: currentSettings }
+                    });
+                    return { success: true, note: "Business context successfully saved to workspace settings." };
+                } catch(e: any) {
+                    return { error: e.message };
+                }
+
+            case 'scrape_website':
+                let { url } = args;
+                if (!url) return { error: "Missing url" };
+
+                try {
+                    // Prepend https:// if not present
+                    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                        url = 'https://' + url;
+                    }
+
+                    const cheerio = require('cheerio');
+                    const { prisma } = require('../../prisma/client');
+                    
+                    const response = await fetch(url, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WhatsVueCRM/1.0)' },
+                        signal: AbortSignal.timeout(10000)
+                    });
+                    
+                    if (!response.ok) {
+                        return { error: `Failed to fetch website. Status: ${response.status}` };
+                    }
+
+                    const html = await response.text();
+                    const $ = cheerio.load(html);
+
+                    // Extract meta tags which are critical for SPAs
+                    const title = $('title').text() || $('meta[property="og:title"]').attr('content') || '';
+                    const description = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '';
+
+                    // ── Extract Images ─────────────────────────────────────────────────
+                    const baseOrigin = new URL(url).origin;
+                    const imageSet = new Set<string>();
+
+                    // og:image first (most reliable brand image)
+                    const ogImg = $('meta[property="og:image"]').attr('content');
+                    if (ogImg) {
+                        try { imageSet.add(new URL(ogImg, baseOrigin).href); } catch {}
+                    }
+                    // All <img> tags
+                    $('img').each((_: number, el: any) => {
+                        const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || '';
+                        if (!src || src.startsWith('data:')) return;
+                        try { imageSet.add(new URL(src, baseOrigin).href); } catch {}
+                    });
+                    // srcset images
+                    $('img[srcset], source[srcset]').each((_: number, el: any) => {
+                        const srcset = $(el).attr('srcset') || '';
+                        srcset.split(',').forEach((part: string) => {
+                            const src = part.trim().split(' ')[0];
+                            if (src && !src.startsWith('data:')) {
+                                try { imageSet.add(new URL(src, baseOrigin).href); } catch {}
+                            }
+                        });
+                    });
+
+                    const imageUrls = Array.from(imageSet)
+                        .filter((u: string) => /\.(jpg|jpeg|png|webp|gif|svg)(\?.*)?$/i.test(u))
+                        .slice(0, 20); // cap at 20
+
+                    // Persist suggested images to workspace settings (fire-and-forget)
+                    if (_workspaceId && imageUrls.length > 0) {
+                        prisma.workspace.findUnique({ where: { id: _workspaceId }, select: { settings: true } })
+                            .then((ws: any) => {
+                                const current = (ws?.settings as any) || {};
+                                return prisma.workspace.update({
+                                    where: { id: _workspaceId },
+                                    data: { settings: { ...current, suggestedImages: imageUrls, suggestedImagesSource: url } }
+                                });
+                            })
+                            .catch((e: any) => log.warn({ err: e }, 'Failed to persist suggestedImages'));
+                    }
+                    // ─────────────────────────────────────────────────────────────────
+
+                    // Remove scripts, styles, navs, footer, ads to clean up DOM
+                    $('script, style, noscript, iframe, nav, footer, header').remove();
+
+                    // Extract all useful text segments
+                    let rawText = '';
+                    if (title) rawText += `Title: ${title.trim()}\n`;
+                    if (description && description !== 'Web site created using create-react-app') rawText += `Description: ${description.trim()}\n`;
+                    
+                    $('h1, h2, h3, h4, h5, p, li, span, div').each((_: number, el: any) => {
+                        const $el = $(el);
+                        const isGeneric = el.tagName === 'div' || el.tagName === 'span';
+                        if (isGeneric && $el.children().length > 0) return;
+                        
+                        const text = $el.text().replace(/\s+/g, ' ').trim();
+                        if (text.length > 15) {
+                            rawText += text + '\n';
+                        }
+                    });
+
+                    const extracted = rawText.slice(0, 3000) + (rawText.length > 3000 ? '...' : '');
+
+                    if (!extracted) {
+                        return { error: "Website loaded but no readable text found." };
+                    }
+                    
+                    return { 
+                        success: true, 
+                        content: extracted,
+                        imagesFound: imageUrls.length,
+                        note: "Here is the raw text extracted from the website. Read this carefully to understand their business model, then reply to the user naturally." 
+                    };
+                } catch(err: any) {
+                    return { error: `Scraping failed: ${err.message}` };
+                }
+
             default:
                 return { error: `Unknown tool: ${functionName}` };
         }
@@ -170,7 +302,11 @@ If the user indicates they are interested in, inquiring about, or wanting to buy
             }
         });
 
-        if (response.functionCalls && response.functionCalls.length > 0) {
+        let toolCallsCount = 0;
+        const MAX_TOOL_CALLS = 5;
+
+        while (response.functionCalls && response.functionCalls.length > 0 && toolCallsCount < MAX_TOOL_CALLS) {
+            toolCallsCount++;
             const originalContent = response.candidates?.[0]?.content;
             if (originalContent) {
                 messages.push(originalContent);
@@ -352,3 +488,132 @@ export async function generateSuggestions(messages: any[], contact: any): Promis
         return { error: err.message };
     }
 }
+
+// ── Onboarding / Setup Engine ────────────────────────────────────────────────
+
+const ONBOARDING_SYSTEM_PROMPT = `You are a helpful and very polite AI assistant integrated into the WhatsVue CRM platform.
+Your ONLY job right now is to welcome the user who just signed up and gather a smooth, organic business profile.
+
+RULES:
+1. Be extremely conversational, empathetic, and human-like.
+2. Mirror the user's tone. If they are brief, be brief. If they are professional, be professional.
+3. NEVER be pushy. If the user wants to skip or refuses to answer, acknowledge it gracefully and conclude.
+4. Try to find out: what their business does, what industry they are in, if they are B2B or B2C, where they are located, and any key taglines or values.
+5. Keep your responses short (max 2-3 sentences per reply). Do not overwhelm the user.
+6. As soon as you learn any solid facts about their business, SILENTLY use the 'update_business_context' tool to save a cohesive Markdown summary of everything you know so far. Overwrite the summary to be comprehensive each time.
+7. SUPERPOWER: You have a 'scrape_website' tool! Encourage the user to provide their website URL so you can instantly call 'scrape_website' to read their page, extract the context, and surprise them with your knowledge.
+
+If there is no conversation history, you MUST send a welcoming first message using the contextual orgName and userEmail provided by the system. Example: "Hi [Name], welcome to [Org]! I'm here to help set things up. Do you have a website URL I can look at to quickly learn about your business?"
+`;
+
+export async function generateOnboardingChat(
+    workspaceId: string, 
+    messages: any[], 
+    contextParams: { orgName: string; userEmail: string }
+): Promise<{ text?: string, error?: string }> {
+    try {
+        const tools: any[] = [{
+            functionDeclarations: [
+                {
+                    name: 'update_business_context',
+                    description: 'Saves the current understanding of the user\'s business profile as a Markdown formatted summary. Call this silently in the background when you learn new facts.',
+                    parameters: {
+                        type: Type.OBJECT,
+                        properties: {
+                            summary: { 
+                                type: Type.STRING, 
+                                description: "A comprehensive Markdown summary of the business (e.g. Industry, Location, B2B/B2C, Team Size, Products). Replace the old context entirely with this new exhaustive string." 
+                            }
+                        },
+                        required: ["summary"]
+                    }
+                },
+                {
+                    name: 'scrape_website',
+                    description: 'Extracts all readable text content from a URL to instantly learn about the users business. Automatically handles missing https:// prefixes.',
+                    parameters: {
+                        type: Type.OBJECT,
+                        properties: {
+                            url: { 
+                                type: Type.STRING, 
+                                description: "The URL of the website to scrape, i.e. stripe.com or https://whatsvue.com" 
+                            }
+                        },
+                        required: ["url"]
+                    }
+                }
+            ]
+        }];
+
+        // If no messages, inject a system cue to force the AI to make the first move based on context
+        const chatMessages = messages.length > 0 ? messages : [
+            { role: 'user', parts: [{ text: `[SYSTEM] The user just signed up. orgName: "${contextParams.orgName}", userEmail: "${contextParams.userEmail}". Generate a welcoming first message to start the onboarding.` }] }
+        ];
+
+        let response = await ai.models.generateContent({
+            model: MODEL,
+            contents: chatMessages,
+            config: {
+                systemInstruction: ONBOARDING_SYSTEM_PROMPT,
+                tools,
+                temperature: 0.7, // slightly more creative and adaptable persona
+            }
+        });
+
+        let toolCallsCount = 0;
+        const MAX_TOOL_CALLS = 5;
+
+        while (response.functionCalls && response.functionCalls.length > 0 && toolCallsCount < MAX_TOOL_CALLS) {
+            toolCallsCount++;
+            const originalContent = response.candidates?.[0]?.content;
+            if (originalContent) {
+                chatMessages.push(originalContent);
+            } else {
+                chatMessages.push({
+                    role: 'model',
+                    parts: response.functionCalls.map(fc => ({ functionCall: fc }))
+                });
+            }
+
+            const functionResponses = [];
+
+            for (const call of response.functionCalls) {
+                const callName = call.name || 'unknown';
+                const result = await executeToolCall(workspaceId, undefined, callName, call.args);
+                functionResponses.push({
+                    functionResponse: {
+                        name: callName,
+                        response: result
+                    }
+                });
+            }
+
+            chatMessages.push({
+                role: 'user',
+                parts: functionResponses
+            });
+
+            // Re-prompt to get text response after tool execution
+            response = await ai.models.generateContent({
+                model: MODEL,
+                contents: chatMessages,
+                config: {
+                    systemInstruction: ONBOARDING_SYSTEM_PROMPT,
+                    tools,
+                    temperature: 0.7,
+                }
+            });
+        }
+
+        if (!response.text) {
+             return { error: 'Empty response from AI.' };
+        }
+
+        return { text: response.text };
+
+    } catch (err: any) {
+        log.error({ err }, 'generateOnboardingChat failed');
+        return { error: err.message };
+    }
+}
+
