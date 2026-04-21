@@ -22,6 +22,22 @@ export default function AudienceDetailPage({ params }: { params: { id: string } 
             header: "Name",
             cell: ({ row }) => {
                 const contact = row.original.contact;
+                const isLocked = contact.customData?.isLocked;
+                
+                if (isLocked) {
+                    return (
+                        <div className="flex items-center gap-3 select-none pointer-events-none">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-gray-500/10 text-gray-400 border border-gray-500/20">
+                                <Users2 size={14} />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-sm font-semibold text-primary blur-sm">Locked Lead Name</span>
+                                <span className="text-xs text-accent font-medium">Premium</span>
+                            </div>
+                        </div>
+                    );
+                }
+
                 const name = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Unknown';
                 return (
                     <div className="flex items-center gap-3">
@@ -36,22 +52,44 @@ export default function AudienceDetailPage({ params }: { params: { id: string } 
         {
             accessorKey: "contact.phone",
             header: "Phone",
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2 text-sm text-secondary">
-                    <Phone size={14} className="text-muted" />
-                    {row.original.contact.phone || "—"}
-                </div>
-            ),
+            cell: ({ row }) => {
+                const isLocked = row.original.contact.customData?.isLocked;
+                if (isLocked) {
+                    return (
+                        <div className="flex items-center gap-2 text-sm text-secondary select-none pointer-events-none">
+                            <Phone size={14} className="text-muted" />
+                            <span className="blur-sm">+1 (XXX) XXX-XXXX</span>
+                        </div>
+                    );
+                }
+                return (
+                    <div className="flex items-center gap-2 text-sm text-secondary">
+                        <Phone size={14} className="text-muted" />
+                        {row.original.contact.phone || "—"}
+                    </div>
+                );
+            },
         },
         {
             accessorKey: "contact.email",
             header: "Email",
-            cell: ({ row }) => (
-                <div className="flex items-center gap-2 text-sm text-secondary">
-                    <Mail size={14} className="text-muted" />
-                    {row.original.contact.email || "—"}
-                </div>
-            ),
+            cell: ({ row }) => {
+                const isLocked = row.original.contact.customData?.isLocked;
+                if (isLocked) {
+                    return (
+                        <div className="flex items-center gap-2 text-sm text-secondary select-none pointer-events-none">
+                            <Mail size={14} className="text-muted" />
+                            <span className="blur-sm">locked@hidden.com</span>
+                        </div>
+                    );
+                }
+                return (
+                    <div className="flex items-center gap-2 text-sm text-secondary">
+                        <Mail size={14} className="text-muted" />
+                        {row.original.contact.email || "—"}
+                    </div>
+                );
+            },
         },
         {
             accessorKey: "sourceType",
@@ -139,6 +177,31 @@ export default function AudienceDetailPage({ params }: { params: { id: string } 
                         )}
                     </div>
                 </div>
+
+                {members.some(m => m.contact.customData?.isLocked) && (
+                    <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-accent/20 text-accent rounded-lg shrink-0">
+                                <Users2 size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-primary text-sm flex items-center gap-2">
+                                    Unlock Premium Leads
+                                </h3>
+                                <p className="text-sm text-secondary mt-1">
+                                    Your daily lead extraction limit has been reached. Some contacts in this audience are locked and blurred. Upgrade your plan to reveal their details and continue finding contacts.
+                                </p>
+                            </div>
+                        </div>
+                        <Button 
+                            variant="accent" 
+                            className="shrink-0 w-full md:w-auto mt-2 md:mt-0"
+                            onClick={() => router.push('/settings?tab=billing')}
+                        >
+                            Upgrade Plan
+                        </Button>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="p-6 rounded-2xl border border-theme bg-elevated shadow-sm flex flex-col gap-2">

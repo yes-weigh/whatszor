@@ -164,11 +164,26 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
 
     log.info({ leadListId, withPhone, totalFound: summaries.length }, 'LeadList marked READY');
 
-    // ── 7. SSE push ──────────────────────────────────────────────────────────
+    // ── 7. SSE push & Auto-Convert ───────────────────────────────────────────
     const list = await prisma.leadList.findUnique({
         where: { id: leadListId },
-        select: { name: true, query: true },
+        select: { name: true, query: true, targetAudienceId: true },
     });
+
+    if (list?.targetAudienceId) {
+        log.info({ leadListId, audienceId: list.targetAudienceId }, 'Auto-converting to specified audience block');
+        try {
+            const { convertLeads } = require('./lead-generation.service');
+            await convertLeads(workspaceId, leadListId, {
+                skipExisting: true,
+                createAudience: false,
+                audienceId: list.targetAudienceId
+            });
+            log.info({ leadListId }, 'Auto-conversion completed within worker');
+        } catch(e: any) {
+            log.error({ err: e, leadListId }, 'Failed to auto-convert leads within worker');
+        }
+    }
 
     emitToWorkspace(workspaceId, 'lead_list.ready', {
         leadListId,

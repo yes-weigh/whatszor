@@ -49,6 +49,12 @@ export async function listContacts(workspaceId: string, opts?: { search?: string
     return prisma.contact.findMany({
         where: {
             workspaceId,
+            NOT: {
+                customData: {
+                    path: ['source'],
+                    equals: 'google_places'
+                }
+            },
             ...(search && {
                 OR: [
                     { firstName: { contains: search, mode: 'insensitive' } },

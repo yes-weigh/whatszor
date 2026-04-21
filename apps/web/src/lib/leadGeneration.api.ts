@@ -62,6 +62,11 @@ export const leadGenerationApi = {
         return res.data;
     },
 
+    batchGenerateLeads: async (rootQuery: string, segments: { keyword: string, location: string }[]): Promise<{ audienceId: string, message: string }> => {
+        const res = await api.post('/lead-generation/batch', { rootQuery, segments });
+        return res.data;
+    },
+
     getLeadLists: async (skip: number = 0, take: number = 20): Promise<{ items: LeadList[], total: number }> => {
         const res = await api.get('/lead-generation', { params: { skip, take } });
         return res.data;

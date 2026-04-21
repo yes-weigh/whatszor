@@ -156,13 +156,13 @@ model Workspace {
   storageUsedBytes  BigInt          @default(0) @map("storage_used_bytes")
   // 0 = use plan-tier default from StorageLimits config (src/core/config/storage.ts)
   storageLimitBytes BigInt          @default(0) @map("storage_limit_bytes")
-  
+
   // Broadcast tracking
   broadcastUsageMonth        String   @default("") @map("broadcast_usage_month") // YYYY-MM
   broadcastUsageCurrentMonth Int      @default(0) @map("broadcast_usage_current_month")
   // ───────────────────────────────────────────────────────────────────────
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
 
   // Relations
   licenses           LicenseKey[]
@@ -674,11 +674,11 @@ model Campaign {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  audience        Audience?        @relation(fields: [audienceId], references: [id], onDelete: SetNull)
-  whatsappAccount WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
-  whatsappAccountId String?        @map("whatsapp_account_id")
-  members         CampaignMember[]
+  workspace         Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  audience          Audience?        @relation(fields: [audienceId], references: [id], onDelete: SetNull)
+  whatsappAccount   WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
+  whatsappAccountId String?          @map("whatsapp_account_id")
+  members           CampaignMember[]
 
   @@index([workspaceId])
   @@index([status])
@@ -835,10 +835,10 @@ model PaymentRequest {
   status         PaymentStatus @default(PENDING)
   adminNote      String?       @map("admin_note")
 
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([status])
@@ -853,9 +853,9 @@ model ConversationTag {
   createdByAgentId String?  @map("created_by_agent_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
-  workspace        Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  agent            User?        @relation(fields: [createdByAgentId], references: [id], onDelete: SetNull)
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent        User?        @relation(fields: [createdByAgentId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId])
   @@index([conversationId])
@@ -873,8 +873,8 @@ model AgentDailyMetric {
   missedChats        Int      @default(0) @map("missed_chats")
   tagsApplied        Json     @default("{}") @map("tags_applied")
 
-  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  agent              User      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agent     User      @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, agentId, date])
   @@map("agent_daily_metrics")
@@ -1220,6 +1220,8 @@ model LeadList {
   processingStartedAt DateTime? @map("processing_started_at")
   completedAt         DateTime? @map("completed_at")
 
+  targetAudienceId    String?   @map("target_audience_id")
+
   source      String  @default("google_places")
   errorReason String? @map("error_reason")
 
@@ -1385,22 +1387,22 @@ enum DlqStatus {
 }
 
 model DeadLetterJob {
-  id          String    @id @default(cuid())
-  workspaceId String?   @map("workspace_id") // null for system-level jobs (e.g. insight-scan)
-  jobId       String    @map("job_id")       // BullMQ-assigned job ID
-  queueName   String    @map("queue_name")
-  jobName     String    @map("job_name")     // BullMQ job name (e.g. "outbound:msg_123")
-  payload     Json                           // Full job.data — do NOT log PII in production
-  failReason  String    @map("fail_reason") @db.Text
-  stackTrace  String?   @map("stack_trace") @db.Text
-  failedAt    DateTime  @map("failed_at")
-  attemptsMade Int      @map("attempts_made")
-  status      DlqStatus @default(PENDING_REVIEW)
+  id           String    @id @default(cuid())
+  workspaceId  String?   @map("workspace_id") // null for system-level jobs (e.g. insight-scan)
+  jobId        String    @map("job_id") // BullMQ-assigned job ID
+  queueName    String    @map("queue_name")
+  jobName      String    @map("job_name") // BullMQ job name (e.g. "outbound:msg_123")
+  payload      Json // Full job.data — do NOT log PII in production
+  failReason   String    @map("fail_reason") @db.Text
+  stackTrace   String?   @map("stack_trace") @db.Text
+  failedAt     DateTime  @map("failed_at")
+  attemptsMade Int       @map("attempts_made")
+  status       DlqStatus @default(PENDING_REVIEW)
 
   // Replay tracking
   replayedAt    DateTime? @map("replayed_at")
   replayedJobId String?   @map("replayed_job_id") // New BullMQ jobId after replay
-  replayedBy    String?   @map("replayed_by")      // userId who triggered the replay
+  replayedBy    String?   @map("replayed_by") // userId who triggered the replay
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -1424,5 +1426,3 @@ model SystemConfig {
 
   @@map("system_configs")
 }
-
-

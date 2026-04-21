@@ -38,7 +38,6 @@ const navSections = [
         label: 'CRM',
         items: [
             { href: '/contacts',  label: 'Contacts',  icon: Users },
-            { href: '/audiences', label: 'Audiences', icon: Users2 },
         ],
     },
     {
@@ -50,7 +49,7 @@ const navSections = [
                 label: 'Campaigns',
                 icon: Megaphone,
             },
-            { href: '/leads', label: 'Lead Generation', icon: MapPin },
+            { href: '/audiences', label: 'Audiences', icon: Users2 },
         ],
     },
     {

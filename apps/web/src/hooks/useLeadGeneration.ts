@@ -42,6 +42,19 @@ export function useLeadGenerationLists() {
         }
     });
 
+    const batchGenerateMutation = useMutation({
+        mutationFn: ({ rootQuery, segments }: { rootQuery: string; segments: { keyword: string; location: string }[] }) =>
+            leadGenerationApi.batchGenerateLeads(rootQuery, segments),
+        onSuccess: (data) => {
+            toast.success(data.message || 'Batch generation initialized!');
+            queryClient.invalidateQueries({ queryKey: ['leadLists'] });
+            queryClient.invalidateQueries({ queryKey: ['audiences'] });
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || 'Failed to start batch generation');
+        }
+    });
+
     const deleteMutation = useMutation({
         mutationFn: (id: string) => leadGenerationApi.deleteLeadList(id),
         onSuccess: () => {
@@ -60,6 +73,8 @@ export function useLeadGenerationLists() {
         refetch,
         generateLeads: generateMutation.mutateAsync,
         isGenerating: generateMutation.isPending,
+        batchGenerateLeads: batchGenerateMutation.mutateAsync,
+        isBatchGenerating: batchGenerateMutation.isPending,
         deleteLeadList: deleteMutation.mutateAsync,
         isDeleting: deleteMutation.isPending,
     };

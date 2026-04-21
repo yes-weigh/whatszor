@@ -15,14 +15,23 @@ import {
     XCircle,
     Loader2,
     AlertTriangle,
-    Database,
     Users2,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { ColumnDef } from '@tanstack/react-table';
-import { Lock } from 'lucide-react';
+import { Lock, Plus } from 'lucide-react';
+import { 
+    Modal, 
+    ModalContent, 
+    ModalHeader, 
+    ModalTitle, 
+    ModalTrigger,
+    ModalFooter,
+    ModalClose
+} from '@/components/ui/Modal';
+import { useAudiences } from '@/hooks/useAudiences';
 
 export default function LeadListDetailPage({ params }: { params: { id: string } }) {
     const router = useRouter();
@@ -38,21 +47,30 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
         isConverting 
     } = useLeadGenerationDetail(id, filter);
 
-    const handleConvertOnly = async () => {
-        if (!confirm('Convert all available leads with phone numbers to CRM Contacts? Existing phones will be skipped.')) return;
-        await convertLeads({ skipExisting: true });
-        toast.success('Leads converted to contacts');
-    };
+    const [pushMode, setPushMode] = React.useState<'new' | 'existing'>('new');
+    const [selectedAudienceId, setSelectedAudienceId] = React.useState<string>('');
+    const { audiences } = useAudiences();
+    const [isPushModalOpen, setIsPushModalOpen] = React.useState(false);
 
-    const handleConvertAndCreateAudience = async () => {
-        if (!confirm('Convert leads to Contacts AND create a named Audience from them? This is the recommended flow for running targeted campaigns.')) return;
-        const result = await convertLeads({ skipExisting: true, createAudience: true });
+    const handlePushToAudience = async () => {
+        let result;
+        if (pushMode === 'new') {
+            result = await convertLeads({ skipExisting: true, createAudience: true });
+        } else {
+            if (!selectedAudienceId) {
+                toast.error('Please select an audience');
+                return;
+            }
+            result = await convertLeads({ skipExisting: true, audienceId: selectedAudienceId });
+        }
+
         if ((result as any)?.audienceId) {
             setCreatedAudienceId((result as any).audienceId);
-            toast.success(`Converted ${(result as any)?.converted ?? 0} leads — Audience created!`);
+            toast.success(`Pushed ${(result as any)?.converted ?? 0} leads to audience!`);
         } else {
-            toast.success('Leads converted to contacts');
+            toast.success('Leads pushed to audience successfully');
         }
+        setIsPushModalOpen(false);
     };
 
     const columns: ColumnDef<Lead>[] = [
@@ -214,7 +232,7 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                                 <span className="text-3xl font-bold text-primary">{list.withPhone}</span>
                             </div>
                             <div className="p-6 rounded-xl border border-theme bg-elevated shadow-sm flex flex-col gap-2">
-                                <span className="text-sm text-secondary font-medium">Converted to Contacts</span>
+                                <span className="text-sm text-secondary font-medium">In Audiences</span>
                                 <span className="text-3xl font-bold text-accent">{list.converted}</span>
                             </div>
                         </div>
@@ -243,7 +261,7 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                                     className="text-xs"
                                     onClick={() => setFilter('converted')}
                                 >
-                                    Converted
+                                    In Audiences
                                 </Button>
                                 <Button 
                                     variant={filter === 'raw' ? 'secondary' : 'ghost'} 
@@ -256,35 +274,78 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                             </div>
 
                             <div className="flex items-center gap-2">
-                                {/* Secondary: convert to contacts only */}
-                                <Button
-                                    variant="secondary"
-                                    onClick={handleConvertOnly}
-                                    disabled={list.withPhone === 0 || isConverting || list.withPhone === list.converted}
-                                    className="gap-2 text-sm"
-                                >
-                                    {isConverting ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Database className="h-4 w-4" />
-                                    )}
-                                    Contacts Only
-                                </Button>
+                                <Modal open={isPushModalOpen} onOpenChange={setIsPushModalOpen}>
+                                    <ModalTrigger asChild>
+                                        <Button
+                                            variant="accent"
+                                            disabled={list.withPhone === 0 || isConverting || list.withPhone === list.converted}
+                                            className="gap-2"
+                                        >
+                                            {isConverting ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Users2 className="h-4 w-4" />
+                                            )}
+                                            {isConverting ? 'Pushing...' : '⚡ Push to Audience'}
+                                        </Button>
+                                    </ModalTrigger>
+                                    <ModalContent>
+                                        <ModalHeader>
+                                            <ModalTitle>Push to Audience</ModalTitle>
+                                        </ModalHeader>
+                                        <div className="space-y-4 py-4">
+                                            <p className="text-sm text-secondary">
+                                                Select whether to push these leads to a new audience or an existing one.
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div 
+                                                    className={`p-3 border rounded-lg cursor-pointer ${pushMode === 'new' ? 'border-accent bg-accent/10 text-accent' : 'border-theme text-secondary hover:border-accent/50'}`}
+                                                    onClick={() => setPushMode('new')}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <Plus size={16} />
+                                                        <span className="font-medium text-sm">New Audience</span>
+                                                    </div>
+                                                </div>
+                                                <div 
+                                                    className={`p-3 border rounded-lg cursor-pointer ${pushMode === 'existing' ? 'border-accent bg-accent/10 text-accent' : 'border-theme text-secondary hover:border-accent/50'}`}
+                                                    onClick={() => setPushMode('existing')}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <Users2 size={16} />
+                                                        <span className="font-medium text-sm">Existing</span>
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                                {/* Primary: convert + create audience */}
-                                <Button
-                                    variant="accent"
-                                    onClick={handleConvertAndCreateAudience}
-                                    disabled={list.withPhone === 0 || isConverting || list.withPhone === list.converted}
-                                    className="gap-2"
-                                >
-                                    {isConverting ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Users2 className="h-4 w-4" />
-                                    )}
-                                    {isConverting ? 'Converting...' : 'Convert & Create Audience'}
-                                </Button>
+                                            {pushMode === 'existing' && (
+                                                <div className="mt-4">
+                                                    <label className="text-xs font-medium text-secondary uppercase tracking-wide mb-1.5 block">Select Audience</label>
+                                                    <select 
+                                                        title="Select Audience"
+                                                        aria-label="Select Audience"
+                                                        className="w-full rounded-lg border border-theme bg-elevated px-3 py-2 text-sm text-primary focus:outline-none focus:ring-2 focus:ring-accent/40"
+                                                        value={selectedAudienceId}
+                                                        onChange={e => setSelectedAudienceId(e.target.value)}
+                                                    >
+                                                        <option value="">-- Choose an audience --</option>
+                                                        {audiences.map(a => (
+                                                            <option key={a.id} value={a.id}>{a.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <ModalFooter>
+                                            <ModalClose asChild>
+                                                <Button variant="ghost">Cancel</Button>
+                                            </ModalClose>
+                                            <Button variant="accent" onClick={handlePushToAudience} disabled={isConverting || (pushMode === 'existing' && !selectedAudienceId)}>
+                                                {isConverting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Push Leads'}
+                                            </Button>
+                                        </ModalFooter>
+                                    </ModalContent>
+                                </Modal>
                             </div>
                         </div>
 
@@ -293,7 +354,7 @@ export default function LeadListDetailPage({ params }: { params: { id: string } 
                             <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm animate-in fade-in">
                                 <div className="flex items-center gap-2">
                                     <Users2 size={16} />
-                                    <span>Audience created from this lead list.</span>
+                                    <span>Added tracking leads to audience.</span>
                                 </div>
                                 <Button
                                     variant="ghost"

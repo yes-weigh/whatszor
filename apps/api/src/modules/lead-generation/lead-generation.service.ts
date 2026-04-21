@@ -24,7 +24,7 @@ import { PLAN_LIMITS } from '../../core/config/pricing';
 const log = createLogger({ module: 'lead-generation-service' });
 
 // ── Rate Limit Constants ──────────────────────────────────────────────────────
-const HOURLY_SEARCH_LIMIT      = 10;
+const HOURLY_SEARCH_LIMIT      = 20;   // raised to support AI batch launches (10 chips at a time)
 const DAILY_SEARCH_LIMIT       = 50;
 const HOURLY_PREVIEW_LIMIT     = 20;
 const MAX_RESULTS_CAP          = 20;   // default cap for normal searches
@@ -129,7 +129,7 @@ export async function previewLeadSearch(
  */
 export async function createLeadList(
     workspaceId: string,
-    input: { query: string; name?: string; maxResults?: number; fetchMaximum?: boolean },
+    input: { query: string; name?: string; maxResults?: number; fetchMaximum?: boolean; targetAudienceId?: string },
 ) {
     await checkSearchRateLimit(workspaceId);
     requirePlacesApiKey(); // fail fast before creating any records
@@ -143,6 +143,7 @@ export async function createLeadList(
             query: input.query.trim(),
             name: input.name?.trim() || null,
             status: 'PENDING',
+            targetAudienceId: input.targetAudienceId || null,
         },
     });
 
@@ -205,6 +206,47 @@ export async function getLeadLists(
     ]);
 
     return { items, total };
+}
+
+/**
+ * Creates a global Audience, then launches multiple LeadLists 
+ * (one per segment) pointing their targetAudienceId directly at it.
+ */
+export async function batchCreateLeadLists(
+    workspaceId: string,
+    input: { rootQuery: string; segments: { keyword: string; location: string }[] }
+) {
+    if (!input.segments || input.segments.length === 0) {
+        throw Object.assign(new Error('At least one segment must be provided.'), { statusCode: 400, code: 'INVALID_INPUT' });
+    }
+
+    // Attempt to deduplicate or create root Audience early
+    const audience = await prisma.audience.create({
+        data: {
+            workspaceId,
+            name: `${input.rootQuery} (AI Batch)`,
+            sourceType: 'lead_list',
+            memberCount: 0,
+        },
+    });
+
+    const results = [];
+    for (const segment of input.segments) {
+        const query = `${segment.keyword} in ${segment.location}`;
+        try {
+            const list = await createLeadList(workspaceId, {
+                query,
+                fetchMaximum: true,
+                targetAudienceId: audience.id,
+            });
+            results.push({ success: true, list });
+        } catch (e: any) {
+            log.error({ workspaceId, query, err: e }, 'Failed to queue sub-segment in batch');
+            results.push({ success: false, query, error: e.message });
+        }
+    }
+
+    return { audience, batches: results };
 }
 
 /**
@@ -368,12 +410,12 @@ export async function convertLeads(
     const limitExtracts = PLAN_LIMITS[list.workspace.planTier].leadsExtractedPerDay;
 
     let availableCapacity = limitExtracts - leadsExtractedToday;
-    if (availableCapacity <= 0) {
-        const err = new Error(`Daily extraction limit of ${limitExtracts} reached. Upgrade your plan to extract more leads today.`);
-        (err as any).statusCode = 402;
-        (err as any).code = 'PAYMENT_REQUIRED';
-        throw err;
-    }
+
+    // We no longer throw an outright error here.
+    // Instead, we process the leads, but any lead that exceeds the availableCapacity
+    // will be inserted into the system with an `isLocked: true` flag.
+
+    let unlockedConverted = 0;
 
     for (const lead of leads) {
         if (!lead.phone) continue; // safety guard (hasPhone filter should prevent this)
@@ -397,6 +439,8 @@ export async function convertLeads(
                 continue;
             }
 
+            const isLocked = availableCapacity <= 0;
+
             // Create the CRM contact
             const contact = await prisma.contact.create({
                 data: {
@@ -408,6 +452,7 @@ export async function convertLeads(
                         address: lead.address ?? null,
                         leadListId,
                         googlePlaceId: lead.googlePlaceId ?? null,
+                        isLocked: isLocked, // Lock to paywall if capacity exceeded
                     },
                 },
             });
@@ -419,10 +464,10 @@ export async function convertLeads(
 
             newContactIds.push(contact.id);
             converted++;
-            availableCapacity--;
-            
-            if (availableCapacity <= 0) {
-                break; // Stop converting if we hit the daily limit
+
+            if (!isLocked) {
+                availableCapacity--;
+                unlockedConverted++;
             }
         } catch (err: any) {
             // Handle unique constraint violation (race condition — phone added concurrently)
@@ -446,9 +491,11 @@ export async function convertLeads(
             data: { converted: { increment: converted } },
         }).catch(() => {});
 
-        // Update Redis usage pattern for daily extract limit
-        await redis.incrby(dailyExtractKey, converted);
-        await redis.expire(dailyExtractKey, 86400 * 2); // Keep for 2 days
+        // Update Redis usage pattern for daily extract limit (only count what we unlocked)
+        if (unlockedConverted > 0) {
+            await redis.incrby(dailyExtractKey, unlockedConverted);
+            await redis.expire(dailyExtractKey, 86400 * 2); // Keep for 2 days
+        }
 
         // Log platform event
         await logEvent(workspaceId, 'leads_converted', 'lead-generation', {

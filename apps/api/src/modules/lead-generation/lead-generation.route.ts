@@ -87,6 +87,36 @@ export const leadGenerationRoutes: FastifyPluginAsync = async (fastify: FastifyI
         }
     });
 
+    // ── POST /batch ────────────────────────────────────────────────────────────
+    fastify.post('/batch', async (req, reply) => {
+        const { workspaceId } = req.user;
+        const body = req.body as {
+            rootQuery: string;
+            segments: { keyword: string; location: string }[];
+        };
+
+        if (!body.rootQuery?.trim() || !Array.isArray(body.segments) || body.segments.length === 0) {
+            return reply.sendError({ message: 'rootQuery and non-empty segments array are required', code: 'BAD_REQUEST' }, 400);
+        }
+
+        try {
+            const result = await leadService.batchCreateLeadLists(workspaceId, {
+                rootQuery: body.rootQuery.trim(),
+                segments: body.segments,
+            });
+
+            return reply.code(202).sendSuccess({
+                audienceId: result.audience.id,
+                message: `Lead gathering initialized for ${result.batches.length} sub-segments into audience.`,
+            });
+        } catch (err: any) {
+            return reply.sendError(
+                { message: err.message, code: err.code ?? 'INTERNAL_ERROR' },
+                err.statusCode ?? 500,
+            );
+        }
+    });
+
     // ── GET / ──────────────────────────────────────────────────────────────────
     fastify.get('/', async (req, reply) => {
         const { workspaceId } = req.user;
