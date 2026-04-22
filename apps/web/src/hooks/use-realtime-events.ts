@@ -1,5 +1,5 @@
-import { getApiUrl } from "@/lib/api";
 'use client';
+import { getApiUrl } from "@/lib/api";
 
 /**
  * useRealtimeEvents — SSE hook for real-time inbox updates

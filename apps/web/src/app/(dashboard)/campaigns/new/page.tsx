@@ -1,5 +1,5 @@
-import { getApiUrl } from "@/lib/api";
 'use client';
+import { getApiUrl } from "@/lib/api";
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';

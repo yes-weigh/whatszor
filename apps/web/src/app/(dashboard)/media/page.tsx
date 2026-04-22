@@ -1,5 +1,5 @@
-import { getApiUrl } from "@/lib/api";
 'use client';
+import { getApiUrl } from "@/lib/api";
 
 import { useState, useRef } from 'react';
 import { Header } from '@/components/layout/Header';

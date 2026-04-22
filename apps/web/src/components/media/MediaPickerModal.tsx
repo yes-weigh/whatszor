@@ -1,5 +1,5 @@
-import { getApiUrl } from "@/lib/api";
 'use client';
+import { getApiUrl } from "@/lib/api";
 
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -36,7 +36,7 @@ function MediaTypeIcon({ type }: { type: string }) {
     return <FileText size={16} />;
 }
 
-// This component is always rendered from another 'use client' component, so function props are safe.
+// This component is always rendered from another  component, so function props are safe.
 // eslint-disable-next-line react/prop-types
 export function MediaPickerModal({ onSelect, onClose, selectedId }: MediaPickerModalProps) {
     const [search, setSearch] = useState('');

@@ -1,5 +1,5 @@
-import { getApiUrl } from "@/lib/api";
 'use client';
+import { getApiUrl } from "@/lib/api";
 
 /* eslint-disable @next/next/no-img-element */
 import { useState } from 'react';
