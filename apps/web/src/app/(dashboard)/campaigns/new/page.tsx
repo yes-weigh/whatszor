@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 'use client';
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
@@ -281,7 +282,7 @@ function PhoneSimulator({ draft, recipientCount, sessionName, mediaList = [], pr
     const displayName = draft.audience.mode === 'list' ? (sessionName || 'WhatsApp Campaign') : `${recipientCount} recipient${recipientCount !== 1 ? 's' : ''}`;
 
     // Resolve media
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+    const apiBase = getApiUrl();
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
     const dbMedia = mediaList.find((m: any) => m.id === draft.message.headerMediaId);
     let resolvedUrl = draft.message.mediaUrl;
@@ -682,7 +683,7 @@ function NewCampaignContent() {
         const fd = new FormData();
         fd.append('file', blob, `preview-${templateId}.png`);
         const token = localStorage.getItem('accessToken') ?? '';
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const apiBase = getApiUrl();
         await fetch(`${apiBase}/templates/${templateId}/preview-image`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
@@ -711,7 +712,7 @@ function NewCampaignContent() {
             if (templateId && previewBlob) {
                 try {
                     await uploadPreviewBlob(templateId, previewBlob);
-                    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+                    const apiBase = getApiUrl();
                     finalPreviewUrl = `${apiBase}/templates/${templateId}/preview-image`;
                 } catch (e) {
                     console.warn('Preview upload failed', e);
@@ -777,7 +778,7 @@ function NewCampaignContent() {
     // ── Live compose → draft sync ──
     useEffect(() => {
         if (!isComposeMode) return;
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const apiBase = getApiUrl();
         const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
         const selectedGalleryMedia = (mediaList as any[]).find((m: any) => m.id === composeMediaId);
         const galleryMediaUrl = selectedGalleryMedia
@@ -1743,7 +1744,7 @@ function NewCampaignContent() {
                                                 {(mediaList as any[]).map(m => {
                                                     const isSelected = composeMediaId === m.id;
                                                     const baseToken = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
-                                                    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+                                                    const apiBase = getApiUrl();
                                                     
                                                     return (
                                                         <button

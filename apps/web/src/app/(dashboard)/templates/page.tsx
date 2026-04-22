@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 'use client';
 
 import api from '@/lib/api';
@@ -136,7 +137,7 @@ export default function TemplatesPage() {
                                         const selectedMedia = latestVersion?.headerMediaId
                                             ? mediaList.find((m: any) => m.id === latestVersion.headerMediaId)
                                             : null;
-                                        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+                                        const apiBase = getApiUrl();
                                         const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
                                         const mediaUrl = selectedMedia ? `${apiBase}/media-gallery/${selectedMedia.id}/file?token=${token}` : null;
 

@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 'use client';
 
 import { useState, useRef } from 'react';
@@ -113,7 +114,7 @@ export default function MediaGalleryPage() {
 
     const copyUrl = (id: string) => {
         const token = localStorage.getItem('accessToken');
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const baseUrl = getApiUrl();
         const url = `${baseUrl}/media-gallery/${id}/file?token=${token}`;
         navigator.clipboard.writeText(url);
         alert('Internal streaming URL copied to clipboard');
@@ -284,7 +285,7 @@ export default function MediaGalleryPage() {
                             const isImage = media.type === 'image';
                             const isVideo = media.type === 'video';
                             const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
-                            const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+                            const baseUrl = getApiUrl();
                             const previewUrl = `${baseUrl}/media-gallery/${media.id}/file?token=${token}`;
 
                             return (

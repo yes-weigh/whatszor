@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -19,7 +20,7 @@ interface MediaPickerModalProps {
     selectedId?: string | null;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE = getApiUrl();
 
 function getToken(): string {
     return typeof window !== 'undefined' ? (localStorage.getItem('accessToken') || '') : '';

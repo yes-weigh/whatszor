@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 'use client';
 
 /**
@@ -17,7 +18,7 @@
 
 import { useEffect, useRef } from 'react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE = getApiUrl();
 const MIN_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 30_000;
 

@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
@@ -219,7 +220,7 @@ function TemplateBuilder() {
         const fd = new FormData();
         fd.append('file', blob, `preview-${templateId}.png`);
         const token = localStorage.getItem('accessToken') ?? '';
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+        const apiBase = getApiUrl();
         await fetch(`${apiBase}/templates/${templateId}/preview-image`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
@@ -329,7 +330,7 @@ function TemplateBuilder() {
     };
 
     const selectedMedia = mediaList.find((m: any) => m.id === form.headerMediaId);
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+    const apiBase = getApiUrl();
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : '';
     const mediaUrl = selectedMedia ? `${apiBase}/media-gallery/${selectedMedia.id}/file?token=${token}` : null;
 

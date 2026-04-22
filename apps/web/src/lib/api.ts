@@ -1,7 +1,21 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+export const getApiUrl = () => {
+    if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL;
+    }
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return 'http://localhost:3001/api/v1';
+        }
+        return `${window.location.protocol}//${window.location.host}/api/v1`;
+    }
+    return 'http://localhost:3001/api/v1';
+};
+
+const API_BASE = getApiUrl();
 
 export const api = axios.create({
     baseURL: API_BASE,

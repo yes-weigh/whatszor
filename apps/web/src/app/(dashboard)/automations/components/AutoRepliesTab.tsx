@@ -1,3 +1,4 @@
+import { getApiUrl } from "@/lib/api";
 'use client';
 
 /* eslint-disable @next/next/no-img-element */
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import { MediaPickerModal } from '@/components/media/MediaPickerModal';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_BASE = getApiUrl();
 
 function getToken(): string {
     return typeof window !== 'undefined' ? (localStorage.getItem('accessToken') || '') : '';
