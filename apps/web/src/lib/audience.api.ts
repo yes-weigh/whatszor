@@ -25,6 +25,7 @@ export interface AudienceMember {
         lastName: string | null;
         phone: string | null;
         email: string | null;
+        customData?: { isLocked?: boolean; [key: string]: unknown } | null;
     };
 }
 

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     MessageSquare, Users, Users2, Megaphone, Zap, LayoutDashboard,
-    Settings, Image, LayoutTemplate, MapPin,
+    Settings, Image, LayoutTemplate,
     LogOut
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
