@@ -23,7 +23,7 @@ import { prisma } from '../../prisma/client';
 import { createLogger } from '../../core/logger';
 import { emitToWorkspace } from '../../core/realtime';
 import { logEvent } from '../../core/event-logger';
-import { searchPlaces, getPlaceDetail } from './places.client';
+import { searchPlaces, getPlaceDetail, gridSearchPlaces } from './places.client';
 import { normalizeToE164 } from './phone.utils';
 import { requirePlacesApiKey } from './lead-generation.service';
 import { QueryCacheService } from './query-cache.service';
@@ -43,7 +43,7 @@ export interface LeadGenerationJobData {
     traceId?: string;
 }
 
-const MAX_DETAILS_PER_JOB = 100; // Hard cap — controls API cost per job (100 when fetchMaximum is enabled)
+const MAX_DETAILS_PER_JOB = 500; // Grid search can surface hundreds of unique results
 
 export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>): Promise<void> {
     const { workspaceId, leadListId, query, keyword, lat, lng, planId, maxResults } = job.data;
@@ -77,7 +77,24 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
     let summaries;
     try {
         const fetchMax = Math.min(maxResults, MAX_DETAILS_PER_JOB);
-        if (keyword && lat !== undefined && lng !== undefined) {
+        const useGridSearch = maxResults >= 100; // grid search when fetchMaximum is enabled
+
+        if (useGridSearch) {
+            // Parse "grocery shop in Madurai" → keyword="grocery shop", city="Madurai"
+            const inMatch = query.match(/^(.+?)\s+in\s+(.+)$/i);
+            const kw   = (inMatch ? inMatch[1] : keyword || query).trim();
+            const city = (inMatch ? inMatch[2] : query).trim();
+
+            summaries = await gridSearchPlaces(kw, city, apiKey, {
+                cityLat: lat,
+                cityLng: lng,
+                cityRadiusKm: 6,   // 6km radius covers most Indian cities
+                cellSizeKm: 0.8,   // 800m cells
+                maxCells: 30,      // 30 cells × up to 3 pages = ~90 API calls max
+            });
+
+            log.info({ leadListId, keyword: kw, city, gridResults: summaries.length }, 'Grid search complete');
+        } else if (keyword && lat !== undefined && lng !== undefined) {
             summaries = await QueryCacheService.searchPlacesCached(query, keyword, lat, lng, fetchMax, apiKey);
         } else {
             summaries = await searchPlaces(query, fetchMax, apiKey);
@@ -213,9 +230,13 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
     }
 
     function checkKillSwitch() {
-        if (processedCount >= 10) {
+        // Require a larger sample (30) and higher dup threshold (90%) for grid searches,
+        // since grid overlap is deduped at the search level — remaining dupes are truly saturated.
+        const minSample = maxResults >= 100 ? 30 : 10;
+        const threshold = maxResults >= 100 ? 0.90 : 0.70;
+        if (processedCount >= minSample) {
             const dupRate = duplicatesSeen / processedCount;
-            if (dupRate > 0.70) {
+            if (dupRate > threshold) {
                 killSwitchFired = true;
                 log.warn({ leadListId, dupRate, processedCount }, 'Kill-switch fired due to high duplicate rate');
             }

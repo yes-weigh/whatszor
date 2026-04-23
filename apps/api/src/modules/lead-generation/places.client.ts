@@ -203,3 +203,209 @@ export async function getPlaceDetail(
         raw: data,
     };
 }
+
+// ── Grid Search ───────────────────────────────────────────────────────────────
+
+/**
+ * Geocode a city name to get its center lat/lng using a Places text search.
+ * Returns null if the city cannot be found.
+ */
+async function geocodeCity(
+    cityName: string,
+    apiKey: string,
+): Promise<{ lat: number; lng: number } | null> {
+    try {
+        const res = await fetch(`${PLACES_BASE}/places:searchText`, buildFetchOptions(
+            apiKey,
+            'places.id,places.location,places.displayName',
+            { textQuery: cityName, maxResultCount: 1, languageCode: 'en' },
+        ));
+        const data = await assertOk(res, `geocodeCity("${cityName}")`);
+        const place = (data.places || [])[0];
+        if (!place?.location) return null;
+        return { lat: place.location.latitude, lng: place.location.longitude };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Generate a grid of lat/lng centroids covering a circular area.
+ *
+ * @param centerLat  - City center latitude
+ * @param centerLng  - City center longitude
+ * @param radiusKm   - Total search radius in km (city size)
+ * @param cellKm     - Size of each grid cell in km (e.g. 0.8)
+ * @returns Array of { lat, lng } points (centroids of each cell)
+ */
+function generateGrid(
+    centerLat: number,
+    centerLng: number,
+    radiusKm: number,
+    cellKm: number,
+): { lat: number; lng: number }[] {
+    const LAT_PER_KM  = 1 / 110.574;
+    const LNG_PER_KM  = 1 / (111.320 * Math.cos((centerLat * Math.PI) / 180));
+
+    const latStep = cellKm * LAT_PER_KM;
+    const lngStep = cellKm * LNG_PER_KM;
+    const steps   = Math.ceil(radiusKm / cellKm);
+
+    const points: { lat: number; lng: number }[] = [];
+
+    for (let row = -steps; row <= steps; row++) {
+        for (let col = -steps; col <= steps; col++) {
+            const lat = centerLat + row * latStep;
+            const lng = centerLng + col * lngStep;
+
+            // Only include cells whose centre falls within the city radius
+            const dLat = (lat - centerLat) / LAT_PER_KM;
+            const dLng = (lng - centerLng) / LNG_PER_KM;
+            if (Math.sqrt(dLat * dLat + dLng * dLng) <= radiusKm) {
+                points.push({ lat, lng });
+            }
+        }
+    }
+
+    return points;
+}
+
+/**
+ * Run a Nearby Search for a single grid cell.
+ * Returns up to 60 place summaries (3 pages × 20).
+ */
+async function nearbySearchCell(
+    keyword: string,
+    lat: number,
+    lng: number,
+    radiusMeters: number,
+    apiKey: string,
+): Promise<PlaceSummary[]> {
+    const PAGE_SIZE = 20;
+    const collected: PlaceSummary[] = [];
+    let pageToken: string | undefined;
+
+    do {
+        const body: Record<string, unknown> = {
+            textQuery: keyword,
+            maxResultCount: PAGE_SIZE,
+            languageCode: 'en',
+            locationBias: {
+                circle: {
+                    center: { latitude: lat, longitude: lng },
+                    radius: radiusMeters,
+                },
+            },
+        };
+        if (pageToken) body.pageToken = pageToken;
+
+        try {
+            const res = await fetch(`${PLACES_BASE}/places:searchText`, buildFetchOptions(
+                apiKey,
+                'places.id,places.displayName,nextPageToken',
+                body,
+            ));
+            const data = await assertOk(res, `nearbySearchCell(${lat},${lng})`);
+            const places: any[] = data.places || [];
+
+            for (const p of places) {
+                collected.push({ placeId: p.id, displayName: resolveDisplayName(p) });
+            }
+
+            pageToken = data.nextPageToken;
+            if (pageToken) await new Promise(r => setTimeout(r, 500));
+        } catch (err: any) {
+            log.warn({ err: err.message, lat, lng }, 'Grid cell search failed — skipping cell');
+            break;
+        }
+    } while (pageToken && collected.length < 60);
+
+    return collected;
+}
+
+/**
+ * Grid Search — bypasses the 60-result/query cap by dividing the city into
+ * a grid of small circles (800m radius each), running a Nearby Search on
+ * each cell, and deduplicating the results by place_id.
+ *
+ * Cost note: Each cell uses up to 3 API pages. A typical city grid of 20-30
+ * cells = 60-90 text search requests. Budget accordingly.
+ *
+ * @param keyword    - What to search for (e.g. "grocery store")
+ * @param cityName   - City name for geocoding centre (e.g. "Madurai")
+ * @param cityLat    - Optional pre-geocoded centre lat (skips geocoding call)
+ * @param cityLng    - Optional pre-geocoded centre lng
+ * @param apiKey     - Google Places API key
+ * @param maxCells   - Hard cap on number of grid cells (default 25, cost control)
+ */
+export async function gridSearchPlaces(
+    keyword: string,
+    cityName: string,
+    apiKey: string,
+    options?: {
+        cityLat?: number;
+        cityLng?: number;
+        cityRadiusKm?: number;
+        cellSizeKm?: number;
+        maxCells?: number;
+    },
+): Promise<PlaceSummary[]> {
+    const {
+        cityRadiusKm = 5,   // typical city search radius
+        cellSizeKm   = 0.8, // 800m cells → up to 60 results each, minimal overlap
+        maxCells     = 25,  // hard cap: 25 cells × 3 pages = 75 API calls max
+    } = options || {};
+
+    // 1. Geocode if not provided
+    let centerLat = options?.cityLat;
+    let centerLng = options?.cityLng;
+
+    if (centerLat === undefined || centerLng === undefined) {
+        const geo = await geocodeCity(cityName, apiKey);
+        if (!geo) {
+            log.warn({ cityName }, 'Could not geocode city — falling back to text search');
+            return searchPlaces(keyword, 60, apiKey);
+        }
+        centerLat = geo.lat;
+        centerLng = geo.lng;
+    }
+
+    // 2. Generate grid
+    let cells = generateGrid(centerLat, centerLng, cityRadiusKm, cellSizeKm);
+    if (cells.length > maxCells) {
+        // Take a representative subset spread across the grid
+        const step = Math.ceil(cells.length / maxCells);
+        cells = cells.filter((_, i) => i % step === 0).slice(0, maxCells);
+    }
+
+    log.info({ keyword, cityName, cells: cells.length, cityRadiusKm, cellSizeKm }, 'Starting grid search');
+
+    // 3. Search each cell, collect and deduplicate by place_id
+    const seen = new Set<string>();
+    const results: PlaceSummary[] = [];
+
+    for (const cell of cells) {
+        const cellResults = await nearbySearchCell(
+            keyword,
+            cell.lat,
+            cell.lng,
+            Math.round(cellSizeKm * 1000 * 1.2), // radius = cell size + 20% overlap buffer
+            apiKey,
+        );
+
+        for (const place of cellResults) {
+            if (!seen.has(place.placeId)) {
+                seen.add(place.placeId);
+                results.push(place);
+            }
+        }
+
+        // Small pause between cells to avoid rate limits
+        await new Promise(r => setTimeout(r, 200));
+    }
+
+    log.info({ keyword, cityName, totalUnique: results.length, cells: cells.length }, 'Grid search complete');
+
+    return results;
+}
+
