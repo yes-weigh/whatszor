@@ -48,6 +48,9 @@ CREATE UNIQUE INDEX "query_performance_metrics_workspace_id_city_keyword_key" ON
 -- CreateIndex
 CREATE INDEX "leads_workspace_id_name_idx" ON "leads"("workspace_id", "name");
 
+-- Enable PostGIS extension (required for geography type and GIST spatial index)
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 -- CreateIndex PostGIS Geo
 CREATE INDEX IF NOT EXISTS "lead_geo_idx" ON "leads" USING GIST ((ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography));
 

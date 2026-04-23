@@ -124,6 +124,7 @@ jobs:
               docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260403034951_add_keyword_automations_and_insights' || true
               docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260403211729_add_lead_generation' || true
               docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260408_added_contact_product_source' || true
+              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260422_optimizer' || true
 
               OLD_MEDIA=\$(docker volume ls -q | grep api-uploads || true)
               if [ -n \"\$OLD_MEDIA\" ]; then
