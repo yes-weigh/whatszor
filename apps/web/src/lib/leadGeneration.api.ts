@@ -91,4 +91,31 @@ export const leadGenerationApi = {
         const res = await api.post('/ai/lead-suggestions', { keyword, location });
         return res.data;
     },
+
+    planOptimizerCampaign: async (params: { city: string; cityLat?: number; cityLng?: number; keywords: string[]; maxBudget: number }) => {
+        const res = await api.post('/lead-generation/optimizer/plan', params);
+        return res.data;
+    },
+
+    executeOptimizerCampaign: async (planBatchId: string, selectedPlanIds: string[]) => {
+        const res = await api.post('/lead-generation/optimizer/execute', { planBatchId, selectedPlanIds });
+        return res.data;
+    },
+
+    getOptimizerPlans: async (planBatchId: string) => {
+        const res = await api.get(`/lead-generation/optimizer/plans/${planBatchId}`);
+        return res.data;
+    },
+
+    smartSearch: async (query: string): Promise<{
+        audienceId: string;
+        keyword: string;
+        city: string;
+        synonymsUsed: string[];
+        totalSearches: number;
+        message: string;
+    }> => {
+        const res = await api.post('/lead-generation/smart-search', { query });
+        return res.data;
+    },
 };

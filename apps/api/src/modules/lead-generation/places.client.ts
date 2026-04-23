@@ -33,6 +33,8 @@ export interface PlaceDetail {
     phone?: string;
     address?: string;
     website?: string;
+    lat?: number;
+    lng?: number;
     /** Complete raw response for storage in rawData column */
     raw: Record<string, unknown>;
 }
@@ -176,7 +178,7 @@ export async function getPlaceDetail(
     const url = `${PLACES_BASE}/places/${encodeURIComponent(placeId)}`;
     const res = await fetch(url, buildFetchOptions(
         apiKey,
-        'id,displayName,nationalPhoneNumber,internationalPhoneNumber,formattedAddress,websiteUri',
+        'id,displayName,nationalPhoneNumber,internationalPhoneNumber,formattedAddress,websiteUri,location',
     ));
 
     if (res.status === 404) {
@@ -196,6 +198,8 @@ export async function getPlaceDetail(
         phone: rawPhone,
         address: data.formattedAddress,
         website: data.websiteUri,
+        lat: data.location?.latitude,
+        lng: data.location?.longitude,
         raw: data,
     };
 }

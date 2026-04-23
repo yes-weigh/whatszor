@@ -26,6 +26,8 @@ import { logEvent } from '../../core/event-logger';
 import { searchPlaces, getPlaceDetail } from './places.client';
 import { normalizeToE164 } from './phone.utils';
 import { requirePlacesApiKey } from './lead-generation.service';
+import { QueryCacheService } from './query-cache.service';
+import { QueryDeduplicator } from './query-deduplicator';
 
 const log = createLogger({ module: 'lead-generation-worker' });
 
@@ -33,6 +35,10 @@ export interface LeadGenerationJobData {
     workspaceId: string;
     leadListId: string;
     query: string;
+    keyword?: string;
+    lat?: number;
+    lng?: number;
+    planId?: string;
     maxResults: number;
     traceId?: string;
 }
@@ -40,7 +46,7 @@ export interface LeadGenerationJobData {
 const MAX_DETAILS_PER_JOB = 100; // Hard cap — controls API cost per job (100 when fetchMaximum is enabled)
 
 export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>): Promise<void> {
-    const { workspaceId, leadListId, query, maxResults } = job.data;
+    const { workspaceId, leadListId, query, keyword, lat, lng, planId, maxResults } = job.data;
 
     log.info({ jobId: job.id, leadListId, query }, 'Lead generation job started');
 
@@ -67,10 +73,15 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
         return; // non-retryable
     }
 
-    // ── 2. Text Search ───────────────────────────────────────────────────────
+    // ── 2. Text Search (with Cache) ──────────────────────────────────────────
     let summaries;
     try {
-        summaries = await searchPlaces(query, Math.min(maxResults, MAX_DETAILS_PER_JOB), apiKey);
+        const fetchMax = Math.min(maxResults, MAX_DETAILS_PER_JOB);
+        if (keyword && lat !== undefined && lng !== undefined) {
+            summaries = await QueryCacheService.searchPlacesCached(query, keyword, lat, lng, fetchMax, apiKey);
+        } else {
+            summaries = await searchPlaces(query, fetchMax, apiKey);
+        }
     } catch (err: any) {
         log.error({ err, leadListId }, 'Places text search failed');
 
@@ -89,6 +100,12 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
         const reason = `No results found for query: "${query}"`;
         log.warn({ leadListId, query }, reason);
         await markFailed(leadListId, workspaceId, reason);
+        if (planId) {
+            await prisma.leadQueryPlan.update({
+                where: { id: planId },
+                data: { status: 'DONE', actualLeads: 0, actualDupes: 0 }
+            }).catch(() => {});
+        }
         return;
     }
 
@@ -100,27 +117,59 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
 
     log.info({ leadListId, totalFound: summaries.length }, 'Places search complete');
 
-    // ── 5. Fetch details + store leads ───────────────────────────────────────
+    // ── 5. Fetch details + dedup + store leads ───────────────────────────────
     let withPhone = 0;
+    let processedCount = 0;
+    let duplicatesSeen = 0;
+    let killSwitchFired = false;
+    let actualLeads = 0;
+
+    await QueryDeduplicator.warmUpCache(workspaceId);
 
     for (const summary of summaries) {
-        let detail = null;
+        if (killSwitchFired) break;
 
+        processedCount++;
+
+        // L1 Dedup Check (PlaceID) early to avoid API call
+        const isDupL1 = await QueryDeduplicator.isDuplicate(workspaceId, { googlePlaceId: summary.placeId, name: summary.displayName });
+        if (isDupL1) {
+            duplicatesSeen++;
+            checkKillSwitch();
+            continue;
+        }
+
+        let detail = null;
         try {
             detail = await getPlaceDetail(summary.placeId, apiKey);
         } catch (err: any) {
-            log.warn({ placeId: summary.placeId, err: err.message }, 'Failed to fetch place detail — storing with displayName only');
-            // Fall through: store a lead with whatever we have from the summary
+            log.warn({ placeId: summary.placeId, err: err.message }, 'Failed to fetch place detail');
         }
 
         // Normalize phone number
         const rawPhone = detail?.phone ?? null;
         const phone = normalizeToE164(rawPhone);
         const hasPhone = phone !== null;
+        
+        // Final Dedup check
+        const isDupFull = await QueryDeduplicator.isDuplicate(workspaceId, {
+            googlePlaceId: summary.placeId,
+            phone,
+            lat: detail?.lat,
+            lng: detail?.lng,
+            name: detail?.name || summary.displayName
+        });
+
+        if (isDupFull) {
+            duplicatesSeen++;
+            checkKillSwitch();
+            continue;
+        }
 
         if (hasPhone) withPhone++;
+        actualLeads++;
 
-        // Store the lead — skip on @@unique([leadListId, googlePlaceId]) conflict
+        // Store the lead
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const rawDataJson = detail?.raw ? (detail.raw as any) : undefined;
@@ -133,23 +182,44 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
                     hasPhone,
                     address: detail?.address ?? null,
                     website: detail?.website ?? null,
+                    lat: detail?.lat,
+                    lng: detail?.lng,
+                    types: (detail?.raw as any)?.types || [],
                     googlePlaceId: summary.placeId,
                     rawData: rawDataJson,
                     status: 'RAW',
                 },
             });
+
+            await QueryDeduplicator.markAsSeen(workspaceId, {
+                googlePlaceId: summary.placeId,
+                phone,
+                lat: detail?.lat,
+                lng: detail?.lng,
+                name: detail?.name || summary.displayName
+            });
         } catch (err: any) {
             if (err?.code === 'P2002') {
-                // Duplicate placeId in this list — already stored, skip silently
                 log.debug({ placeId: summary.placeId, leadListId }, 'Duplicate place skipped');
             } else {
                 log.error({ err, placeId: summary.placeId }, 'Failed to create Lead record');
             }
         }
 
-        // Throttle: small delay between detail calls to avoid hitting rate limits
-        // BullMQ handles the retry backoff for transient API errors
+        checkKillSwitch();
+
+        // Throttle: small delay between detail calls
         await delay(150);
+    }
+
+    function checkKillSwitch() {
+        if (processedCount >= 10) {
+            const dupRate = duplicatesSeen / processedCount;
+            if (dupRate > 0.70) {
+                killSwitchFired = true;
+                log.warn({ leadListId, dupRate, processedCount }, 'Kill-switch fired due to high duplicate rate');
+            }
+        }
     }
 
     // ── 6. Mark READY ────────────────────────────────────────────────────────
@@ -162,7 +232,77 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
         },
     });
 
-    log.info({ leadListId, withPhone, totalFound: summaries.length }, 'LeadList marked READY');
+    if (planId) {
+        try {
+            const plan = await prisma.leadQueryPlan.findUnique({ where: { id: planId } });
+            if (plan) {
+                await prisma.leadQueryPlan.update({
+                    where: { id: planId },
+                    data: {
+                        status: killSwitchFired ? 'KILLED' : 'DONE',
+                        actualLeads,
+                        actualDupes: duplicatesSeen,
+                        killSwitchFired,
+                        leadListId
+                    }
+                });
+
+                // Phase 4A: Self-Improvement & Learning Loop
+                const yieldRatio = plan.estimatedLeads > 0 ? actualLeads / plan.estimatedLeads : 0;
+                
+                // Fetch or create QueryPerformanceMetric
+                let metric = await prisma.queryPerformanceMetric.findUnique({
+                    where: {
+                        workspaceId_city_keyword: {
+                            workspaceId,
+                            city: plan.city,
+                            keyword: plan.keyword
+                        }
+                    }
+                });
+
+                if (!metric) {
+                    metric = await prisma.queryPerformanceMetric.create({
+                        data: {
+                            workspaceId,
+                            city: plan.city,
+                            keyword: plan.keyword,
+                            yieldMultiplier: 1.0,
+                            runCount: 0
+                        }
+                    });
+                }
+
+                let newMultiplier = metric.yieldMultiplier;
+                if (killSwitchFired) {
+                    newMultiplier = metric.yieldMultiplier * 0.6;
+                } else {
+                    newMultiplier = 0.7 * metric.yieldMultiplier + 0.3 * yieldRatio;
+                }
+
+                await prisma.queryPerformanceMetric.update({
+                    where: { id: metric.id },
+                    data: {
+                        yieldMultiplier: newMultiplier,
+                        runCount: { increment: 1 }
+                    }
+                });
+
+                // Cooldown logic
+                if (killSwitchFired || yieldRatio < 0.1) {
+                    const { getRedisClient } = require('../../core/redis');
+                    const redis = getRedisClient();
+                    const cooldownKey = `lead:cooldown:${workspaceId}:${plan.city}:${plan.keyword}`;
+                    await redis.set(cooldownKey, '1', 'EX', 24 * 60 * 60);
+                    log.info({ planId, keyword: plan.keyword, city: plan.city }, 'Cooldown triggered for query');
+                }
+            }
+        } catch (e: any) {
+            log.error({ err: e, planId }, 'Failed to update LeadQueryPlan or metrics');
+        }
+    }
+
+    log.info({ leadListId, withPhone, actualLeads, duplicatesSeen, killSwitchFired }, 'LeadList processing complete');
 
     // ── 7. SSE push & Auto-Convert ───────────────────────────────────────────
     const list = await prisma.leadList.findUnique({
@@ -197,7 +337,8 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
         leadListId,
         query,
         totalFound: summaries.length,
-        withPhone
+        withPhone,
+        killSwitchFired
     }, job.data.traceId);
 }
 

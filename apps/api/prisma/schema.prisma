@@ -194,6 +194,8 @@ model Workspace {
   paymentRequests    PaymentRequest[]
   conversationTags   ConversationTag[]
   agentDailyMetrics  AgentDailyMetric[]
+  leadQueryPlans     LeadQueryPlan[]
+  queryPerformanceMetrics QueryPerformanceMetric[]
 
   @@map("workspaces")
 }
@@ -1249,6 +1251,9 @@ model Lead {
   googlePlaceId String? @map("google_place_id")
 
   rawData Json? @map("raw_data")
+  lat     Float?
+  lng     Float?
+  types   String[]
 
   status LeadStatus @default(RAW)
 
@@ -1265,7 +1270,53 @@ model Lead {
   @@index([leadListId, status])
   @@index([leadListId, hasPhone])
   @@index([workspaceId, status])
+  @@index([workspaceId, name])
   @@map("leads")
+}
+
+model LeadQueryPlan {
+  id              String   @id @default(cuid())
+  workspaceId     String   @map("workspace_id")
+  planBatchId     String   @map("plan_batch_id")
+  
+  city            String
+  keyword         String
+  microArea       String?  @map("micro_area")
+  microAreaLat    Float?   @map("micro_area_lat")
+  microAreaLng    Float?   @map("micro_area_lng")
+  
+  status          String   @default("PENDING") // PENDING | RUNNING | DONE | KILLED | SKIPPED
+  preOverlapScore Float    @default(0) @map("pre_overlap_score")
+  estimatedLeads  Int      @default(0) @map("estimated_leads")
+  actualLeads     Int      @default(0) @map("actual_leads")
+  actualDupes     Int      @default(0) @map("actual_dupes")
+  killSwitchFired Boolean  @default(false) @map("kill_switch_fired")
+  leadListId      String?  @map("lead_list_id")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  @@index([workspaceId, planBatchId])
+  @@map("lead_query_plans")
+}
+
+model QueryPerformanceMetric {
+  id              String   @id @default(cuid())
+  workspaceId     String   @map("workspace_id")
+  city            String
+  keyword         String
+  
+  yieldMultiplier Float    @default(1.0) @map("yield_multiplier")
+  runCount        Int      @default(0) @map("run_count")
+  
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, city, keyword])
+  @@map("query_performance_metrics")
 }
 
 // ============================================================

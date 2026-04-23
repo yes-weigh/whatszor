@@ -24,8 +24,8 @@ import { PLAN_LIMITS } from '../../core/config/pricing';
 const log = createLogger({ module: 'lead-generation-service' });
 
 // ── Rate Limit Constants ──────────────────────────────────────────────────────
-const HOURLY_SEARCH_LIMIT      = 20;   // raised to support AI batch launches (10 chips at a time)
-const DAILY_SEARCH_LIMIT       = 50;
+const HOURLY_SEARCH_LIMIT      = 200;  // per-batch — smart search counts as 1 operation
+const DAILY_SEARCH_LIMIT       = 500;
 const HOURLY_PREVIEW_LIMIT     = 20;
 const MAX_RESULTS_CAP          = 20;   // default cap for normal searches
 const MAX_RESULTS_CAP_PREMIUM  = 100;  // cap when fetchMaximum is enabled
@@ -129,9 +129,10 @@ export async function previewLeadSearch(
  */
 export async function createLeadList(
     workspaceId: string,
-    input: { query: string; name?: string; maxResults?: number; fetchMaximum?: boolean; targetAudienceId?: string },
+    input: { query: string; name?: string; maxResults?: number; fetchMaximum?: boolean; targetAudienceId?: string; keyword?: string; lat?: number; lng?: number; planId?: string; skipRateCheck?: boolean; },
 ) {
-    await checkSearchRateLimit(workspaceId);
+    // skipRateCheck is set by batchCreateLeadLists which checks the limit once upfront
+    if (!input.skipRateCheck) await checkSearchRateLimit(workspaceId);
     requirePlacesApiKey(); // fail fast before creating any records
 
     const cap = input.fetchMaximum ? MAX_RESULTS_CAP_PREMIUM : MAX_RESULTS_CAP;
@@ -160,6 +161,10 @@ export async function createLeadList(
         leadListId: leadList.id,
         query: leadList.query,
         maxResults,
+        keyword: input.keyword,
+        lat: input.lat,
+        lng: input.lng,
+        planId: input.planId,
     });
 
     // Store job.id for observability (non-blocking — ignore if it fails)
@@ -230,6 +235,9 @@ export async function batchCreateLeadLists(
         },
     });
 
+    // Check rate limit ONCE for the whole batch (counts as 1 operation, not N)
+    await checkSearchRateLimit(workspaceId);
+
     const results = [];
     for (const segment of input.segments) {
         const query = `${segment.keyword} in ${segment.location}`;
@@ -238,6 +246,7 @@ export async function batchCreateLeadLists(
                 query,
                 fetchMaximum: true,
                 targetAudienceId: audience.id,
+                skipRateCheck: true, // already checked above for the whole batch
             });
             results.push({ success: true, list });
         } catch (e: any) {

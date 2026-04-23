@@ -20,7 +20,7 @@ services:
       - api
 
   db:
-    image: postgres:15-alpine
+    image: postgis/postgis:15-3.4
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-whatszor}
@@ -28,6 +28,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-whatszor_prod}
     volumes:
       - db-data:/var/lib/postgresql/data
+      - ./docker/db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER}" ]
       interval: 10s

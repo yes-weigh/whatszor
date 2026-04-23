@@ -659,6 +659,64 @@ RULES:
     }
 }
 
+/**
+ * Parses a natural language search like "grocery shops in madhurai"
+ * into a structured { keyword, city, synonyms[] } for maximum lead coverage.
+ */
+export async function expandLeadQuery(query: string): Promise<{
+    keyword: string;
+    city: string;
+    synonyms: string[];
+    error?: string;
+}> {
+    const fallback = { keyword: query, city: '', synonyms: [] };
+    try {
+        const systemInstruction = `You are a lead generation expert for Indian businesses.
+Parse the user's natural language search query into structured fields, then generate synonym keywords that would find similar businesses on Google Maps.
+
+Return ONLY valid compact JSON with exactly these fields:
+{
+  "keyword": "the primary business type (singular, clean)",
+  "city": "the city or location name (properly capitalized)",
+  "synonyms": ["synonym1", "synonym2", ...]
+}
+
+Rules for synonyms:
+- Generate 6-8 synonym keywords that describe the same or closely related business type
+- Include local/regional Indian terms where applicable (e.g. "kirana store", "provision store", "darshini")
+- Do NOT include the city in synonyms — only the business type
+- Do NOT repeat the primary keyword in synonyms
+- Return synonyms as short 1-3 word phrases
+
+Example input: "grocery shops in madhurai"
+Example output: {"keyword":"grocery shop","city":"Madurai","synonyms":["kirana store","provision store","supermarket","general store","convenience store","departmental store","wholesale grocery"]}`;
+
+        const response = await ai.models.generateContent({
+            model: MODEL,
+            contents: [{ role: 'user', parts: [{ text: `Parse and expand: "${query}"` }] }],
+            config: { systemInstruction, temperature: 0.3, responseMimeType: 'application/json' }
+        });
+
+        if (!response.text) return { ...fallback, error: 'Empty AI response' };
+
+        let parsed: any;
+        try { parsed = JSON.parse(response.text.trim()); } catch {
+            return { ...fallback, error: 'Failed to parse AI response' };
+        }
+
+        return {
+            keyword: String(parsed.keyword || query),
+            city: String(parsed.city || ''),
+            synonyms: Array.isArray(parsed.synonyms)
+                ? parsed.synonyms.slice(0, 8).map(String)
+                : [],
+        };
+    } catch (err: any) {
+        log.error({ err }, 'expandLeadQuery failed');
+        return { ...fallback, error: err.message };
+    }
+}
+
 export async function suggestLeadQueries(keyword: string, location: string): Promise<{ suggestions?: {keyword: string, location: string}[]; error?: string }> {
     try {
         const systemInstruction = `You are a localized lead generation expert. You break down broad business queries into narrower, highly-targeted categories and specific local neighborhoods/sub-regions.

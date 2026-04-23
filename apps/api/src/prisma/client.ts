@@ -52,6 +52,15 @@ export async function connectDatabase(): Promise<void> {
     try {
         await prisma.$connect();
         log.info('Database connected successfully');
+
+        // Verify PostGIS extension is installed
+        const postgisCheck = await prisma.$queryRaw`SELECT extname FROM pg_extension WHERE extname = 'postgis';` as { extname: string }[];
+        if (!postgisCheck || postgisCheck.length === 0) {
+            log.fatal('FATAL: PostGIS extension is not installed in the database. Ensure init script ran.');
+            process.exit(1);
+        }
+        log.info('PostGIS extension verified');
+
     } catch (err) {
         log.error({ err }, 'Failed to connect to database');
         throw err;
