@@ -207,7 +207,7 @@ export function LeadSearchTab() {
                 {/* Hint text */}
                 {!isSearching && (
                     <p className="mt-2 text-[12px] text-muted px-1">
-                        Just describe what you're looking for — AI automatically searches across synonyms &amp; city areas for maximum coverage.
+                        Just describe what you&apos;re looking for — AI automatically searches across synonyms &amp; city areas for maximum coverage.
                     </p>
                 )}
             </form>
