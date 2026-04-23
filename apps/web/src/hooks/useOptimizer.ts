@@ -34,7 +34,7 @@ export function useOptimizer() {
         }
     });
 
-    const { data: plansData, refetch: refetchPlans } = useQuery({
+    const { data: plansData } = useQuery({
         queryKey: ['optimizerPlans', activePlanBatchId],
         queryFn: () => leadGenerationApi.getOptimizerPlans(activePlanBatchId!),
         enabled: !!activePlanBatchId,

@@ -19,6 +19,7 @@ import * as leadService from './lead-generation.service';
 import { QueryPlannerService } from './query-planner.service';
 import { AdaptiveExecutionService } from './adaptive-execution.service';
 import { prisma } from '../../prisma/client';
+import { expandLeadQuery } from '../ai/ai.service';
 
 export const leadGenerationRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     fastify.addHook('preHandler', authenticate);
@@ -133,7 +134,6 @@ export const leadGenerationRoutes: FastifyPluginAsync = async (fastify: FastifyI
         }
 
         try {
-            const { expandLeadQuery } = await import('../ai/ai.service');
             const expanded = await expandLeadQuery(query.trim());
 
             if (!expanded.city) {
