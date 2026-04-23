@@ -125,6 +125,9 @@ jobs:
               docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260403211729_add_lead_generation' || true
               docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260408_added_contact_product_source' || true
               docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --rolled-back 20260422_optimizer' || true
+              
+              # Resolve the manual migration that was already applied directly to the DB
+              docker compose -f docker-compose.prod.yml run --rm --entrypoint sh api -c 'npx prisma migrate resolve --applied 20260423104500_add_missing_manual_tables' || true
 
               OLD_MEDIA=\$(docker volume ls -q | grep api-uploads || true)
               if [ -n \"\$OLD_MEDIA\" ]; then
