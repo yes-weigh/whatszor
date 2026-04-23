@@ -358,6 +358,7 @@ export async function convertLeads(
         skipExisting?: boolean;
         createAudience?: boolean;
         audienceId?: string;
+        ignoreVisibleLimit?: boolean;
     } = {},
 ) {
     const list = await prisma.leadList.findFirst({
@@ -395,9 +396,9 @@ export async function convertLeads(
     });
 
     // Apply the plan's per-search visibility limit.
-    // If the user explicitly selected specific leadIds we trust that list
-    // (they already went through the gated UI), otherwise enforce the cap.
-    const leads = input.leadIds?.length
+    // If the user explicitly selected specific leadIds or this is a background auto-convert,
+    // bypass the UI visibility cap.
+    const leads = (input.leadIds?.length || input.ignoreVisibleLimit)
         ? allLeads
         : allLeads.slice(0, visibleLimit);
 

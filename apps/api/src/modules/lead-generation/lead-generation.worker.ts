@@ -338,7 +338,8 @@ export async function processLeadGenerationJob(job: Job<LeadGenerationJobData>):
             await convertLeads(workspaceId, leadListId, {
                 skipExisting: true,
                 createAudience: false,
-                audienceId: list.targetAudienceId
+                audienceId: list.targetAudienceId,
+                ignoreVisibleLimit: true
             });
             log.info({ leadListId }, 'Auto-conversion completed within worker');
         } catch(e: any) {
