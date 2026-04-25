@@ -24,6 +24,7 @@ interface WASession {
     isKnowledgeBot: boolean;
     userId: string | null;
     assignedUser: { name: string; email: string } | null;
+    antibanStats?: any;
 }
 
 /** Normalise raw API session shape → WASession */
@@ -301,6 +302,48 @@ function SessionCard({
                         <div className="flex items-center gap-1 mt-1">
                             <UserX size={11} className="text-muted shrink-0" />
                             <span className="text-xs text-muted">Unassigned</span>
+                        </div>
+                    )}
+
+                    {/* AntiBan Stats */}
+                    {session.antibanStats && session.status === 'CONNECTED' && (
+                        <div className="flex flex-col gap-1 mt-3 p-2.5 bg-surface-elevated/30 rounded-xl border border-theme">
+                            <div className="flex items-center justify-between gap-4 mb-0.5">
+                                <span className="text-[10px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1"><MonitorSmartphone size={10} /> Warm-Up Status</span>
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-primary bg-surface border border-theme shadow-sm">
+                                    {session.antibanStats.warmUp.phase === 'graduated' ? 'Graduated' : `Day ${session.antibanStats.warmUp.day}`}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-surface-elevated/80 rounded-full h-1.5 overflow-hidden">
+                                    {(() => {
+                                        const pct = session.antibanStats.warmUp.phase === 'graduated' ? 100 : Math.min(100, (session.antibanStats.warmUp.todaySent / session.antibanStats.warmUp.todayLimit) * 100);
+                                        const safeId = session.sessionId.replace(/[^a-zA-Z0-9]/g, '-');
+                                        return (
+                                            <>
+                                                <style>{`.antiban-pct-${safeId} { width: ${pct}%; }`}</style>
+                                                <div 
+                                                    className={`h-full rounded-full transition-all antiban-pct-${safeId} ${session.antibanStats.warmUp.phase === 'graduated' ? 'bg-green-500' : session.antibanStats.warmUp.todaySent >= session.antibanStats.warmUp.todayLimit ? 'bg-red-500' : 'bg-blue-500'}`}
+                                                />
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                                <span className="text-[11px] font-semibold text-secondary font-mono">
+                                    {session.antibanStats.warmUp.phase === 'graduated' ? 'Uncapped' : `${session.antibanStats.warmUp.todaySent}/${session.antibanStats.warmUp.todayLimit}`}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4 mt-1.5">
+                                <span className="text-[10px] font-bold text-secondary uppercase tracking-wider">Health Risk</span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                                    session.antibanStats.health.risk === 'low' ? 'bg-green-500/10 text-green-600' :
+                                    session.antibanStats.health.risk === 'medium' ? 'bg-yellow-500/10 text-yellow-600' :
+                                    session.antibanStats.health.risk === 'high' ? 'bg-orange-500/10 text-orange-600' :
+                                    'bg-red-500/10 text-red-600'
+                                }`}>
+                                    {session.antibanStats.health.risk.toUpperCase()}
+                                </span>
+                            </div>
                         </div>
                     )}
                 </div>

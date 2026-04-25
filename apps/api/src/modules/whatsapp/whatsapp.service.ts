@@ -6,7 +6,7 @@ import { createLogger } from '../../core/logger';
 import { alertSessionDrop } from '../../core/alert';
 import { EventEmitter } from 'events';
 import { prisma } from '../../prisma/client';
-import { ANTIBAN_CONFIG, loadWarmUpState, registerWrappedSocket, persistWarmUpState, removeAntiBan } from '../../core/antiban';
+import { ANTIBAN_CONFIG, loadWarmUpState, registerWrappedSocket, persistWarmUpState, removeAntiBan, getAntibanStats } from '../../core/antiban';
 import { notificationService } from '../../core/notification.service';
 import { WhatsAppAccountRepository } from '../../core/database/repositories/WhatsAppAccountRepository';
 
@@ -108,6 +108,54 @@ class WhatsAppManager extends EventEmitter {
         //   • Health monitoring (disconnects, failed sends → risk score)
         const savedWarmUpState = await loadWarmUpState(sessionId);
         const safeSock = wrapSocket(sock as any, ANTIBAN_CONFIG, savedWarmUpState);
+        
+        // --- PATCH FOR baileys-antiban CONCURRENCY & WARM-UP BUG ---
+        const warmUp = (safeSock.antiban as any)?.warmUp as any;
+        if (warmUp) {
+            // Fix 1: Ensure `startedAt` accurately tracks active days rather than idle connection time.
+            // If they haven't sent any messages yet, we keep `startedAt` rolling to NOW so the day stays 0.
+            const originalGetCurrentDay = warmUp.getCurrentDay.bind(warmUp);
+            warmUp.getCurrentDay = function() {
+                if (this.state.dailyCounts.length === 0) {
+                    this.state.startedAt = Date.now();
+                    return 0;
+                }
+                return originalGetCurrentDay();
+            };
+
+            // Fix 2: Prevent concurrent bypass of limits.
+            // canSend() in AntiBan evaluates synchronously for all concurrent queue jobs BEFORE
+            // the delayed rate-limiting block, causing N concurrent requests to easily bypass the daily limit.
+            // We optimistically increment `dailyCounts` immediately to reserve the slot!
+            const originalCanSend = warmUp.canSend.bind(warmUp);
+            warmUp.canSend = function() {
+                const allowed = originalCanSend();
+                if (allowed) {
+                    if (this.state.graduated) {
+                        return true;
+                    }
+
+                    const day = this.getCurrentDay();
+                    while (this.state.dailyCounts.length <= day) {
+                        this.state.dailyCounts.push(0);
+                    }
+                    this.state.dailyCounts[day]++; // Optimistically reserve!
+
+                    // Check graduation (transferred from original record method)
+                    if (day >= this.config.warmUpDays) {
+                        this.state.graduated = true;
+                    }
+                }
+                return allowed;
+            };
+
+            // Fix 3: Since we optimistically reserve the count above, we shouldn't double-increment in record()
+            warmUp.record = function() {
+                this.state.lastActiveAt = Date.now();
+            };
+        }
+        // -------------------------------------------------------------
+
         this.safeSockets.set(sessionId, safeSock);
         registerWrappedSocket(sessionId, safeSock);
         log.info({ sessionId, hasWarmUpState: !!savedWarmUpState }, 'AntiBan safe socket created');
@@ -453,6 +501,7 @@ class WhatsAppManager extends EventEmitter {
                 isKnowledgeBot: !!account.botMode,
                 userId: account.userId ?? null,
                 assignedUser: (account as any).user ?? null,
+                antibanStats: isSocketAlive ? getAntibanStats(account.sessionId) : null,
             };
         });
     }
