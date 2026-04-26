@@ -262,7 +262,12 @@ export async function processOutboundMessage(job: Job): Promise<void> {
         }
     }
 
-        const formattedJid = toJid.includes('@') ? toJid : `${toJid.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+        let formattedJid = toJid;
+        if (!toJid.endsWith('@g.us') && !toJid.endsWith('@newsletter') && !toJid.endsWith('@broadcast') && toJid !== 'status@broadcast') {
+            const [prefix, domain] = toJid.split('@');
+            const cleanPrefix = prefix.replace(/[^0-9]/g, '');
+            formattedJid = `${cleanPrefix}@${domain || 's.whatsapp.net'}`;
+        }
         const result = await socket.sendMessage(formattedJid, payload);
 
         // Use updateMany for load testing safety

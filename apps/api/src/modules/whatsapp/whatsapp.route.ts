@@ -368,6 +368,30 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify: FastifyInstanc
     });
 
     /**
+     * POST /sessions/:sessionId/antiban/reset
+     * Reset the antiban warm-up state for testing edge cases.
+     */
+    fastify.post('/sessions/:sessionId/antiban/reset', async (req, reply) => {
+        const ctx = {
+            userId: req.user.sub,
+            workspaceId: req.user.workspaceId,
+            role: req.user.role as import('@prisma/client').UserRole,
+        };
+        const { sessionId } = req.params as { sessionId: string };
+
+        const account = await import('../../core/database/repositories/WhatsAppAccountRepository').then(m => m.WhatsAppAccountRepository.findBySessionIdOrThrow(ctx, sessionId).catch((_) => null));
+
+        if (!account) {
+            return reply.sendError({ message: 'Session not found.', code: 'NOT_FOUND' }, 404);
+        }
+
+        const { resetWarmUpState } = await import('../../core/antiban');
+        await resetWarmUpState(sessionId);
+
+        return reply.sendSuccess({ message: 'AntiBan warm-up state reset successfully.' });
+    });
+
+    /**
      * PATCH /sessions/:sessionId/knowledge-bot
      * Toggle Product Knowledge Bot listening state safely against active WhatsApp accounts.
      */

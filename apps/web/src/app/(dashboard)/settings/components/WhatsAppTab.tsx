@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import {
     Smartphone, CheckCircle2, MonitorSmartphone, Unplug,
     Loader2, Plus, Trash2, Wifi, WifiOff, RefreshCw, X, Brain, Edit2,
-    UserCheck, UserX, ChevronDown
+    UserCheck, UserX, ChevronDown, RotateCcw
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -223,6 +223,11 @@ function SessionCard({
         onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] })
     });
 
+    const resetWarmupMutation = useMutation({
+        mutationFn: () => api.post(`/whatsapp/sessions/${session.sessionId}/antiban/reset`),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-accounts'] })
+    });
+
     const normalStatus = session.status === 'QR_PENDING' ? 'NEEDS_SCAN' : session.status;
     const statusConfig = {
         CONNECTED: { color: 'text-green-700 dark:text-green-400', bg: 'bg-green-500/10 border-green-500/25', icon: <Wifi size={14} />, label: 'Connected' },
@@ -310,9 +315,23 @@ function SessionCard({
                         <div className="flex flex-col gap-1 mt-3 p-2.5 bg-surface-elevated/30 rounded-xl border border-theme">
                             <div className="flex items-center justify-between gap-4 mb-0.5">
                                 <span className="text-[10px] font-bold text-secondary uppercase tracking-wider flex items-center gap-1"><MonitorSmartphone size={10} /> Warm-Up Status</span>
-                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-primary bg-surface border border-theme shadow-sm">
-                                    {session.antibanStats.warmUp.phase === 'graduated' ? 'Graduated' : `Day ${session.antibanStats.warmUp.day}`}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => {
+                                            if (confirm('Reset warm-up state to Day 0? This is for testing only.')) {
+                                                resetWarmupMutation.mutate();
+                                            }
+                                        }}
+                                        disabled={resetWarmupMutation.isPending}
+                                        title="Reset warm-up state"
+                                        className="text-muted hover:text-red-400 transition-colors"
+                                    >
+                                        <RotateCcw size={12} className={resetWarmupMutation.isPending ? "animate-spin" : ""} />
+                                    </button>
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-primary bg-surface border border-theme shadow-sm">
+                                        {session.antibanStats.warmUp.phase === 'graduated' ? 'Graduated' : `Day ${session.antibanStats.warmUp.day}`}
+                                    </span>
+                                </div>
                             </div>
                             <div className="flex items-center gap-2">
                                 <div className="flex-1 bg-surface-elevated/80 rounded-full h-1.5 overflow-hidden">

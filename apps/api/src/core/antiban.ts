@@ -128,3 +128,26 @@ export function getAntibanStats(sessionId: string): object | null {
     const sock = wrappedSockets.get(sessionId);
     return sock ? sock.antiban.getStats() : null;
 }
+
+/**
+ * Reset the warm-up state for a session.
+ * Used for testing edge cases.
+ */
+export async function resetWarmUpState(sessionId: string): Promise<void> {
+    try {
+        const redis = getRedisClient();
+        await redis.del(`${REDIS_KEY_PREFIX}${sessionId}`);
+        const sock = wrappedSockets.get(sessionId);
+        if (sock && (sock.antiban as any).warmUp) {
+            (sock.antiban as any).warmUp.state = {
+                startedAt: Date.now(),
+                lastActiveAt: Date.now(),
+                dailyCounts: [],
+                graduated: false
+            };
+        }
+        log.info({ sessionId }, 'Reset AntiBan warm-up state');
+    } catch (err) {
+        log.error({ err, sessionId }, 'Failed to reset AntiBan warm-up state');
+    }
+}
