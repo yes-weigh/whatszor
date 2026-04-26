@@ -19,20 +19,10 @@
  *   const count  = await luaScripts.dequeueCounter(redis, key, ttlMs);
  */
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { Redis } from 'ioredis';
 import { createLogger } from './logger';
 
 const log = createLogger({ module: 'lua-scripts' });
-
-// ── Script paths ─────────────────────────────────────────────────────────────
-
-const SCRIPT_DIR = join(__dirname, 'lua');
-
-function loadScript(filename: string): string {
-    return readFileSync(join(SCRIPT_DIR, filename), 'utf8');
-}
 
 // ── SHA cache ─────────────────────────────────────────────────────────────────
 // Keyed by script filename. Populated lazily on first evalScript() call.
@@ -88,17 +78,55 @@ async function evalScript(
 const SLIDING_WINDOW_FILE    = 'sliding_window_ratelimit.lua';
 const DEQUEUE_COUNTER_FILE   = 'dequeue_counter.lua';
 
-// Lazy-loaded sources — only read from disk once per process lifetime
-let _slidingWindowSrc: string | null = null;
-let _dequeueCounterSrc: string | null = null;
+const _slidingWindowSrc = `
+local key        = KEYS[1]
+local now_ms     = tonumber(ARGV[1])
+local window_ms  = tonumber(ARGV[2])
+local max_req    = tonumber(ARGV[3])
+local req_id     = ARGV[4]
+
+local window_start = now_ms - window_ms
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
+
+local count = tonumber(redis.call('ZCARD', key))
+
+if count >= max_req then
+    local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    local retry_after_ms = 0
+    if #oldest >= 2 then
+        local oldest_ts = tonumber(oldest[2])
+        retry_after_ms = math.max(0, (oldest_ts + window_ms) - now_ms + 1)
+    else
+        retry_after_ms = window_ms
+    end
+    return { 0, count, retry_after_ms }
+end
+
+redis.call('ZADD', key, now_ms, req_id)
+redis.call('PEXPIRE', key, window_ms + 5000)
+
+return { 1, count + 1, 0 }
+`;
+
+const _dequeueCounterSrc = `
+local key    = KEYS[1]
+local ttl_ms = tonumber(ARGV[1])
+
+local count = redis.call('INCR', key)
+
+if count == 1 then
+    redis.call('PEXPIRE', key, ttl_ms)
+end
+
+return count
+`;
 
 function getSlidingWindowSrc(): string {
-    if (!_slidingWindowSrc) _slidingWindowSrc = loadScript(SLIDING_WINDOW_FILE);
     return _slidingWindowSrc;
 }
 
 function getDequeueCounterSrc(): string {
-    if (!_dequeueCounterSrc) _dequeueCounterSrc = loadScript(DEQUEUE_COUNTER_FILE);
     return _dequeueCounterSrc;
 }
 
