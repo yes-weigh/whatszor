@@ -326,8 +326,27 @@ export async function processOutboundMessage(job: Job): Promise<void> {
             throw err; // Let BullMQ handle the delay natively
         }
 
-        // ── Release Lock on Failure to Allow Retry ─────────────
         const idempotencyKey = `wa:out:${workspaceId}:${messageId}`;
+
+        // ── Gracefully Handle Anti-Ban Warm-up Limits ──────────
+        // If the daily limit is hit, do not fail. Delay until tomorrow.
+        if (err?.message?.includes('Warm-up limit')) {
+            const now = new Date();
+            const midnight = new Date(now);
+            midnight.setHours(24, 0, 0, 0); // Next midnight local time
+            const delayMs = midnight.getTime() - now.getTime() + 60000; // +1 minute to be safe
+
+            log.warn(
+                { sessionId, messageId, delayMs, err: err.message },
+                'Warm-up daily limit reached — pausing message until tomorrow'
+            );
+
+            await releaseIdempotencyLock(idempotencyKey);
+            await job.moveToDelayed(Date.now() + delayMs, job.token!);
+            throw new DelayedError();
+        }
+
+        // ── Release Lock on Failure to Allow Retry ─────────────
         await releaseIdempotencyLock(idempotencyKey);
 
         log.error({ err, messageId, toJid }, 'Failed to send outbound message');

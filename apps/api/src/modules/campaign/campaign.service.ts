@@ -289,12 +289,13 @@ export async function syncCampaignStats(workspaceId: string, campaignId: string)
         _count: { status: true }
     });
 
-    const parsedStats = {
+    const parsedStats: any = {
         total: 0,
         sent: 0,
         delivered: 0,
         read: 0,
-        failed: 0
+        failed: 0,
+        paused: 0
     };
 
     // Calculate absolute isolated counts
@@ -306,6 +307,10 @@ export async function syncCampaignStats(workspaceId: string, campaignId: string)
         if (stat.status === 'READ') parsedStats.read += count;
         if (stat.status === 'FAILED') parsedStats.failed += count;
     }
+
+    parsedStats.paused = await prisma.campaignMember.count({
+        where: { campaignId, errorReason: { startsWith: 'Paused' } }
+    });
 
     // Cumulative Funnel logic:
     // A READ message is implicitly DELIVERED and SENT.

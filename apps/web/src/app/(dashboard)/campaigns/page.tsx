@@ -130,6 +130,15 @@ export default function CampaignsPage() {
                                     </>
                                 )}
 
+                                {stats?.paused > 0 && (
+                                    <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-600 rounded-md p-3 text-sm flex items-center gap-2">
+                                        <Clock size={16} />
+                                        <span>
+                                            <b>{stats.paused} messages paused:</b> Daily warm-up limit reached. Will automatically resume tomorrow.
+                                        </span>
+                                    </div>
+                                )}
+
                                 {c.status === 'RUNNING' && (
                                     <div className="bg-primary/10 border border-primary/20 text-primary rounded-md p-3 text-sm flex items-center gap-2">
                                         <Megaphone size={16} />
