@@ -165,36 +165,36 @@ model Workspace {
   updatedAt                  DateTime @updatedAt @map("updated_at")
 
   // Relations
-  licenses           LicenseKey[]
-  members            WorkspaceMember[]
-  contacts           Contact[]
-  organizations      Organization[]
-  pipelines          Pipeline[]
-  records            Record[]
-  conversations      Conversation[]
-  messages           Message[]
-  whatsAppSessions   WhatsAppSession[]
-  whatsAppAccounts   WhatsAppAccount[]
-  campaigns          Campaign[]
-  automationRules    AutomationRule[]
-  eventLogs          EventLog[]
-  media              Media[]
-  templates          Template[]
-  QuickReply         QuickReply[]
-  productKnowledge   ProductKnowledge[]
-  allowedNumbers     AllowedNumber[]
-  keywordAutomations KeywordAutomation[]
-  automationLogs     AutomationLog[]
-  automationInsights AutomationInsight[]
-  leadLists          LeadList[]
-  leads              Lead[]
-  ContactProduct     ContactProduct[]
-  AccountAccess      AccountAccess[]
-  deadLetterJobs     DeadLetterJob[]
-  paymentRequests    PaymentRequest[]
-  conversationTags   ConversationTag[]
-  agentDailyMetrics  AgentDailyMetric[]
-  leadQueryPlans     LeadQueryPlan[]
+  licenses                LicenseKey[]
+  members                 WorkspaceMember[]
+  contacts                Contact[]
+  organizations           Organization[]
+  pipelines               Pipeline[]
+  records                 Record[]
+  conversations           Conversation[]
+  messages                Message[]
+  whatsAppSessions        WhatsAppSession[]
+  whatsAppAccounts        WhatsAppAccount[]
+  campaigns               Campaign[]
+  automationRules         AutomationRule[]
+  eventLogs               EventLog[]
+  media                   Media[]
+  templates               Template[]
+  QuickReply              QuickReply[]
+  productKnowledge        ProductKnowledge[]
+  allowedNumbers          AllowedNumber[]
+  keywordAutomations      KeywordAutomation[]
+  automationLogs          AutomationLog[]
+  automationInsights      AutomationInsight[]
+  leadLists               LeadList[]
+  leads                   Lead[]
+  ContactProduct          ContactProduct[]
+  AccountAccess           AccountAccess[]
+  deadLetterJobs          DeadLetterJob[]
+  paymentRequests         PaymentRequest[]
+  conversationTags        ConversationTag[]
+  agentDailyMetrics       AgentDailyMetric[]
+  leadQueryPlans          LeadQueryPlan[]
   queryPerformanceMetrics QueryPerformanceMetric[]
 
   @@map("workspaces")
@@ -670,7 +670,9 @@ model Campaign {
   // Metrics for forecasting (optional)
   expectedReplyRate Float? @map("expected_reply_rate")
 
-  audienceId String? @map("audience_id")
+  audienceId           String?  @map("audience_id")
+  excludeExistingChats Boolean  @default(false) @map("exclude_existing_chats")
+  excludeRecentChats   Boolean  @default(false) @map("exclude_recent_chats")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1222,7 +1224,7 @@ model LeadList {
   processingStartedAt DateTime? @map("processing_started_at")
   completedAt         DateTime? @map("completed_at")
 
-  targetAudienceId    String?   @map("target_audience_id")
+  targetAudienceId String? @map("target_audience_id")
 
   source      String  @default("google_places")
   errorReason String? @map("error_reason")
@@ -1250,7 +1252,7 @@ model Lead {
   website       String?
   googlePlaceId String? @map("google_place_id")
 
-  rawData Json? @map("raw_data")
+  rawData Json?    @map("raw_data")
   lat     Float?
   lng     Float?
   types   String[]
@@ -1275,45 +1277,45 @@ model Lead {
 }
 
 model LeadQueryPlan {
-  id              String   @id @default(cuid())
-  workspaceId     String   @map("workspace_id")
-  planBatchId     String   @map("plan_batch_id")
-  
-  city            String
-  keyword         String
-  microArea       String?  @map("micro_area")
-  microAreaLat    Float?   @map("micro_area_lat")
-  microAreaLng    Float?   @map("micro_area_lng")
-  
-  status          String   @default("PENDING") // PENDING | RUNNING | DONE | KILLED | SKIPPED
-  preOverlapScore Float    @default(0) @map("pre_overlap_score")
-  estimatedLeads  Int      @default(0) @map("estimated_leads")
-  actualLeads     Int      @default(0) @map("actual_leads")
-  actualDupes     Int      @default(0) @map("actual_dupes")
-  killSwitchFired Boolean  @default(false) @map("kill_switch_fired")
-  leadListId      String?  @map("lead_list_id")
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+  planBatchId String @map("plan_batch_id")
 
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
+  city         String
+  keyword      String
+  microArea    String? @map("micro_area")
+  microAreaLat Float?  @map("micro_area_lat")
+  microAreaLng Float?  @map("micro_area_lng")
+
+  status          String  @default("PENDING") // PENDING | RUNNING | DONE | KILLED | SKIPPED
+  preOverlapScore Float   @default(0) @map("pre_overlap_score")
+  estimatedLeads  Int     @default(0) @map("estimated_leads")
+  actualLeads     Int     @default(0) @map("actual_leads")
+  actualDupes     Int     @default(0) @map("actual_dupes")
+  killSwitchFired Boolean @default(false) @map("kill_switch_fired")
+  leadListId      String? @map("lead_list_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   @@index([workspaceId, planBatchId])
   @@map("lead_query_plans")
 }
 
 model QueryPerformanceMetric {
-  id              String   @id @default(cuid())
-  workspaceId     String   @map("workspace_id")
-  city            String
-  keyword         String
-  
-  yieldMultiplier Float    @default(1.0) @map("yield_multiplier")
-  runCount        Int      @default(0) @map("run_count")
-  
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id          String @id @default(cuid())
+  workspaceId String @map("workspace_id")
+  city        String
+  keyword     String
 
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  yieldMultiplier Float @default(1.0) @map("yield_multiplier")
+  runCount        Int   @default(0) @map("run_count")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, city, keyword])
   @@map("query_performance_metrics")

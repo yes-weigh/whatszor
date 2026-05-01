@@ -57,6 +57,8 @@ export const CreateCampaignSchema = z.object({
     contactIds: z.array(z.string()).optional().nullable(),
     audienceId: z.string().optional().nullable(),
     whatsappAccountId: z.string().optional().nullable(),
+    excludeExistingChats: z.boolean().optional().nullable(),
+    excludeRecentChats: z.boolean().optional().nullable(),
 });
 
 export const UpdateCampaignSchema = z.object({
@@ -67,6 +69,8 @@ export const UpdateCampaignSchema = z.object({
     messageText: z.string().optional(),
     expectedReplyRate: z.number().optional(),
     scheduledAt: z.string().datetime().optional(),
+    excludeExistingChats: z.boolean().optional(),
+    excludeRecentChats: z.boolean().optional(),
 });
 
 export const AddCampaignMembersSchema = z.object({

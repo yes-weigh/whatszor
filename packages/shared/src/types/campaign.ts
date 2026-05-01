@@ -24,6 +24,8 @@ export interface Campaign {
     startedAt: string | null;
     completedAt: string | null;
     messageText: string | null;
+    excludeExistingChats: boolean;
+    excludeRecentChats: boolean;
     expectedReplyRate: number | null;
     stats: CampaignStats | null;
     createdAt: string;
@@ -54,6 +56,8 @@ export interface CreateCampaignInput {
     whatsappAccountId?: string | null;
     messageText?: string | null;
     expectedReplyRate?: number | null;
+    excludeExistingChats?: boolean;
+    excludeRecentChats?: boolean;
 }
 
 export interface UpdateCampaignInput {
@@ -64,6 +68,8 @@ export interface UpdateCampaignInput {
     scheduledAt?: string;
     messageText?: string;
     expectedReplyRate?: number;
+    excludeExistingChats?: boolean;
+    excludeRecentChats?: boolean;
 }
 
 export interface AddCampaignMembersInput {

@@ -42,6 +42,9 @@ export async function createCampaign(workspaceId: string, input: CreateCampaignI
             expectedReplyRate: input.expectedReplyRate || null,
             scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
             audienceId: input.audienceId || null,
+            whatsappAccountId: input.whatsappAccountId || null,
+            excludeExistingChats: input.excludeExistingChats || false,
+            excludeRecentChats: input.excludeRecentChats || false,
         },
     });
 
@@ -129,6 +132,8 @@ export async function updateCampaign(
     if (input.messageText !== undefined) data.messageText = input.messageText || null;
     if (input.expectedReplyRate !== undefined) data.expectedReplyRate = input.expectedReplyRate || null;
     if (input.scheduledAt !== undefined) data.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+    if (input.excludeExistingChats !== undefined) data.excludeExistingChats = input.excludeExistingChats;
+    if (input.excludeRecentChats !== undefined) data.excludeRecentChats = input.excludeRecentChats;
 
     // ── Campaign session ownership validation ───────────────────────────────────────
     if ((input as any).whatsappAccountId !== undefined) {
@@ -188,7 +193,23 @@ export async function addCampaignMembers(workspaceId: string, campaignId: string
     const validContactIds = new Set(validContacts.map((c: { id: string }) => c.id));
 
     // 3. Filter input to only valid contacts (or throw error for invalid chunks)
-    const validMembersToAdd = input.members.filter(m => validContactIds.has(m.contactId));
+    let validMembersToAdd = input.members.filter(m => validContactIds.has(m.contactId));
+
+    if ((campaign.excludeExistingChats || campaign.excludeRecentChats) && campaign.whatsappAccountId) {
+        const dateThreshold = (!campaign.excludeExistingChats && campaign.excludeRecentChats) ? new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) : undefined;
+        const existingConversations = await prisma.conversation.findMany({
+            where: {
+                workspaceId,
+                sessionId: campaign.whatsappAccountId,
+                ...(dateThreshold ? { lastMessageAt: { gte: dateThreshold } } : {}),
+                contactId: { in: validMembersToAdd.map(m => m.contactId) }
+            },
+            select: { contactId: true }
+        });
+
+        const excludeContactIds = new Set(existingConversations.map(c => c.contactId).filter(Boolean));
+        validMembersToAdd = validMembersToAdd.filter(m => !excludeContactIds.has(m.contactId));
+    }
 
     if (validMembersToAdd.length === 0) {
         throw { statusCode: 400, code: ErrorCodes.BAD_REQUEST, message: 'No valid contacts provided for this workspace' };
@@ -384,10 +405,52 @@ export async function populateFromAudience(
     // Snapshot: read all audience members at this moment
     const members = await prisma.audienceMember.findMany({
         where: { audienceId },
-        select: { contactId: true },
+        select: { contactId: true, contact: { select: { phone: true } } },
     });
 
-    const contactIds = members.map(m => m.contactId);
+    let contactIds = members.map(m => m.contactId);
+
+    if ((campaign.excludeExistingChats || campaign.excludeRecentChats) && campaign.whatsappAccountId) {
+        const dateThreshold = (!campaign.excludeExistingChats && campaign.excludeRecentChats) ? new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) : undefined;
+        
+        const existingConversations = await prisma.conversation.findMany({
+            where: {
+                workspaceId,
+                sessionId: campaign.whatsappAccountId,
+                ...(dateThreshold ? { lastMessageAt: { gte: dateThreshold } } : {}),
+                OR: [
+                    { contactId: { in: contactIds } },
+                    { providerId: { in: members.map(m => m.contact.phone ? `+${m.contact.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net` : null).filter(Boolean) as string[] } },
+                ]
+            },
+            select: { contactId: true, providerId: true }
+        });
+
+        const excludeContactIds = new Set<string>();
+        for (const conv of existingConversations) {
+            if (conv.contactId) excludeContactIds.add(conv.contactId);
+        }
+
+        const phoneToContactId = new Map<string, string>();
+        for (const m of members) {
+            if (m.contact.phone) {
+                phoneToContactId.set(`+${m.contact.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`, m.contactId);
+                phoneToContactId.set(`${m.contact.phone.replace(/[^0-9]/g, '')}@s.whatsapp.net`, m.contactId);
+            }
+        }
+
+        for (const conv of existingConversations) {
+            if (phoneToContactId.has(conv.providerId)) {
+                excludeContactIds.add(phoneToContactId.get(conv.providerId)!);
+            }
+        }
+
+        contactIds = contactIds.filter(id => !excludeContactIds.has(id));
+    }
+
+    if (contactIds.length === 0) {
+        return { added: 0, audienceId, memberCount: audience.memberCount };
+    }
 
     // Bulk insert into campaign (skipping existing duplicates)
     const created = await prisma.campaignMember.createMany({

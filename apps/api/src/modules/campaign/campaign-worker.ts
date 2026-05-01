@@ -137,6 +137,50 @@ export async function processCampaignJob(job: Job) {
                 throw new Error('Contact missing phone number');
             }
 
+            // ── Dynamic Exclusion Check (Late Bound) ───────────────────────────────────
+            // We check this again at send-time in case:
+            // 1) The draft was saved without exclusion, but launched with exclusion toggled ON.
+            // 2) A new chat was initiated between draft creation and campaign launch.
+            if ((campaign.excludeExistingChats || campaign.excludeRecentChats) && resolvedSessionId) {
+                const dateThreshold = (!campaign.excludeExistingChats && campaign.excludeRecentChats) ? new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) : undefined;
+                
+                const phone = member.contact.phone;
+                const digits = phone.replace(/[^0-9]/g, '');
+                const providerIdsToCheck = [
+                    phone,
+                    digits,
+                    `+${digits}`,
+                    `${digits}@s.whatsapp.net`,
+                    `+${digits}@s.whatsapp.net`
+                ];
+
+                const existingConv = await prisma.conversation.findFirst({
+                    where: {
+                        workspaceId,
+                        sessionId: resolvedSessionId,
+                        ...(dateThreshold ? { lastMessageAt: { gte: dateThreshold } } : {}),
+                        OR: [
+                            { contactId: member.contactId },
+                            { providerId: { in: providerIdsToCheck } }
+                        ]
+                    },
+                    select: { id: true }
+                });
+
+                if (existingConv) {
+                    log.info({ campaignId, memberId: member.id, phone }, 'Skipping member due to chat exclusion (late bound)');
+                    await prisma.campaignMember.update({
+                        where: { id: member.id },
+                        data: {
+                            status: 'FAILED', // We could use SKIPPED if we had it in the enum, but FAILED prevents sending.
+                            errorReason: 'Skipped: Chat exclusion rule matched'
+                        }
+                    });
+                    continue; // Skip queuing this message entirely
+                }
+            }
+            // ──────────────────────────────────────────────────────────────────────────
+
             // Ensure conversation exists, pinned to the resolved WA session
             const conversation = await createOrGetConversation(workspaceId, {
                 provider: 'WHATSAPP',

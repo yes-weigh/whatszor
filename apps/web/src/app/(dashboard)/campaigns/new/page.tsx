@@ -219,6 +219,8 @@ interface CampaignDraft {
         manualContacts?: ManualContact[];
         mapSelectedPlaces?: string[];
     };
+    excludeExistingChats: boolean;
+    excludeRecentChats: boolean;
 }
 
 // ─── Readiness Computation ────────────────────────────────────────────────────
@@ -397,6 +399,8 @@ function NewCampaignContent() {
         whatsappSessionId: null,
         message: { text: '', buttons: [], footerText: '', mediaUrl: undefined },
         audience: { mode: 'list', listId: undefined },
+        excludeExistingChats: false,
+        excludeRecentChats: false,
     });
 
     // ── Load existing draft when ?id= is present ──
@@ -544,6 +548,8 @@ function NewCampaignContent() {
                 messageText: !draft.message.templateId ? (draft.message as any).rawText || draft.message.text : undefined,
                 audienceId: audienceMode === 'list' ? draft.audience.listId : undefined,
                 whatsappAccountId: draft.whatsappSessionId || undefined,
+                excludeExistingChats: draft.excludeExistingChats,
+                excludeRecentChats: draft.excludeRecentChats,
                 status: 'DRAFT',
             };
             if (savedCampaignId) {
@@ -874,6 +880,8 @@ function NewCampaignContent() {
             audienceId: audienceMode === 'list' ? draft.audience.listId : undefined,
             contactIds: audienceMode === 'manual' ? manualContacts.map(c => c.id) : [],
             whatsappAccountId: draft.whatsappSessionId || undefined,
+            excludeExistingChats: draft.excludeExistingChats,
+            excludeRecentChats: draft.excludeRecentChats,
             status: 'DRAFT',
         };
 
@@ -1175,6 +1183,45 @@ function NewCampaignContent() {
                     background: var(--bg-surface); color: var(--text-primary);
                     border: 1px solid var(--border-strong);
                     box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+                }
+
+                /* Exclude existing chats toggle */
+                .nc-exclude-toggle {
+                    display: flex; align-items: center; justify-content: space-between;
+                    gap: 10px; cursor: pointer;
+                    margin: 10px 0 8px;
+                    padding: 9px 10px;
+                    border-radius: 8px;
+                    background: var(--bg-elevated);
+                    border: 1px solid var(--border);
+                    transition: border-color 160ms, background 160ms;
+                }
+                .nc-exclude-toggle:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+                .nc-exclude-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+                .nc-exclude-toggle-label {
+                    font-size: 12px; font-weight: 600; color: var(--text-primary);
+                }
+                .nc-exclude-toggle-sub {
+                    font-size: 10px; color: var(--text-muted); line-height: 1.3;
+                }
+                .nc-toggle {
+                    width: 34px; height: 20px; border-radius: 10px; flex-shrink: 0;
+                    background: var(--bg-surface); border: 1px solid var(--border-strong);
+                    position: relative; cursor: pointer;
+                    transition: background 200ms, border-color 200ms;
+                }
+                .nc-toggle--on {
+                    background: var(--accent); border-color: var(--accent);
+                }
+                .nc-toggle-knob {
+                    position: absolute; top: 2px; left: 2px;
+                    width: 14px; height: 14px; border-radius: 50%;
+                    background: var(--text-muted);
+                    transition: transform 200ms, background 200ms;
+                }
+                .nc-toggle--on .nc-toggle-knob {
+                    transform: translateX(14px);
+                    background: #fff;
                 }
 
                 /* Audience Pulse */
@@ -1939,10 +1986,47 @@ function NewCampaignContent() {
                                     </div>
                                 )}
                             </section>
-
                             {/* Section: Audience */}
                             <section>
                                 <div className="nc-section-label">Audience</div>
+
+                                {/* Exclude Existing Chats Toggles */}
+                                <div className="nc-exclude-toggles-container" style={{ marginBottom: 16 }}>
+                                    <label className="nc-exclude-toggle" htmlFor="exclude-existing-chats">
+                                        <div className="nc-exclude-toggle-text">
+                                            <span className="nc-exclude-toggle-label">Skip all existing chats</span>
+                                            <span className="nc-exclude-toggle-sub">Exclude anyone already chatting on this session</span>
+                                        </div>
+                                        <div
+                                            role="switch"
+                                            aria-checked={draft.excludeExistingChats}
+                                            aria-label="Skip contacts with existing chats"
+                                            id="exclude-existing-chats"
+                                            className={`nc-toggle ${draft.excludeExistingChats ? 'nc-toggle--on' : ''}`}
+                                            onClick={() => setDraft(d => ({ ...d, excludeExistingChats: !d.excludeExistingChats }))}
+                                        >
+                                            <div className="nc-toggle-knob" />
+                                        </div>
+                                    </label>
+
+                                    <label className="nc-exclude-toggle" htmlFor="exclude-recent-chats" style={{ opacity: draft.excludeExistingChats ? 0.5 : 1, pointerEvents: draft.excludeExistingChats ? 'none' : 'auto' }}>
+                                        <div className="nc-exclude-toggle-text">
+                                            <span className="nc-exclude-toggle-label">Skip recent chats (5 days)</span>
+                                            <span className="nc-exclude-toggle-sub">Exclude contacts active within the last 5 days</span>
+                                        </div>
+                                        <div
+                                            role="switch"
+                                            aria-checked={draft.excludeRecentChats}
+                                            aria-label="Skip contacts with recent chats"
+                                            id="exclude-recent-chats"
+                                            className={`nc-toggle ${draft.excludeRecentChats ? 'nc-toggle--on' : ''}`}
+                                            onClick={() => setDraft(d => ({ ...d, excludeRecentChats: !d.excludeRecentChats }))}
+                                        >
+                                            <div className="nc-toggle-knob" />
+                                        </div>
+                                    </label>
+                                </div>
+
                                 {/* Mode tabs */}
                                 <div className="nc-aud-tabs nc-aud-tabs--mb">
                                     <button className={`nc-aud-tab ${audienceMode === 'list' ? 'nc-aud-tab--active' : ''}`} onClick={() => setAudienceMode('list')}>
