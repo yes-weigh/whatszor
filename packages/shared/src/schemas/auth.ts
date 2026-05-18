@@ -17,7 +17,6 @@ export const RegisterSchema = z.object({
 export const LoginSchema = z.object({
     email: EmailSchema,
     password: z.string().min(1),
-    workspaceSlug: SlugSchema,
 });
 
 export const AdminLoginSchema = z.object({

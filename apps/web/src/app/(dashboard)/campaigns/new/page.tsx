@@ -1991,7 +1991,7 @@ function NewCampaignContent() {
                                 <div className="nc-section-label">Audience</div>
 
                                 {/* Exclude Existing Chats Toggles */}
-                                <div className="nc-exclude-toggles-container" style={{ marginBottom: 16 }}>
+                                <div className="nc-exclude-toggles-container mb-4">
                                     <label className="nc-exclude-toggle" htmlFor="exclude-existing-chats">
                                         <div className="nc-exclude-toggle-text">
                                             <span className="nc-exclude-toggle-label">Skip all existing chats</span>
@@ -1999,7 +1999,8 @@ function NewCampaignContent() {
                                         </div>
                                         <div
                                             role="switch"
-                                            aria-checked={draft.excludeExistingChats}
+                                            // eslint-disable-next-line jsx-a11y/aria-proptypes
+                                            aria-checked={draft.excludeExistingChats ? 'true' : 'false'}
                                             aria-label="Skip contacts with existing chats"
                                             id="exclude-existing-chats"
                                             className={`nc-toggle ${draft.excludeExistingChats ? 'nc-toggle--on' : ''}`}
@@ -2009,14 +2010,15 @@ function NewCampaignContent() {
                                         </div>
                                     </label>
 
-                                    <label className="nc-exclude-toggle" htmlFor="exclude-recent-chats" style={{ opacity: draft.excludeExistingChats ? 0.5 : 1, pointerEvents: draft.excludeExistingChats ? 'none' : 'auto' }}>
+                                    <label className={`nc-exclude-toggle ${draft.excludeExistingChats ? 'opacity-50 pointer-events-none' : ''}`} htmlFor="exclude-recent-chats">
                                         <div className="nc-exclude-toggle-text">
                                             <span className="nc-exclude-toggle-label">Skip recent chats (5 days)</span>
                                             <span className="nc-exclude-toggle-sub">Exclude contacts active within the last 5 days</span>
                                         </div>
                                         <div
                                             role="switch"
-                                            aria-checked={draft.excludeRecentChats}
+                                            // eslint-disable-next-line jsx-a11y/aria-proptypes
+                                            aria-checked={draft.excludeRecentChats ? 'true' : 'false'}
                                             aria-label="Skip contacts with recent chats"
                                             id="exclude-recent-chats"
                                             className={`nc-toggle ${draft.excludeRecentChats ? 'nc-toggle--on' : ''}`}

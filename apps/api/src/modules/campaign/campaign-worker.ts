@@ -44,6 +44,16 @@ export async function processCampaignJob(job: Job) {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ── Update Status if Scheduled ────────────────────────────────────────────
+    if (campaign.status === 'SCHEDULED') {
+        log.info({ campaignId }, 'Transitioning campaign from SCHEDULED to RUNNING');
+        await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { status: 'RUNNING', startedAt: new Date() }
+        });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // ── Resolve WhatsApp session ──────────────────────────────────────────────
     // The campaign must have a linked WhatsApp account to send from.
     let resolvedSessionId: string | null = null;

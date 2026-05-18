@@ -263,7 +263,13 @@ export async function startCampaign(workspaceId: string, campaignId: string, isF
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    // Mark as running and deduct quota atomically
+    // Calculate delay if campaign is scheduled for the future
+    const now = Date.now();
+    const scheduledTime = campaign.scheduledAt?.getTime() || now;
+    const delay = Math.max(0, scheduledTime - now);
+    const newStatus = delay > 0 ? 'SCHEDULED' : 'RUNNING';
+
+    // Mark as running or scheduled and deduct quota atomically
     const updated = await prisma.$transaction(async (tx) => {
         await tx.workspace.update({
             where: { id: workspaceId },
@@ -276,8 +282,8 @@ export async function startCampaign(workspaceId: string, campaignId: string, isF
         return tx.campaign.update({
             where: { id: campaignId },
             data: {
-                status: 'RUNNING',
-                startedAt: new Date(),
+                status: newStatus,
+                startedAt: delay > 0 ? null : new Date(),
             }
         });
     });
@@ -287,7 +293,7 @@ export async function startCampaign(workspaceId: string, campaignId: string, isF
         workspaceId,
         campaignId,
         isFastMode
-    });
+    }, { delay });
 
     // Log global event
     await logEvent(workspaceId, 'campaign_sent', 'campaign_module', {
@@ -342,6 +348,36 @@ export async function syncCampaignStats(workspaceId: string, campaignId: string)
     await prisma.campaign.update({
         where: { id: campaignId, workspaceId },
         data: { stats: parsedStats as any }
+    });
+
+    // ── Time-Series Analytics (Hourly Snapshot) ──
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+
+    await prisma.campaignTimeSeries.upsert({
+        where: {
+            campaignId_timestamp: {
+                campaignId,
+                timestamp: now
+            }
+        },
+        create: {
+            campaignId,
+            workspaceId,
+            timestamp: now,
+            sent: parsedStats.sent,
+            delivered: parsedStats.delivered,
+            read: parsedStats.read,
+            failed: parsedStats.failed,
+            replies: parsedStats.replies || 0,
+        },
+        update: {
+            sent: parsedStats.sent,
+            delivered: parsedStats.delivered,
+            read: parsedStats.read,
+            failed: parsedStats.failed,
+            replies: parsedStats.replies || 0,
+        }
     });
 }
 

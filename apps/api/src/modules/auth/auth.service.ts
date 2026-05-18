@@ -66,26 +66,25 @@ export async function registerUser(input: RegisterInput): Promise<AuthTokens> {
 // ── Login ──────────────────────────────────────────────────
 
 export async function loginUser(input: LoginInput): Promise<AuthTokens> {
-    const { email, password, workspaceSlug } = input;
+    const { email, password } = input;
 
-    // Find workspace by slug
-    const workspace = await prisma.workspace.findUnique({
-        where: { slug: workspaceSlug },
-        include: { members: { where: { user: { email } } } },
+    // Find user and their memberships to automatically get the workspace
+    const user = await prisma.user.findUnique({
+        where: { email },
+        include: { memberships: { include: { workspace: true } } },
     });
 
-    const member = workspace?.members[0];
+    const member = user?.memberships[0];
+    const workspace = member?.workspace;
 
     // Constant time comparison even on failure to prevent user enumeration
     const dummyHash = '$2a$12$invalidhashfortimingprotectiononly000000000000000000000';
-    const passwordHash = member
-        ? (await prisma.user.findUnique({ where: { id: member.userId } }))?.passwordHash ?? dummyHash
-        : dummyHash;
+    const passwordHash = user ? user.passwordHash : dummyHash;
 
     const valid = await bcrypt.compare(password, passwordHash);
 
-    if (!workspace || !member || !valid) {
-        const err = new Error('Invalid email, password, or workspace') as Error & { code: string; statusCode: number };
+    if (!user || !member || !workspace || !valid) {
+        const err = new Error('Invalid email or password') as Error & { code: string; statusCode: number };
         err.code = ErrorCodes.INVALID_CREDENTIALS;
         err.statusCode = 401;
         throw err;

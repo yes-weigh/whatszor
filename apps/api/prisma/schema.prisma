@@ -683,10 +683,30 @@ model Campaign {
   whatsappAccount   WhatsAppAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: SetNull)
   whatsappAccountId String?          @map("whatsapp_account_id")
   members           CampaignMember[]
+  timeSeries        CampaignTimeSeries[]
 
   @@index([workspaceId])
   @@index([status])
   @@map("campaigns")
+}
+
+model CampaignTimeSeries {
+  id          String   @id @default(cuid())
+  campaignId  String   @map("campaign_id")
+  workspaceId String   @map("workspace_id")
+  timestamp   DateTime @default(now())
+  
+  sent        Int      @default(0)
+  delivered   Int      @default(0)
+  read        Int      @default(0)
+  failed      Int      @default(0)
+  replies     Int      @default(0)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, timestamp])
+  @@index([campaignId, timestamp])
+  @@map("campaign_time_series")
 }
 
 model CampaignMember {

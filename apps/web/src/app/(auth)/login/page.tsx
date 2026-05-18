@@ -9,7 +9,6 @@ import { Bot, Eye, EyeOff, Loader2, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
-    const [workspaceSlug, setWorkspaceSlug] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPw, setShowPw] = useState(false);
@@ -21,8 +20,7 @@ export default function LoginPage() {
         e.preventDefault();
         setLoading(true);
         try {
-            const cleanSlug = workspaceSlug.replace(/-+$/, '');
-            const { data } = await api.post('/auth/login', { workspaceSlug: cleanSlug, email, password });
+            const { data } = await api.post('/auth/login', { email, password });
             const { accessToken, refreshToken } = data as { accessToken: string; refreshToken: string };
 
             // Decode JWT payload (base64url) — signed but not encrypted, safe to read client-side.
@@ -88,18 +86,6 @@ export default function LoginPage() {
 
                 {/* Card */}
                 <form onSubmit={handleSubmit} className="card flex flex-col gap-4">
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-secondary">Organization ID</label>
-                        <input
-                            type="text"
-                            className="input"
-                            placeholder="my-organization-id"
-                            value={workspaceSlug}
-                            onChange={e => setWorkspaceSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+/g, ''))}
-                            required
-                        />
-                    </div>
-
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-medium text-secondary">Email</label>
                         <input

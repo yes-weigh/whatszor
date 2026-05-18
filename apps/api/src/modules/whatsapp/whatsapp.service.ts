@@ -26,6 +26,8 @@ class WhatsAppManager extends EventEmitter {
     private qrCodes: Map<string, string> = new Map();
     // Map<sessionId, Map<lid, { jid: string; name: string }>> — LID to real phone JID mapping
     private contactsStore: Map<string, Map<string, { jid: string; name: string }>> = new Map();
+    // Map<sessionId, reconnectAttempts> — tracks consecutive failures for exponential backoff
+    private reconnectAttempts: Map<string, number> = new Map();
 
     constructor() {
         super();
@@ -199,12 +201,28 @@ class WhatsAppManager extends EventEmitter {
                 const shouldReconnect = error !== DisconnectReason.loggedOut;
 
                 if (shouldReconnect) {
-                    log.warn({ sessionId, error }, 'Connection closed — reconnecting in 5s');
                     await prisma.whatsAppAccount.updateMany({
                         where: { sessionId },
                         data: { status: 'DISCONNECTED' },
                     });
-                    setTimeout(() => this.connect(sessionId, workspaceId), 5000);
+
+                    // Exponential backoff: 5s → 10s → 20s → 40s … capped at 5 minutes.
+                    // 405 errors indicate WhatsApp is actively rejecting us (IP block /
+                    // rate-limit / outdated client). Back off harder in that case.
+                    const attempts = (this.reconnectAttempts.get(sessionId) ?? 0) + 1;
+                    this.reconnectAttempts.set(sessionId, attempts);
+
+                    const baseDelay = error === 405 ? 30_000 : 5_000; // 30s base for 405
+                    const delay = Math.min(baseDelay * Math.pow(2, attempts - 1), 300_000); // cap 5 min
+
+                    log.warn(
+                        { sessionId, error, attempt: attempts, delayMs: delay },
+                        `Connection closed — reconnecting in ${Math.round(delay / 1000)}s`
+                    );
+
+                    setTimeout(() => this.connect(sessionId, workspaceId).catch(err => {
+                        log.error({ sessionId, err }, 'Reconnect attempt failed');
+                    }), delay);
                 } else {
                     log.warn({ sessionId }, 'Session logged out.');
                     // CRITICAL: Notify about primary account logout
@@ -229,6 +247,8 @@ class WhatsAppManager extends EventEmitter {
             } else if (connection === 'open') {
                 log.info({ sessionId }, 'Connection opened successfully!');
                 this.qrCodes.delete(sessionId);
+                // Reset backoff counter on successful connection
+                this.reconnectAttempts.delete(sessionId);
 
                 // Extract phone number from creds
                 const creds = (sock.authState as any)?.creds?.me;
