@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:20-alpine AS builder
 RUN apk add --no-cache libc6-compat python3 make g++ openssl
 
 ENV PNPM_HOME="/pnpm"
@@ -24,7 +24,7 @@ RUN pnpm --filter api run build
 # ---
 # Production Image
 # ---
-FROM node:22-alpine AS runner
+FROM node:20-alpine AS runner
 RUN apk add --no-cache openssl
 
 ENV PNPM_HOME="/pnpm"
